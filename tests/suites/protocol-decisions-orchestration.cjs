@@ -1,0 +1,201 @@
+const assert = require('node:assert/strict')
+
+module.exports = {
+  name: 'protocol + orchestration',
+  async run(env) {
+    const { modules } = env
+
+    assert.equal(modules.protocol.normalizeWakeHint('completion_report', undefined, 'team-lead'), 'hard')
+    assert.equal(modules.protocol.normalizeWakeHint('completion_report', undefined, 'researcher'), 'soft')
+    assert.equal(modules.protocol.normalizeWakeHint('question', undefined, 'planner'), 'soft')
+    assert.equal(modules.protocol.normalizeWakeHint('question', undefined, 'team-lead'), 'soft')
+
+    const team = modules.state.createInitialTeamState({
+      teamName: 'decision-suite',
+      leaderSessionFile: '/tmp/leader-decision.jsonl',
+      leaderCwd: '/tmp',
+      description: 'decision test',
+    })
+    modules.state.upsertMember(team, {
+      name: 'researcher',
+      role: 'researcher',
+      cwd: '/tmp',
+      sessionFile: '/tmp/researcher.jsonl',
+      status: 'idle',
+    })
+    const task = modules.state.createTask(team, {
+      title: 'Investigate issue',
+      description: 'collect findings',
+    })
+    task.owner = 'researcher'
+    task.status = 'blocked'
+    task.updatedAt = Date.now()
+    modules.state.writeTeamState(team)
+
+    const blockedMessage = modules.state.pushMailboxMessage(team.name, 'team-lead', {
+      from: 'researcher',
+      to: 'team-lead',
+      text: `${task.id} blocked due to missing dataset`,
+      summary: `${task.id} blocked`,
+      type: 'blocked',
+      taskId: task.id,
+      threadId: `task:${task.id}`,
+      requestId: 'blocked-1',
+      priority: 'high',
+      wakeHint: 'hard',
+    })
+
+    const injected = modules.orchestration.maybeInjectLeaderOrchestrationContext(
+      { messages: [{ role: 'user', content: 'please continue' }] },
+      {
+        team,
+        memberName: 'team-lead',
+        state: {
+          lastDigestKey: '',
+          lastDigestAt: 0,
+          lastBlockedCount: 0,
+          lastBlockedFingerprints: [],
+        },
+      },
+    )
+    assert.ok(injected.injected, 'leader orchestration digest should be injected')
+    assert.ok(injected.injected.messages.some(m => typeof m.content === 'string' && m.content.includes('[agentteam-orchestration-digest]')))
+    const injectedText = injected.injected.messages
+      .map(m => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n')
+    assert.ok(injectedText.includes('blocked task count: 1'))
+    assert.ok(injectedText.includes('unread leader mailbox count: 1'))
+    assert.ok(injectedText.includes(blockedMessage.id), 'digest should include latest unread message id')
+
+    const digestKey = modules.orchestration.computeLeaderDigestKey(modules.state.readTeamState('decision-suite'))
+    assert.ok(digestKey.includes('blocked:1'))
+    assert.ok(digestKey.includes('unread:1'))
+    assert.ok(digestKey.includes(`latest:${blockedMessage.id}`))
+
+    const quietTeam = modules.state.createInitialTeamState({
+      teamName: 'quiet-mode-suite',
+      leaderSessionFile: '/tmp/leader-quiet.jsonl',
+      leaderCwd: '/tmp',
+      description: 'quiet mode test',
+    })
+    modules.state.upsertMember(quietTeam, {
+      name: 'researcher',
+      role: 'researcher',
+      cwd: '/tmp',
+      sessionFile: '/tmp/researcher-quiet.jsonl',
+      status: 'running',
+      lastWakeReason: 'processing prompt',
+    })
+    const quietTask = modules.state.createTask(quietTeam, {
+      title: 'Long running exploration',
+      description: 'let teammate run without leader polling',
+    })
+    quietTask.owner = 'researcher'
+    quietTask.status = 'in_progress'
+    quietTask.updatedAt = Date.now()
+    modules.state.writeTeamState(quietTeam)
+
+    const quietInjected = modules.orchestration.maybeInjectLeaderOrchestrationContext(
+      { messages: [{ role: 'user', content: 'continue' }] },
+      {
+        team: quietTeam,
+        memberName: 'team-lead',
+        state: {
+          lastDigestKey: '',
+          lastDigestAt: 0,
+          lastBlockedCount: 0,
+          lastBlockedFingerprints: [],
+        },
+      },
+    )
+    assert.ok(quietInjected.injected, 'digest should inject on first leader turn')
+    const quietDigestText = quietInjected.injected.messages
+      .map(m => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n')
+    assert.ok(quietDigestText.includes('blocked task count: 0'))
+    assert.ok(quietDigestText.includes('unread leader mailbox count: 0'))
+
+    const quietSecond = modules.orchestration.maybeInjectLeaderOrchestrationContext(
+      { messages: [{ role: 'user', content: 'continue' }] },
+      {
+        team: quietTeam,
+        memberName: 'team-lead',
+        state: {
+          lastDigestKey: quietInjected.digestKey,
+          lastDigestAt: quietInjected.digestAt,
+          lastBlockedCount: quietInjected.blockedCount,
+          lastBlockedFingerprints: quietInjected.blockedFingerprints,
+        },
+      },
+    )
+    assert.equal(
+      quietSecond.injected,
+      undefined,
+      'digest should throttle repeated injection when nothing changed',
+    )
+
+    const quietAfterInterval = modules.orchestration.maybeInjectLeaderOrchestrationContext(
+      { messages: [{ role: 'user', content: 'continue' }] },
+      {
+        team: quietTeam,
+        memberName: 'team-lead',
+        state: {
+          lastDigestKey: quietInjected.digestKey,
+          lastDigestAt: quietInjected.digestAt - (16 * 60 * 1000),
+          lastBlockedCount: quietInjected.blockedCount,
+          lastBlockedFingerprints: quietInjected.blockedFingerprints,
+        },
+      },
+    )
+    assert.ok(
+      quietAfterInterval.injected,
+      'digest should allow periodic health-check injection after long interval',
+    )
+
+    const unreadScopeTeam = modules.state.createInitialTeamState({
+      teamName: 'unread-scope-suite',
+      leaderSessionFile: '/tmp/unread-scope-leader.jsonl',
+      leaderCwd: '/tmp',
+      description: 'unread filtering test',
+    })
+    modules.state.upsertMember(unreadScopeTeam, {
+      name: 'planner',
+      role: 'planner',
+      cwd: '/tmp',
+      sessionFile: '/tmp/unread-scope-planner.jsonl',
+      status: 'idle',
+    })
+    modules.state.writeTeamState(unreadScopeTeam)
+
+    modules.state.pushMailboxMessage('unread-scope-suite', 'team-lead', {
+      from: 'planner',
+      to: 'team-lead',
+      text: 'completed and acknowledged',
+      type: 'completion_report',
+      taskId: 'T001',
+      threadId: 'task:T001',
+      priority: 'normal',
+      wakeHint: 'hard',
+      readAt: Date.now(),
+    })
+
+    const unreadQuestion = modules.state.pushMailboxMessage('unread-scope-suite', 'team-lead', {
+      from: 'planner',
+      to: 'team-lead',
+      text: 'still need decision',
+      type: 'question',
+      taskId: 'T002',
+      threadId: 'task:T002',
+      priority: 'normal',
+      wakeHint: 'soft',
+    })
+
+    const unreadScopeSnapshot = modules.orchestration.buildLeaderCoordinationSnapshot(
+      modules.state.readTeamState('unread-scope-suite'),
+    )
+
+    assert.equal(unreadScopeSnapshot.blockedCount, 0)
+    assert.equal(unreadScopeSnapshot.unreadCount, 1)
+    assert.equal(unreadScopeSnapshot.latestUnreadMessageId, unreadQuestion.id)
+  },
+}

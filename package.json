@@ -1,0 +1,53 @@
+{
+  "name": "pi-agentteam",
+  "version": "0.1.0",
+  "description": "Multi-agent team orchestration for pi — leader-coordinator pattern with researcher, planner, and implementer teammates in tmux panes",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "multi-agent",
+    "team",
+    "orchestration",
+    "tmux",
+    "agent-swarm"
+  ],
+  "type": "module",
+  "license": "MIT",
+  "author": "linys77",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LinYS77/PI-agentteam.git"
+  },
+  "homepage": "https://github.com/LinYS77/PI-agentteam#readme",
+  "bugs": {
+    "url": "https://github.com/LinYS77/PI-agentteam/issues"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "files": [
+    "*.ts",
+    "agents/",
+    "commands/",
+    "hooks/",
+    "teamPanel/",
+    "tests/",
+    "tools/",
+    "config.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*"
+  },
+  "scripts": {
+    "test": "node tests/run.cjs"
+  }
+}

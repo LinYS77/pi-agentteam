@@ -1,0 +1,20 @@
+# Runtime state — never ship
+data/
+
+# Dependencies
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Build artifacts
+dist/
+*.js.map
