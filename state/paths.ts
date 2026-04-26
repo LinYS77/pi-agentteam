@@ -1,3 +1,4 @@
+import * as os from 'node:os'
 import * as path from 'node:path'
 import { ensureDir } from './fsStore.js'
 
@@ -9,10 +10,17 @@ export function sanitizeName(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-')
 }
 
-function getAgentTeamRoot(): string {
-  const root = path.join(path.dirname(__filename), 'data')
+export function getAgentTeamRoot(): string {
+  const override = process.env.PI_AGENTTEAM_HOME?.trim()
+  const root = override
+    ? path.resolve(override)
+    : path.join(os.homedir(), '.pi', 'agent', 'agentteam')
   ensureDir(root)
   return root
+}
+
+export function getConfigPath(): string {
+  return path.join(getAgentTeamRoot(), 'config.json')
 }
 
 export function getTeamsDir(): string {
@@ -42,7 +50,7 @@ export function getMailboxPath(teamName: string, memberName: string): string {
 }
 
 export function getSessionsDir(): string {
-  const dir = path.join(getAgentTeamRoot(), 'sessions')
+  const dir = path.join(getAgentTeamRoot(), 'session-bindings')
   ensureDir(dir)
   return dir
 }

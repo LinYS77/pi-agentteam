@@ -50,6 +50,7 @@ export type ToolHandlerDeps = {
   ensureTeamForSession: (ctx: ExtensionContext) => TeamState | null
   currentActor: (ctx: ExtensionContext) => string
   healMemberPaneBinding: (member: TeamState['members'][string]) => void
+  isLeaderInsideTmux: () => boolean
   wakeWorker: (team: TeamState, memberName: string, explicitTask?: string) => Promise<WakeOutcome>
   wakeLeaderIfNeeded: (
     team: TeamState,

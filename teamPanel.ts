@@ -1,5 +1,4 @@
 import type { ExtensionContext } from '@mariozechner/pi-coding-agent'
-import { truncateToWidth } from '@mariozechner/pi-tui'
 import { handleTeamPanelInput } from './teamPanel/input.js'
 import { renderTeamPanelLines } from './teamPanel/layout.js'
 import {
@@ -14,19 +13,15 @@ export type { TeamPanelResult } from './teamPanel/viewModel.js'
 
 export async function openTeamPanel(
   ctx: ExtensionContext,
-  teamName: string,
-  onSyncMailbox: () => void,
+  teamName?: string | null,
 ): Promise<TeamPanelResult | undefined> {
   return ctx.ui.custom<TeamPanelResult | undefined>((tui, theme, _kb, done) => {
     let data = loadPanelData(teamName)
     const panelState = createInitialPanelState()
+    clampPanelStateToData(panelState, data)
 
     const refresh = () => {
       data = loadPanelData(teamName)
-      if (!data) {
-        done({ type: 'close' })
-        return
-      }
       clampPanelStateToData(panelState, data)
       tui.requestRender()
     }
@@ -34,25 +29,14 @@ export async function openTeamPanel(
     return {
       invalidate() {},
       handleInput(input: string) {
-        if (!data) {
-          done({ type: 'close' })
-          return
-        }
-
         const selection = buildPanelSelectionView(data, panelState)
         handleTeamPanelInput(input, data, panelState, selection, {
           done,
           refresh,
-          onSyncMailbox,
           requestRender: () => tui.requestRender(),
         })
       },
       render(width: number): string[] {
-        const safeWidth = Math.max(56, width)
-        if (!data) {
-          return [truncateToWidth(theme.fg('error', 'agentteam: team not found'), safeWidth)]
-        }
-
         const selection = buildPanelSelectionView(data, panelState)
         return renderTeamPanelLines(theme, {
           width,

@@ -14,6 +14,7 @@ import {
   deleteTeamRuntime,
   ensureTeamForSession,
   healMemberPaneBinding,
+  isLeaderInsideTmux,
   maybeLinkTaskNoteToMessage,
   normalizeOwnerName,
   sanitizeTeamName,
@@ -55,8 +56,6 @@ export default function agentTeamExtension(pi: ExtensionAPI): void {
   })
 
   registerAgentTeamCommands(pi, {
-    sanitizeWorkerName,
-    ensureTeamForSession,
     deleteTeamRuntime,
     invalidateStatus: runtime.invalidateStatus,
     resetMailboxSyncKey: runtime.resetMailboxSyncKey,
@@ -72,6 +71,7 @@ export default function agentTeamExtension(pi: ExtensionAPI): void {
     ensureTeamForSession,
     currentActor,
     healMemberPaneBinding,
+    isLeaderInsideTmux,
     wakeWorker,
     wakeLeaderIfNeeded,
     appendStructuredTaskNote,

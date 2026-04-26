@@ -15,8 +15,8 @@ export const clearPaneLabelsForTeam = labels.clearPaneLabelsForTeam
 export const syncPaneLabelsForTeam = labels.syncPaneLabelsForTeam
 
 export const createTeammatePane = panes.createTeammatePane
-export const focusPane = panes.focusPane
 export const killPane = panes.killPane
+export const clearPaneLabelSync = panes.clearPaneLabelSync
 
 export const ensureSwarmWindow = windows.ensureSwarmWindow
 

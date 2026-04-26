@@ -60,6 +60,7 @@ async function setPaneLabel(paneId: string, label: string, signal?: AbortSignal)
 
 async function clearPaneLabel(paneId: string, signal?: AbortSignal): Promise<void> {
   await runTmuxNoThrowAsync(['set-option', '-up', '-t', paneId, '@agentteam-name'], undefined, signal)
+  await runTmuxNoThrowAsync(['select-pane', '-t', paneId, '-T', ''], undefined, signal)
 }
 
 async function markWindowAsAgentTeam(target: string, signal?: AbortSignal): Promise<void> {

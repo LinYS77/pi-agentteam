@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { parseFrontmatter } from '@mariozechner/pi-coding-agent'
+import { getConfigPath } from './state.js'
 
 export type AgentDefinition = {
   name: string
@@ -20,10 +21,6 @@ function isDirectory(p: string): boolean {
   } catch {
     return false
   }
-}
-
-function getConfigPath(): string {
-  return path.join(path.dirname(__filename), 'config.json')
 }
 
 function readAgentTeamConfig(): AgentTeamConfig {

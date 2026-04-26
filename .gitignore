@@ -1,6 +1,9 @@
 # Runtime state — never ship
 data/
 
+# Local development notes/checklists — keep README as the only public doc for now
+docs/
+
 # Dependencies
 node_modules/
 

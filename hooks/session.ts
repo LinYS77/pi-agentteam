@@ -1,31 +1,13 @@
 import type { ExtensionAPI, ExtensionContext } from '@mariozechner/pi-coding-agent'
-import { readTeamState, updateMemberStatus, writeTeamState } from '../state.js'
-import { getCurrentMemberName, getCurrentTeamName } from '../session.js'
-import { TEAM_LEAD } from '../types.js'
-
-type SessionHookState = {
-  lastLeaderDigestKey: string
-  lastLeaderDigestAt: number
-  lastBlockedCountForDigest: number
-  lastBlockedFingerprintsForDigest: string[]
-}
-
-type SessionDigestPatch = Partial<SessionHookState>
-
-function updateSessionDigestState(
-  deps: Pick<SessionHookDeps, 'state' | 'updateDigestState'>,
-  patch: SessionDigestPatch,
-): void {
-  if (deps.updateDigestState) {
-    deps.updateDigestState(patch)
-    return
-  }
-  Object.assign(deps.state, patch)
-}
+import type { HookDigestPatch, HookDigestState } from './lifecycleService.js'
+import {
+  markWorkerSessionShutdown,
+  resetDigestState,
+} from './lifecycleService.js'
 
 export type SessionHookDeps = {
-  state: SessionHookState
-  updateDigestState?: (patch: SessionDigestPatch) => void
+  state: HookDigestState
+  updateDigestState?: (patch: HookDigestPatch) => void
   attachCurrentSessionIfNeeded: (
     ctx: ExtensionContext,
   ) => {
@@ -34,15 +16,6 @@ export type SessionHookDeps = {
   }
   invalidateStatus: (ctx: ExtensionContext) => void
   runMailboxSync: (ctx: ExtensionContext) => void
-}
-
-function resetDigestState(deps: Pick<SessionHookDeps, 'state' | 'updateDigestState'>): void {
-  updateSessionDigestState(deps, {
-    lastLeaderDigestKey: '',
-    lastLeaderDigestAt: 0,
-    lastBlockedCountForDigest: 0,
-    lastBlockedFingerprintsForDigest: [],
-  })
 }
 
 export function registerSessionHooks(pi: ExtensionAPI, deps: SessionHookDeps): void {
@@ -59,18 +32,6 @@ export function registerSessionHooks(pi: ExtensionAPI, deps: SessionHookDeps): v
 
   pi.on('session_shutdown', async (_event, ctx) => {
     resetDigestState(deps)
-
-    const teamName = getCurrentTeamName(ctx)
-    const memberName = getCurrentMemberName(ctx)
-    if (!teamName || !memberName || memberName === TEAM_LEAD) return
-
-    const team = readTeamState(teamName)
-    if (!team) return
-
-    updateMemberStatus(team, memberName, {
-      status: 'idle',
-      lastWakeReason: 'session shutdown',
-    })
-    writeTeamState(team)
+    markWorkerSessionShutdown(ctx)
   })
 }

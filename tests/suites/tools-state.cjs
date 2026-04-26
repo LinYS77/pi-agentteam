@@ -116,7 +116,9 @@ module.exports = {
     const planMailbox = modules.state.readMailbox('full-suite-team', 'plan-one')
     assert.equal(planMailbox.length, 2)
     assert.ok(planMailbox.every(item => item.type === 'fyi'))
-    assert.equal(planMailbox.filter(item => !item.readAt).length, 0)
+    const peerFyi = planMailbox.find(item => item.text.includes('peer handoff'))
+    assert.ok(peerFyi?.deliveredAt, 'worker wake should mark mailbox messages delivered')
+    assert.equal(peerFyi?.readAt, undefined, 'worker wake should not mark mailbox messages read')
 
     res = await tool('agentteam_send').execute('send-peer-completion', {
       to: 'plan-one',
@@ -125,7 +127,15 @@ module.exports = {
       taskId: 'T001',
     }, null, () => {}, researchCtx)
     assert.deepEqual(res.details.recipients, ['plan-one'])
-    assert.equal(res.details.mirroredToLeader, undefined)
+    assert.deepEqual(res.details.mirroredToLeader, ['plan-one'])
+    assert.ok(
+      modules.state.readMailbox('full-suite-team', 'team-lead').some(m =>
+        m.type === 'completion_report' &&
+        m.metadata?.mirrorOf === 'plan-one' &&
+        m.text.includes('Research complete'),
+      ),
+      'peer completion_report should be mirrored to leader mailbox',
+    )
 
     let teamAfterPeerSend = modules.state.readTeamState('full-suite-team')
     const peerEvent = [...(teamAfterPeerSend.events ?? [])].reverse().find(event =>
@@ -349,6 +359,51 @@ module.exports = {
     const txMissing = modules.state.updateTeamState('missing-transaction-suite', team => team)
     assert.equal(txMissing, null, 'updateTeamState should return null for missing team')
 
+    const concurrentTeam = modules.state.createInitialTeamState({
+      teamName: 'concurrent-note-suite',
+      leaderSessionFile: '/tmp/concurrent-note-leader.jsonl',
+      leaderCwd: '/tmp',
+    })
+    modules.state.upsertMember(concurrentTeam, {
+      name: 'note-worker-a',
+      role: 'researcher',
+      cwd: '/tmp',
+      sessionFile: '/tmp/concurrent-note-worker-a.jsonl',
+      status: 'idle',
+    })
+    modules.state.upsertMember(concurrentTeam, {
+      name: 'note-worker-b',
+      role: 'researcher',
+      cwd: '/tmp',
+      sessionFile: '/tmp/concurrent-note-worker-b.jsonl',
+      status: 'idle',
+    })
+    const concurrentTask = modules.state.createTask(concurrentTeam, {
+      title: 'Concurrent notes',
+      description: 'ensure transaction updates preserve both notes',
+    })
+    modules.state.writeTeamState(concurrentTeam)
+
+    const noteWorkerACtx = helpers.createCtx('/tmp', '/tmp/concurrent-note-worker-a.jsonl', env.notifications)
+    const noteWorkerBCtx = helpers.createCtx('/tmp', '/tmp/concurrent-note-worker-b.jsonl', env.notifications)
+    await Promise.all([
+      tool('agentteam_task').execute('concurrent-note-a', {
+        action: 'note',
+        taskId: concurrentTask.id,
+        note: 'note-from-a',
+      }, null, () => {}, noteWorkerACtx),
+      tool('agentteam_task').execute('concurrent-note-b', {
+        action: 'note',
+        taskId: concurrentTask.id,
+        note: 'note-from-b',
+      }, null, () => {}, noteWorkerBCtx),
+    ])
+    const concurrentAfter = modules.state.readTeamState('concurrent-note-suite')
+    const concurrentNotes = concurrentAfter.tasks[concurrentTask.id].notes.map(note => note.text)
+    assert.ok(concurrentNotes.includes('note-from-a'), 'transaction task note update should preserve note from worker A')
+    assert.ok(concurrentNotes.includes('note-from-b'), 'transaction task note update should preserve note from worker B')
+
+    modules.state.deleteTeamState('concurrent-note-suite')
     modules.state.deleteTeamState('status-key-suite')
     modules.state.deleteTeamState('storage-cache-suite')
     modules.state.deleteTeamState('reconcile-invalidate-suite')

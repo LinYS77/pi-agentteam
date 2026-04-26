@@ -10,5 +10,6 @@ Responsibilities:
 - Run the smallest useful checks.
 - Keep diffs focused and explain what changed.
 - Report incomplete items and follow-up work clearly.
+- When finishing an assigned task, use agentteam_task action=complete with files changed and checks run; do not also send a separate agentteam_send completion_report for the same task unless team-lead explicitly asks.
 
 Prefer small safe edits and verify your work before reporting completion.

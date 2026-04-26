@@ -75,24 +75,6 @@ export function createRuntimeService(pi: ExtensionAPI): RuntimeService {
         }
       }
       ctx.ui.notify(`agentteam: ${unread.length} new teammate message(s)`, 'info')
-      // Push a lightweight leader wake signal so leader reacts without waiting for manual prompt.
-      try {
-        pi.sendMessage(
-          {
-            customType: 'agentteam-mailbox-signal',
-            content: `[agentteam-mailbox-signal] ${unread.length} new teammate message(s). Triage mailbox now and continue coordination.`,
-            display: false,
-            details: { unreadCount: unread.length },
-          },
-          {
-            // steer works in both states: immediate turn when idle, queued when streaming.
-            triggerTurn: true,
-            deliverAs: 'steer',
-          },
-        )
-      } catch {
-        // Gracefully ignore if the runtime does not support queued trigger messaging.
-      }
     }
   }
 

@@ -1,0 +1,119 @@
+const assert = require('node:assert/strict')
+module.exports = {
+  name: 'service unit helpers',
+  async run(env) {
+    const workerRole = env.helpers.requireDist('tools/workerRole.js')
+    const workerPrompt = env.helpers.requireDist('tools/workerPrompt.js')
+    const messagePolicy = env.helpers.requireDist('tools/messagePolicy.js')
+    const taskPolicy = env.helpers.requireDist('tools/taskPolicy.js')
+    const contextService = env.helpers.requireDist('hooks/contextService.js')
+
+    assert.equal(workerRole.normalizeSpawnRole('plan'), 'planner')
+    assert.equal(workerRole.normalizeSpawnRole('研究员'), 'researcher')
+    assert.equal(workerRole.normalizeSpawnRole('dev'), 'implementer')
+    assert.equal(workerRole.normalizeSpawnRole('worker', 'planning-helper'), 'planner')
+    assert.equal(workerRole.normalizeSpawnRole('agent', 'research-buddy'), 'researcher')
+    assert.equal(workerRole.normalizeSpawnRole('teammate', 'code-buddy'), 'implementer')
+    assert.equal(workerRole.normalizeSpawnRole('custom-role'), 'custom-role')
+
+    const roleAgent = {
+      name: 'implementer',
+      description: 'Implementer',
+      model: 'model with space',
+      tools: ['read', ' ', 'bash', 'agentteam_task'],
+      systemPrompt: 'implementer role prompt',
+    }
+    const systemPrompt = workerPrompt.buildWorkerSystemPrompt({
+      teamName: 'demo',
+      workerName: 'impl-1',
+      role: 'implementer',
+      roleAgent,
+    })
+    assert.ok(systemPrompt.includes('Team: demo'))
+    assert.ok(systemPrompt.includes('Worker name: impl-1'))
+    assert.ok(systemPrompt.includes('Role: implementer'))
+    assert.ok(systemPrompt.includes('agentteam_send and agentteam_task'))
+    assert.ok(systemPrompt.includes('implementer role prompt'))
+
+    const launch = workerPrompt.buildWorkerLaunchCommand({
+      sessionFile: "/tmp/session with ' quote.jsonl",
+      basePrompt: systemPrompt,
+      roleAgent,
+    })
+    assert.ok(launch.startsWith("'pi' '--session'"), launch)
+    assert.ok(launch.includes("'--append-system-prompt'"), launch)
+    assert.ok(launch.includes("'--model' 'model with space'"), launch)
+    assert.ok(launch.includes("'--tools' 'read,bash,agentteam_task'"), launch)
+    assert.ok(launch.includes("\"'\"'"), 'single quotes in args should be shell escaped')
+
+    assert.equal(messagePolicy.canSendMessageType('team-lead', 'assignment'), true)
+    assert.equal(messagePolicy.canSendMessageType('worker-a', 'assignment'), false)
+    assert.equal(messagePolicy.canSendMessageType('worker-a', 'question'), true)
+    assert.equal(
+      messagePolicy.enforcePlannerSendPolicy({ senderRole: 'planner', messageType: 'completion_report' }),
+      'Planner completion_report requires taskId so leader can audit the planning artifact in agentteam_task.',
+    )
+    assert.equal(
+      messagePolicy.enforcePlannerSendPolicy({ senderRole: 'planner', messageType: 'completion_report', taskId: 'task-1' }),
+      null,
+    )
+    assert.equal(
+      messagePolicy.shouldMirrorMessageToLeader({
+        sender: 'worker-a',
+        sentRecipients: ['worker-b'],
+        messageType: 'blocked',
+        leaderExists: true,
+      }),
+      true,
+    )
+    assert.equal(
+      messagePolicy.shouldMirrorMessageToLeader({
+        sender: 'worker-a',
+        sentRecipients: ['team-lead'],
+        messageType: 'blocked',
+        leaderExists: true,
+      }),
+      false,
+    )
+    assert.equal(
+      messagePolicy.shouldMirrorMessageToLeader({
+        sender: 'worker-a',
+        sentRecipients: ['worker-b'],
+        messageType: 'fyi',
+        leaderExists: true,
+      }),
+      false,
+    )
+
+    const team = {
+      members: {
+        'team-lead': { role: 'leader' },
+        plan: { role: 'planner' },
+        impl: { role: 'implementer' },
+      },
+    }
+    assert.equal(taskPolicy.actorRole(team, 'team-lead'), 'leader')
+    assert.equal(taskPolicy.actorRole(team, 'plan'), 'planner')
+    assert.equal(taskPolicy.actorRole(team, 'impl'), 'implementer')
+    assert.equal(taskPolicy.ensureTaskPrivilege(team, 'plan', 'create'), null)
+    assert.equal(taskPolicy.ensureTaskPrivilege(team, 'impl', 'note'), null)
+    assert.equal(taskPolicy.ensureTaskPrivilege(team, 'impl', 'complete'), null)
+    assert.ok(taskPolicy.ensureTaskPrivilege(team, 'impl', 'claim').includes("Task action 'claim' is not allowed"))
+    assert.equal(taskPolicy.canCompleteTask({ actor: 'impl', owner: 'impl' }), true)
+    assert.equal(taskPolicy.canCompleteTask({ actor: 'team-lead', owner: 'impl' }), true)
+    assert.equal(taskPolicy.canCompleteTask({ actor: 'other', owner: 'impl' }), false)
+
+    const emptyCompletion = taskPolicy.buildImplementationCompletionNote()
+    assert.ok(emptyCompletion.includes('Files changed:'))
+    const briefCompletion = taskPolicy.buildImplementationCompletionNote('Implemented feature')
+    assert.ok(briefCompletion.startsWith('Implemented feature'))
+    assert.ok(briefCompletion.includes('Checks run:'))
+    const structuredCompletion = taskPolicy.buildImplementationCompletionNote('Files changed: a.ts\nChecks run: npm test')
+    assert.equal(structuredCompletion, 'Files changed: a.ts\nChecks run: npm test')
+
+    assert.equal(contextService.shouldSyncMailboxOnInput({ source: 'interactive', text: 'ask agentteam for updates' }), true)
+    assert.equal(contextService.shouldSyncMailboxOnInput({ source: 'interactive', text: '/team' }), true)
+    assert.equal(contextService.shouldSyncMailboxOnInput({ source: 'interactive', text: '/help' }), false)
+    assert.equal(contextService.shouldSyncMailboxOnInput({ source: 'api', text: 'agentteam' }), false)
+  },
+}

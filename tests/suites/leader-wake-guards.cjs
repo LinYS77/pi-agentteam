@@ -119,7 +119,15 @@ module.exports = {
       taskId: 'T002',
     }, null, () => {}, plannerCtx)
     assert.deepEqual(res.details.recipients, ['researcher-guard'])
-    assert.equal(res.details.mirroredToLeader, undefined)
+    assert.deepEqual(res.details.mirroredToLeader, ['researcher-guard'])
+    assert.ok(
+      modules.state.readMailbox('guard-suite-team', 'team-lead').some(m =>
+        m.type === 'completion_report' &&
+        m.metadata?.mirrorOf === 'researcher-guard' &&
+        m.text.includes('planning done'),
+      ),
+      'peer completion_report should be mirrored to leader mailbox',
+    )
     let guardTeamState = modules.state.readTeamState('guard-suite-team')
     const peerLogEntry = [...(guardTeamState.events ?? [])].reverse().find(event =>
       event.type === 'peer_message' &&
@@ -184,14 +192,22 @@ module.exports = {
     }, null, () => {}, implementerCtx)
     helpers.assertContains(res.content[0].text, 'Completed T003')
 
+    res = await tool('agentteam_task').execute('guard-task-complete-impl-idempotent', {
+      action: 'complete',
+      taskId: 'T003',
+      note: 'Duplicate completion should not add another completion note',
+    }, null, () => {}, implementerCtx)
+    helpers.assertContains(res.content[0].text, 'Already completed T003')
+    assert.equal(res.details.alreadyCompleted, true)
+
     const guardTeamAfterComplete = modules.state.readTeamState('guard-suite-team')
     const t003 = guardTeamAfterComplete.tasks['T003']
-    const completionTemplateNote = t003.notes.find(note =>
+    const completionTemplateNotes = t003.notes.filter(note =>
       note.author === 'implementer-guard' &&
       note.text.includes('Files changed:') &&
       note.text.includes('Checks run:'),
     )
-    assert.ok(completionTemplateNote, 'implementer completion note should include change summary template')
+    assert.equal(completionTemplateNotes.length, 1, 'duplicate complete should not add another implementation completion note')
 
     res = await tool('agentteam_send').execute('guard-peer-fyi-allowed', {
       to: 'researcher-guard',
@@ -301,7 +317,7 @@ module.exports = {
       'non-agentteam interactive input should not trigger mailbox sync consumption',
     )
 
-    await runInputHooks({ type: 'input', source: 'interactive', text: '/team-sync' }, leaderCtx)
+    await runInputHooks({ type: 'input', source: 'interactive', text: '/team' }, leaderCtx)
 
     leaderMailbox = modules.state.readMailbox('guard-suite-team', 'team-lead')
     const syncedProbe = leaderMailbox.find(item => item.id === probeMessage.id)

@@ -1,6 +1,6 @@
 {
   "name": "pi-agentteam",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Multi-agent team orchestration for pi — leader-coordinator pattern with researcher, planner, and implementer teammates in tmux panes",
   "keywords": [
     "pi-package",
@@ -10,7 +10,7 @@
     "team",
     "orchestration",
     "tmux",
-    "agent-swarm"
+    "tmux-agent"
   ],
   "type": "module",
   "license": "MIT",
@@ -32,7 +32,6 @@
     "teamPanel/",
     "tmux/",
     "tools/",
-    "config.json",
     "README.md",
     "LICENSE"
   ],
@@ -48,6 +47,7 @@
     "typebox": "*"
   },
   "scripts": {
-    "test": "node tests/run.cjs"
+    "test": "node tests/run.cjs",
+    "test:e2e": "node tests/e2e/tmux-smoke.cjs"
   }
 }

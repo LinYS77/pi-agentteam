@@ -34,6 +34,8 @@ export const withFileLock = fsStore.withFileLock
 export const writeJsonFile = fsStore.writeJsonFile
 
 // paths
+export const getAgentTeamRoot = paths.getAgentTeamRoot
+export const getConfigPath = paths.getConfigPath
 export const getMailboxDir = paths.getMailboxDir
 export const getMailboxPath = paths.getMailboxPath
 export const getSessionContextPath = paths.getSessionContextPath
@@ -65,6 +67,7 @@ export const createTask = taskStore.createTask
 
 // mailbox store
 export const ensureMailbox = mailboxStore.ensureMailbox
+export const markMailboxMessagesDelivered = mailboxStore.markMailboxMessagesDelivered
 export const markMailboxMessagesRead = mailboxStore.markMailboxMessagesRead
 export const peekUnreadMailbox = mailboxStore.peekUnreadMailbox
 export const pushMailboxMessage = mailboxStore.pushMailboxMessage

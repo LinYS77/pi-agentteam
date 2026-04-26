@@ -13,14 +13,38 @@ module.exports = {
     assert.ok(pkg.pi.extensions.includes('./index.ts'), 'package.json should expose ./index.ts as pi extension entry')
 
     const files = pkg.files || []
+    assert.ok(files.includes('commands/'), 'package files should include command console submodules')
     assert.ok(files.includes('state/'), 'package files should include state submodules')
+    assert.ok(files.includes('teamPanel/'), 'package files should include team panel submodules')
     assert.ok(files.includes('tmux/'), 'package files should include tmux submodules')
+    assert.ok(files.includes('*.ts'), 'package files should include top-level runtime facade/submodules')
     assert.ok(!files.includes('tests/'), 'published package should not include test suites')
 
-    const sourceText = [
+    const toolRegistrationFiles = [
       'tools/team.ts',
       'tools/message.ts',
       'tools/task.ts',
+    ]
+    for (const file of toolRegistrationFiles) {
+      const text = fs.readFileSync(path.join(root, file), 'utf8')
+      assert.ok(!text.includes("../state.js"), `${file} should delegate state access to service modules`)
+      assert.ok(!text.includes("../tmux.js"), `${file} should delegate tmux access to service modules`)
+      assert.ok(!text.includes("../agents.js"), `${file} should delegate agent discovery to service modules`)
+    }
+
+    const removedFiles = [
+      'commands/cleanup.ts',
+      'tools/messageMirror.ts',
+      'tools/taskUtils.ts',
+      'docs/release-checklist.md',
+      'docs/testing-real-experience.md',
+    ]
+    for (const file of removedFiles) {
+      assert.equal(fs.existsSync(path.join(root, file)), false, `${file} should not exist before release`)
+    }
+
+    const sourceText = [
+      ...toolRegistrationFiles,
       'tmux/core.ts',
       'tmux/panes.ts',
       'tmux/windows.ts',
@@ -64,5 +88,7 @@ module.exports = {
     const taskTool = env.pi.__tools.get('agentteam_task')
     assert.deepEqual(taskTool.parameters.o.action.enum, ['create', 'list', 'claim', 'update', 'complete', 'note'])
     assert.deepEqual(taskTool.parameters.o.status.v.enum, ['pending', 'in_progress', 'blocked', 'completed'])
+
+    assert.deepEqual([...env.pi.__commands.keys()].filter(name => name.startsWith('team')), ['team'])
   },
 }

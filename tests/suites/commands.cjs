@@ -1,19 +1,25 @@
 const assert = require('node:assert/strict')
 
+function oneShotPanel(ctx, result) {
+  let used = false
+  ctx.ui.custom = async () => {
+    if (used) return { type: 'close' }
+    used = true
+    return result
+  }
+}
+
 module.exports = {
   name: 'commands flow',
   async run(env) {
-    const { pi, modules, leaderCtx } = env
+    const { pi, modules, leaderCtx, patches } = env
     const command = name => pi.__commands.get(name)
 
-    const commandNames = [...pi.__commands.keys()]
-    const teamIndex = commandNames.indexOf('team')
-    const syncIndex = commandNames.indexOf('team-sync')
-    assert.ok(teamIndex >= 0 && syncIndex >= 0, 'team and team-sync should both be registered')
-    assert.ok(teamIndex < syncIndex, '/team should be registered before /team-sync for higher completion priority')
-    assert.ok(!pi.__commands.has('team-synv'), 'team-synv alias should not exist')
-
-    await command('team-sync').handler('', leaderCtx)
+    assert.deepEqual([...pi.__commands.keys()].filter(name => name.startsWith('team')), ['team'])
+    assert.ok(!pi.__commands.has('team-sync'), 'team-sync command should be removed')
+    assert.ok(!pi.__commands.has('team-delete'), 'team-delete command should be removed')
+    assert.ok(!pi.__commands.has('team-cleanup'), 'team-cleanup command should be removed')
+    assert.ok(!pi.__commands.has('team-remove-member'), 'team-remove-member command should be removed')
 
     const team = modules.state.readTeamState('full-suite-team')
     modules.state.pushMailboxMessage(team.name, 'team-lead', {
@@ -29,19 +35,37 @@ module.exports = {
     })
 
     const originalCustom = leaderCtx.ui.custom
-    leaderCtx.ui.custom = async () => ({
-      type: 'close',
-    })
+    oneShotPanel(leaderCtx, { type: 'sync' })
     await command('team').handler('', leaderCtx)
     leaderCtx.ui.custom = originalCustom
 
-    await command('team-remove-member').handler('plan-one', leaderCtx)
-    const teamAfterRemove = modules.state.readTeamState('full-suite-team')
-    assert.ok(!teamAfterRemove.members['plan-one'], 'plan-one should be removed')
+    let teamAfterSync = modules.state.readTeamState('full-suite-team')
+    assert.ok(teamAfterSync, 'team should still exist after sync action')
 
-    await command('team-delete').handler('ignored-name', leaderCtx)
+    oneShotPanel(leaderCtx, {
+      type: 'remove-member',
+      teamName: 'full-suite-team',
+      memberName: 'plan-one',
+    })
+    await command('team').handler('', leaderCtx)
+    leaderCtx.ui.custom = originalCustom
+    const teamAfterRemove = modules.state.readTeamState('full-suite-team')
+    assert.ok(!teamAfterRemove.members['plan-one'], 'plan-one should be removed from /team action')
+
+    patches.livePanes.add('%old-leader')
+    modules.state.updateTeamState('full-suite-team', latest => {
+      latest.members['team-lead'].paneId = '%old-leader'
+      latest.members['team-lead'].windowTarget = 'test:@1'
+    })
+    oneShotPanel(leaderCtx, {
+      type: 'delete-team',
+      teamName: 'full-suite-team',
+    })
+    await command('team').handler('', leaderCtx)
+    leaderCtx.ui.custom = originalCustom
     const deleted = modules.state.readTeamState('full-suite-team')
     assert.equal(deleted, null)
+    assert.equal(patches.livePanes.has('%old-leader'), false, 'delete should kill non-current leader pane')
 
     const cleanupA = modules.state.createInitialTeamState({
       teamName: 'cleanup-a',
@@ -53,12 +77,51 @@ module.exports = {
       leaderSessionFile: '/tmp/cleanup-b-leader.jsonl',
       leaderCwd: '/tmp',
     })
+    cleanupA.members['team-lead'].paneId = '%cleanup-old-leader'
+    cleanupA.members['team-lead'].windowTarget = 'test:@1'
+    cleanupB.members['team-lead'].paneId = '%leader'
+    cleanupB.members['team-lead'].windowTarget = 'test:@1'
+    patches.livePanes.add('%cleanup-old-leader')
     modules.state.writeTeamState(cleanupA)
     modules.state.writeTeamState(cleanupB)
 
-    await command('team-cleanup').handler('', leaderCtx)
+    oneShotPanel(leaderCtx, { type: 'cleanup-all' })
+    await command('team').handler('', leaderCtx)
+    leaderCtx.ui.custom = originalCustom
     assert.equal(modules.state.readTeamState('cleanup-a'), null)
     assert.equal(modules.state.readTeamState('cleanup-b'), null)
+    assert.equal(patches.livePanes.has('%cleanup-old-leader'), false, 'cleanup should kill non-current leader pane')
+    assert.equal(patches.livePanes.has('%leader'), true, 'cleanup should keep current pane alive')
+    assert.ok(patches.clearedPaneLabels.includes('%leader'), 'cleanup should clear current pane label')
 
+    const recoverTeam = modules.state.createInitialTeamState({
+      teamName: 'recover-suite',
+      leaderSessionFile: '/tmp/old-recover-leader.jsonl',
+      leaderCwd: '/tmp/old',
+    })
+    modules.state.upsertMember(recoverTeam, {
+      name: 'stale-current-pane-member',
+      role: 'researcher',
+      cwd: '/tmp',
+      sessionFile: '/tmp/stale-current-pane-member.jsonl',
+      status: 'error',
+      paneId: '%leader',
+      windowTarget: 'test:@1',
+    })
+    modules.state.writeTeamState(recoverTeam)
+    const recoverCtx = env.helpers.createCtx('/tmp/new-leader', '/tmp/new-recover-leader.jsonl', env.notifications)
+    oneShotPanel(recoverCtx, {
+      type: 'recover-team',
+      teamName: 'recover-suite',
+    })
+    await command('team').handler('', recoverCtx)
+    const recovered = modules.state.readTeamState('recover-suite')
+    assert.equal(recovered.leaderSessionFile, '/tmp/new-recover-leader.jsonl')
+    assert.equal(recovered.members['team-lead'].sessionFile, '/tmp/new-recover-leader.jsonl')
+    assert.equal(recovered.members['team-lead'].paneId, '%leader')
+    assert.ok(!recovered.members['stale-current-pane-member'], 'recover should clear stale worker binding that points at current pane')
+    assert.equal(modules.state.readSessionContext('/tmp/new-recover-leader.jsonl').teamName, 'recover-suite')
+
+    modules.state.deleteTeamState('recover-suite')
   },
 }

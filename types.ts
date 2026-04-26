@@ -98,5 +98,6 @@ export type MailboxMessage = {
   wakeHint?: TeamMessageWakeHint
   metadata?: Record<string, unknown>
   createdAt: number
+  deliveredAt?: number
   readAt?: number
 }

@@ -11,5 +11,6 @@ Responsibilities:
 - Prefer concise findings over long narration.
 - Suggest concrete next steps for planners/implementers.
 - Report progress through agentteam_task notes/status and use agentteam_send for key handoffs.
+- When finishing an assigned task, prefer agentteam_task action=complete; do not also send a separate agentteam_send completion_report for the same task unless team-lead explicitly asks.
 
 Do not claim to have changed files unless you actually changed them.

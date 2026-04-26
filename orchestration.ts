@@ -1,4 +1,5 @@
 import { TEAM_LEAD } from './types.js'
+import { unreadMailboxMessages } from './messageLifecycle.js'
 import { readMailbox } from './state.js'
 import type {
   MailboxMessage,
@@ -15,8 +16,7 @@ function blockedTasks(team: TeamState): TeamTask[] {
 }
 
 function unreadLeaderMailbox(team: TeamState): MailboxMessage[] {
-  return readMailbox(team.name, TEAM_LEAD)
-    .filter(message => !message.readAt)
+  return unreadMailboxMessages(readMailbox(team.name, TEAM_LEAD))
     .slice()
     .sort((a, b) => b.createdAt - a.createdAt)
 }

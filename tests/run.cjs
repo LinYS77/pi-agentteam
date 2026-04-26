@@ -8,12 +8,20 @@ const DEFAULT_EXT_ROOT = path.resolve(__dirname, '..')
 const EXT_ROOT = process.env.AGENTTEAM_EXT_ROOT
   ? path.resolve(process.env.AGENTTEAM_EXT_ROOT)
   : DEFAULT_EXT_ROOT
-const TS_ROOT = '/home/linyusheng/.nvm/versions/node/v24.9.0/lib/node_modules/typescript'
-const ts = require(TS_ROOT)
+function requireTypeScript() {
+  try {
+    return require('typescript')
+  } catch {
+    return require('/home/linyusheng/.nvm/versions/node/v24.9.0/lib/node_modules/typescript')
+  }
+}
+const ts = requireTypeScript()
 
 const BUILD_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-test-build-'))
 const DIST_ROOT = path.join(BUILD_ROOT, 'dist')
 const STUB_ROOT = path.join(DIST_ROOT, 'stubs')
+process.env.PI_AGENTTEAM_HOME = path.join(BUILD_ROOT, 'agentteam-home')
+process.env.TMUX = process.env.TMUX || '/tmp/agentteam-test-tmux'
 
 
 function log(msg) {
@@ -244,8 +252,8 @@ function createCtx(cwd, sessionFile, notifications) {
       custom: async callback => {
         let doneValue
         const done = value => { doneValue = value }
-        const panel = callback({ requestRender() {} }, createFakeTheme(), {}, done)
-        if (panel && typeof panel.handleInput === 'function') {
+        const panel = await callback({ requestRender() {} }, createFakeTheme(), {}, done)
+        if (doneValue === undefined && panel && typeof panel.handleInput === 'function') {
           panel.handleInput('__esc__')
         }
         return doneValue
@@ -261,6 +269,7 @@ function assertContains(text, expected, msg) {
 
 function setupRuntimePatches(modules) {
   const sentPrompts = []
+  const clearedPaneLabels = []
   const tmux = modules.tmux
 
   const original = {
@@ -273,8 +282,8 @@ function setupRuntimePatches(modules) {
     sendEnterToPane: tmux.sendEnterToPane,
     syncPaneLabelsForTeam: tmux.syncPaneLabelsForTeam,
     clearPaneLabelsForTeam: tmux.clearPaneLabelsForTeam,
+    clearPaneLabelSync: tmux.clearPaneLabelSync,
     ensureSwarmWindow: tmux.ensureSwarmWindow,
-    focusPane: tmux.focusPane,
     killPane: tmux.killPane,
     listAgentTeamPanes: tmux.listAgentTeamPanes,
   }
@@ -295,8 +304,8 @@ function setupRuntimePatches(modules) {
   tmux.sendEnterToPane = () => {}
   tmux.syncPaneLabelsForTeam = () => {}
   tmux.clearPaneLabelsForTeam = () => {}
+  tmux.clearPaneLabelSync = paneId => { clearedPaneLabels.push(paneId) }
   tmux.ensureSwarmWindow = async () => ({ session: 'test', window: '@1', target: 'test:@1', leaderPaneId: '%leader' })
-  tmux.focusPane = () => {}
   tmux.killPane = paneId => { livePanes.delete(paneId) }
   tmux.listAgentTeamPanes = () => []
 
@@ -310,6 +319,8 @@ function setupRuntimePatches(modules) {
 
   return {
     sentPrompts,
+    livePanes,
+    clearedPaneLabels,
     restore() {
       Object.assign(tmux, original)
       agents.discoverAgents = originalDiscoverAgents
@@ -369,10 +380,12 @@ async function main() {
         createCtx,
         createFakeTheme,
         assertContains,
+        requireDist: rel => require(path.join(DIST_ROOT, rel)),
         visibleWidth: require(path.join(STUB_ROOT, 'pi-tui.js')).visibleWidth,
+        tuiKeys: require(path.join(STUB_ROOT, 'pi-tui.js')).Key,
       }
       const toolsSuite = require(path.join(__dirname, 'suites', 'tools-state.cjs'))
-      const env = { pi, modules, leaderCtx, notifications, sentPrompts: patches.sentPrompts, helpers, toolsSuite }
+      const env = { pi, modules, leaderCtx, notifications, sentPrompts: patches.sentPrompts, patches, helpers, toolsSuite }
 
       for (const suite of loadSuites()) {
         log(`▶ suite: ${suite.name}`)

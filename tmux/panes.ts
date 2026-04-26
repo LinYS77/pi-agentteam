@@ -1,4 +1,4 @@
-import { runTmux, runTmuxAsync, runTmuxNoThrow, runTmuxNoThrowAsync } from './client.js'
+import { runTmuxAsync, runTmuxNoThrow, runTmuxNoThrowAsync } from './client.js'
 import { refreshWindowPaneLabels } from './labels.js'
 import { ensureSwarmWindow } from './windows.js'
 
@@ -20,15 +20,15 @@ export async function createTeammatePane(
 
   let paneId = ''
   if (hasLeaderLayout && panes.length === 1) {
-    paneId = await runTmuxAsync(['split-window', '-t', swarm.leaderPaneId, '-h', '-l', '70%', ...cwdArgs, '-P', '-F', '#{pane_id}', ...commandArgs], undefined, signal)
+    paneId = await runTmuxAsync(['split-window', '-t', swarm.leaderPaneId, '-h', '-p', '34', ...cwdArgs, '-P', '-F', '#{pane_id}', ...commandArgs], undefined, signal)
     await runTmuxAsync(['select-layout', '-t', swarm.target, 'main-vertical'], undefined, signal)
-    await runTmuxAsync(['resize-pane', '-t', swarm.leaderPaneId, '-x', '30%'], undefined, signal)
+    await runTmuxAsync(['resize-pane', '-t', swarm.leaderPaneId, '-x', '66%'], undefined, signal)
   } else {
     const splitTarget = panes[panes.length - 1]!
     paneId = await runTmuxAsync(['split-window', '-t', splitTarget, '-v', ...cwdArgs, '-P', '-F', '#{pane_id}', ...commandArgs], undefined, signal)
     await runTmuxAsync(['select-layout', '-t', swarm.target, hasLeaderLayout ? 'main-vertical' : 'tiled'], undefined, signal)
     if (hasLeaderLayout) {
-      await runTmuxAsync(['resize-pane', '-t', swarm.leaderPaneId, '-x', '30%'], undefined, signal)
+      await runTmuxAsync(['resize-pane', '-t', swarm.leaderPaneId, '-x', '66%'], undefined, signal)
     }
   }
 
@@ -38,10 +38,11 @@ export async function createTeammatePane(
   return { paneId, target: swarm.target }
 }
 
-export function focusPane(paneId: string): void {
-  runTmux(['select-pane', '-t', paneId])
-}
-
 export function killPane(paneId: string): void {
   runTmuxNoThrow(['kill-pane', '-t', paneId])
+}
+
+export function clearPaneLabelSync(paneId: string): void {
+  runTmuxNoThrow(['set-option', '-up', '-t', paneId, '@agentteam-name'])
+  runTmuxNoThrow(['select-pane', '-t', paneId, '-T', ''])
 }

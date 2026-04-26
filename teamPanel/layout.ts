@@ -3,13 +3,14 @@ import {
   truncateToWidth,
   visibleWidth,
 } from '@mariozechner/pi-tui'
+import { isMailboxMessageUnread } from '../messageLifecycle.js'
 import type {
   TeamMember,
   TeamTask,
 } from '../types.js'
 import type {
-  FocusSection,
   LeaderMailboxItem,
+  PanelActionMenu,
   PanelData,
   PanelSelectionView,
   TeamPanelState,
@@ -95,24 +96,19 @@ function drawBox(
 ): string[] {
   const width = Math.max(8, options.width)
   const inner = width - 2
-  const borderColor = options.focused ? 'accent' : 'dim'
+  const isFocused = Boolean(options.focused)
+  const borderColor = isFocused ? 'accent' : 'dim'
   const px = options.paddingX ?? 2
   const py = options.paddingY ?? 0
   const padStr = ' '.repeat(px)
   const contentInner = Math.max(0, inner - px * 2)
 
-  const titleText = ` ${options.title} `
-  let top = ''
-  if (options.focused) {
-    const leftPad = Math.max(0, Math.floor((inner - visibleWidth(titleText)) / 2))
-    const rightPad = Math.max(0, inner - visibleWidth(titleText) - leftPad)
-    const centeredTitle = '─'.repeat(leftPad) + theme.bold(titleText) + '─'.repeat(rightPad)
-    top = theme.fg('accent', `╭${centeredTitle}╮`)
-  } else {
-    const title = truncateToWidth(titleText, inner)
-    const topFill = '─'.repeat(Math.max(0, inner - visibleWidth(title)))
-    top = theme.fg(borderColor, `╭${theme.bold(title)}${topFill}╮`)
-  }
+  const marker = isFocused ? theme.fg('accent', '● ') : ''
+  const rawTitleText = ` ${marker}${options.title} `
+  const titleText = truncateToWidth(rawTitleText, inner)
+  const title = isFocused ? theme.bold(titleText) : theme.bold(titleText)
+  const topFill = '─'.repeat(Math.max(0, inner - visibleWidth(titleText)))
+  const top = theme.fg(borderColor, `╭${title}${topFill}╮`)
 
   let bottom = ''
   if (options.footer) {
@@ -208,11 +204,14 @@ function detailKV(
   value: string,
   color: 'dim' | 'accent' | 'warning' | 'error' | 'success' | 'text' = 'dim',
 ): string {
-  const key = `${padCell(`${label}:`, 15)}`
-  return `${theme.fg('dim', key)} ${theme.fg(color, value)}`
+  return renderDetailField(theme, label, value, color)
 }
 
-function renderOverviewLine(theme: ExtensionContext['ui']['theme'], data: PanelData, focus: FocusSection): string {
+function renderOverviewLine(theme: ExtensionContext['ui']['theme'], data: PanelData): string {
+  if (data.mode === 'global') {
+    return `${theme.bold(theme.fg('text', '✦  AgentTeam Console '))} ${theme.fg('dim', '│')} Teams ${data.teams.length} ${theme.fg('dim', '│')} Stale panes ${data.orphanPanes.length}`
+  }
+
   const runningCount = data.members.filter(member => member.status === 'running').length
   const queuedCount = data.members.filter(member => member.status === 'queued').length
   const idleCount = data.members.filter(member => member.status === 'idle').length
@@ -224,7 +223,7 @@ function renderOverviewLine(theme: ExtensionContext['ui']['theme'], data: PanelD
   const completedCount = data.tasks.filter(task => task.status === 'completed').length
 
   const blockedMsgCount = data.mailbox.filter(item => mailboxType(item) === 'blocked').length
-  const unreadMsgCount = data.mailbox.filter(item => !item.readAt).length
+  const unreadMsgCount = data.mailbox.filter(isMailboxMessageUnread).length
 
   const tName = theme.bold(theme.fg('text', `✦  ${data.team.name} `))
 
@@ -237,7 +236,7 @@ function renderOverviewLine(theme: ExtensionContext['ui']['theme'], data: PanelD
 
 function renderMembersLines(
   theme: ExtensionContext['ui']['theme'],
-  data: PanelData,
+  data: Extract<PanelData, { mode: 'attached' }>,
   state: TeamPanelState,
 ): string[] {
   const membersWindow = windowSlice(data.members, state.selectedMemberIndex, 6)
@@ -257,7 +256,7 @@ function renderMembersLines(
     const isSelected = state.focus === 'members' && absolute === state.selectedIndex
     const pointer = isSelected ? theme.fg('accent', '›') : ' '
     
-    const unread = data.mailbox.filter(m => m.from === member.name && !m.readAt).length
+    const unread = data.mailbox.filter(m => m.from === member.name && isMailboxMessageUnread(m)).length
     const activeTasks = data.tasks.filter(t => t.owner === member.name && t.status !== 'completed').length
     const ageStr = formatAge(Date.now() - member.updatedAt)
     
@@ -345,7 +344,7 @@ function renderMailboxLines(
     const icon = theme.fg(mailboxTypeColor(type), mailboxTypeIcon(type))
     const fromCol = isSelected ? padCell(theme.bold(theme.fg('accent', short(item.from, 14))), 14) : padCell(theme.fg('text', short(item.from, 14)), 14)
     
-    const isUnread = !item.readAt
+    const isUnread = isMailboxMessageUnread(item)
     const summaryText = short(item.summary ?? item.text, 36)
     const summaryFmt = isUnread ? theme.bold(theme.fg('text', summaryText)) : theme.fg('dim', summaryText)
     const summaryCol = padCell(summaryFmt, 36)
@@ -365,33 +364,227 @@ function renderMailboxLines(
   return lines
 }
 
+function teamStatusLine(theme: ExtensionContext['ui']['theme'], team: Extract<PanelData, { mode: 'global' }>['teams'][number]): string {
+  const teammates = Object.values(team.members).filter(member => member.name !== 'team-lead')
+  const errorCount = teammates.filter(member => member.status === 'error').length
+  const taskCount = Object.keys(team.tasks).length
+  const leader = team.members['team-lead']
+  const leaderPane = leader?.paneId ? `pane ${leader.paneId}` : 'leader pane missing'
+  const errorSuffix = errorCount > 0 ? theme.fg('error', ` · ${errorCount} error`) : ''
+  return `${teammates.length} teammate(s) · ${taskCount} task(s) · ${leaderPane}${errorSuffix}`
+}
+
+function renderGlobalTeamLines(
+  theme: ExtensionContext['ui']['theme'],
+  data: Extract<PanelData, { mode: 'global' }>,
+  state: TeamPanelState,
+): string[] {
+  const teamsWindow = windowSlice(data.teams, state.selectedTeamIndex, 8)
+  const lines: string[] = []
+  if (data.teams.length === 0) {
+    lines.push(theme.fg('muted', 'No saved teams'))
+    return lines
+  }
+  if (teamsWindow.offset > 0) lines.push(theme.fg('dim', `… ${teamsWindow.offset} above`))
+  for (let i = 0; i < teamsWindow.items.length; i += 1) {
+    const team = teamsWindow.items[i]!
+    const absolute = teamsWindow.offset + i
+    const isSelected = state.focus === 'teams' && absolute === state.selectedIndex
+    const pointer = isSelected ? theme.fg('accent', '›') : ' '
+    const name = isSelected ? theme.bold(theme.fg('accent', short(team.name, 24))) : theme.fg('text', short(team.name, 24))
+    lines.push(`${pointer}  ${padCell(name, 24)} ${theme.fg('dim', teamStatusLine(theme, team))}`)
+  }
+  const hiddenBelow = data.teams.length - (teamsWindow.offset + teamsWindow.items.length)
+  if (hiddenBelow > 0) lines.push(theme.fg('dim', `… ${hiddenBelow} below`))
+  return lines
+}
+
+function renderGlobalPaneLines(
+  theme: ExtensionContext['ui']['theme'],
+  data: Extract<PanelData, { mode: 'global' }>,
+  state: TeamPanelState,
+): string[] {
+  const panesWindow = windowSlice(data.orphanPanes, state.selectedPaneIndex, 8)
+  const lines: string[] = []
+  if (data.orphanPanes.length === 0) {
+    lines.push(theme.fg('muted', 'No stale panes with agentteam labels'))
+    return lines
+  }
+  if (panesWindow.offset > 0) lines.push(theme.fg('dim', `… ${panesWindow.offset} above`))
+  for (let i = 0; i < panesWindow.items.length; i += 1) {
+    const pane = panesWindow.items[i]!
+    const absolute = panesWindow.offset + i
+    const isSelected = state.focus === 'panes' && absolute === state.selectedIndex
+    const pointer = isSelected ? theme.fg('accent', '›') : ' '
+    const paneId = isSelected ? theme.bold(theme.fg('accent', pane.paneId)) : theme.fg('text', pane.paneId)
+    lines.push(`${pointer}  ${padCell(paneId, 8)} ${theme.fg('dim', short(pane.label || pane.currentCommand || pane.target, 54))}`)
+  }
+  const hiddenBelow = data.orphanPanes.length - (panesWindow.offset + panesWindow.items.length)
+  if (hiddenBelow > 0) lines.push(theme.fg('dim', `… ${hiddenBelow} below`))
+  return lines
+}
+
+function renderGlobalDetailLines(
+  theme: ExtensionContext['ui']['theme'],
+  data: Extract<PanelData, { mode: 'global' }>,
+  state: TeamPanelState,
+  selection: PanelSelectionView,
+): string[] {
+  const detailLines: string[] = []
+  if (state.focus === 'panes') {
+    const pane = selection.selectedPane
+    if (!pane) {
+      detailLines.push(theme.fg('muted', 'No stale pane selected'))
+    } else {
+      detailLines.push(`🧹 ${theme.bold(theme.fg('text', pane.paneId))}`)
+      detailLines.push('')
+      detailLines.push(detailKV(theme, 'Target', pane.target || '-', 'text'))
+      detailLines.push(detailKV(theme, 'Label', pane.label || '-', 'text'))
+      detailLines.push(detailKV(theme, 'Command', pane.currentCommand || '-', 'text'))
+    }
+  } else {
+    const team = selection.selectedTeam
+    if (!team) {
+      detailLines.push(theme.fg('muted', 'No team selected'))
+    } else {
+      const teammates = Object.values(team.members).filter(member => member.name !== 'team-lead')
+      const tasks = Object.values(team.tasks)
+      const leader = team.members['team-lead']
+      detailLines.push(`🤝 ${theme.bold(theme.fg('text', team.name))}`)
+      detailLines.push('')
+      detailLines.push(detailKV(theme, 'Teammates', String(teammates.length), 'text'))
+      detailLines.push(detailKV(theme, 'Tasks', String(tasks.length), 'text'))
+      detailLines.push(detailKV(theme, 'Leader pane', leader?.paneId ?? 'missing', leader?.paneId ? 'text' : 'warning'))
+      detailLines.push(detailKV(theme, 'Created', new Date(team.createdAt).toLocaleString(), 'text'))
+    }
+  }
+  detailLines.push('')
+  detailLines.push(theme.fg('dim', '👉 ') + theme.fg('accent', 'Enter ') + theme.fg('dim', 'actions'))
+  return detailLines
+}
+
+function renderActionMenuLines(
+  theme: ExtensionContext['ui']['theme'],
+  menu: PanelActionMenu,
+): string[] {
+  const lines: string[] = []
+  lines.push(theme.bold(theme.fg('text', menu.title)))
+  lines.push('')
+  for (let i = 0; i < menu.actions.length; i += 1) {
+    const action = menu.actions[i]!
+    const isSelected = i === menu.selectedIndex
+    const pointer = isSelected ? theme.fg('accent', '›') : ' '
+    const labelColor = action.danger ? 'error' : isSelected ? 'accent' : 'text'
+    const label = isSelected ? theme.bold(theme.fg(labelColor, action.label)) : theme.fg(labelColor, action.label)
+    lines.push(`${pointer}  ${label}`)
+    if (action.description) {
+      lines.push(`   ${theme.fg('dim', short(action.description, 76))}`)
+    }
+  }
+  return lines
+}
+
+function splitLongTokenByWidth(token: string, width: number): string[] {
+  if (visibleWidth(token) <= width) return [token]
+  const chunks: string[] = []
+  let current = ''
+  for (const char of [...token]) {
+    if (current && visibleWidth(current + char) > width) {
+      chunks.push(current)
+      current = char
+    } else {
+      current += char
+    }
+  }
+  if (current) chunks.push(current)
+  return chunks
+}
+
 function wordWrap(text: string, width: number): string[] {
+  const safeWidth = Math.max(1, width)
   if (!text) return ['']
-  const words = text.split(' ')
   const lines: string[] = []
   let currentLine = ''
 
-  for (const word of words) {
-    if (currentLine.length + word.length + 1 <= width) {
-      currentLine += (currentLine.length > 0 ? ' ' : '') + word
-    } else {
-      if (currentLine) lines.push(currentLine)
-      currentLine = word
+  const flush = () => {
+    if (!currentLine) return
+    lines.push(currentLine)
+    currentLine = ''
+  }
+
+  for (const rawToken of text.split(/(\s+)/u)) {
+    if (!rawToken) continue
+    if (/^\s+$/u.test(rawToken)) {
+      if (currentLine && visibleWidth(`${currentLine} `) <= safeWidth) currentLine += ' '
+      continue
+    }
+
+    for (const token of splitLongTokenByWidth(rawToken, safeWidth)) {
+      if (!currentLine) {
+        currentLine = token
+        continue
+      }
+      if (visibleWidth(currentLine + token) <= safeWidth) {
+        currentLine += token
+        continue
+      }
+      if (visibleWidth(`${currentLine} ${token}`) <= safeWidth) {
+        currentLine += ` ${token}`
+        continue
+      }
+      flush()
+      currentLine = token
     }
   }
-  if (currentLine) lines.push(currentLine)
-  return lines
+
+  flush()
+  return lines.length > 0 ? lines : ['']
+}
+
+function renderDetailField(
+  theme: ExtensionContext['ui']['theme'],
+  label: string,
+  value: string,
+  color: 'dim' | 'accent' | 'warning' | 'error' | 'success' | 'text' = 'text',
+): string {
+  const labelWidth = 13
+  return `${theme.fg('dim', padCell(`${label}:`, labelWidth))} ${theme.fg(color, value)}`
+}
+
+function renderDetailBlock(
+  theme: ExtensionContext['ui']['theme'],
+  label: string,
+  value: string,
+  width: number,
+  color: 'dim' | 'accent' | 'warning' | 'error' | 'success' | 'text' = 'text',
+): string[] {
+  const out: string[] = []
+  const marker = theme.fg('accent', '▸')
+  out.push(`${marker} ${theme.bold(theme.fg('dim', label))}`)
+  const indent = '  '
+  const wrapWidth = Math.max(8, width - visibleWidth(indent))
+  const rawLines = value ? value.split('\n') : ['']
+  for (const rawLine of rawLines) {
+    for (const wrappedLine of wordWrap(rawLine, wrapWidth)) {
+      out.push(`${indent}${theme.fg(color, wrappedLine)}`)
+    }
+  }
+  return out
+}
+
+function renderDetailSeparator(theme: ExtensionContext['ui']['theme'], width: number): string {
+  return theme.fg('dim', '─'.repeat(Math.max(8, width)))
 }
 
 function renderDetailLines(
   theme: ExtensionContext['ui']['theme'],
-  data: PanelData,
+  data: Extract<PanelData, { mode: 'attached' }>,
   state: TeamPanelState,
   selection: PanelSelectionView,
   width: number,
 ): string[] {
   const detailLines: string[] = []
-  const textWidth = Math.max(20, width - 6) // Leave room for box borders and padding
+  const textWidth = Math.max(20, width - 6) // Content width inside details box after borders/padding.
 
   if (state.focus === 'members') {
     const selectedMember = selection.selectedMember
@@ -404,14 +597,14 @@ function renderDetailLines(
     const msgCount = data.mailbox.filter(item => item.from === selectedMember.name).length
     detailLines.push(`👤 ${theme.bold(theme.fg('text', selectedMember.name))}  ${memberStatusBadge(theme, selectedMember.status)}  ${theme.fg('dim', selectedMember.role)}`)
     detailLines.push('')
-    detailLines.push(detailKV(theme, 'Tasks', String(activeTasks), 'text'))
-    detailLines.push(detailKV(theme, 'Mailbox', String(msgCount), 'text'))
-    detailLines.push(detailKV(theme, 'Session', basename(selectedMember.sessionFile), 'text'))
-    if (selectedMember.lastWakeReason) detailLines.push(detailKV(theme, 'Wake', selectedMember.lastWakeReason, 'text'))
-    if (selectedMember.lastError) detailLines.push(detailKV(theme, 'Error', selectedMember.lastError, 'error'))
+    detailLines.push(renderDetailField(theme, 'Tasks', String(activeTasks), 'text'))
+    detailLines.push(renderDetailField(theme, 'Mailbox', String(msgCount), 'text'))
+    detailLines.push(renderDetailField(theme, 'Session', basename(selectedMember.sessionFile), 'text'))
+    if (selectedMember.lastWakeReason) detailLines.push(renderDetailField(theme, 'Wake', selectedMember.lastWakeReason, 'text'))
+    if (selectedMember.lastError) detailLines.push(renderDetailField(theme, 'Error', selectedMember.lastError, 'error'))
     
     detailLines.push('')
-    detailLines.push(theme.fg('dim', '👉 ') + theme.fg('accent', 'Enter ') + theme.fg('dim', 'focus pane · ') + theme.fg('accent', 'l ') + theme.fg('dim', 'focus leader'))
+    detailLines.push(theme.fg('dim', '👉 ') + theme.fg('accent', 'Enter ') + theme.fg('dim', 'actions'))
     return detailLines
   }
 
@@ -422,39 +615,33 @@ function renderDetailLines(
       return detailLines
     }
 
-    detailLines.push(`📋 ${theme.bold(theme.fg('accent', selectedTask.id))}  ${taskStatusBadge(theme, selectedTask.status)}  ${theme.fg('text', short(selectedTask.title, textWidth - 25))}`)
+    detailLines.push(`📋 ${theme.bold(theme.fg('accent', selectedTask.id))}  ${taskStatusBadge(theme, selectedTask.status)}  ${theme.fg('text', short(selectedTask.title, Math.max(12, textWidth - 25)))}`)
     detailLines.push('')
-    detailLines.push(detailKV(theme, 'Owner', selectedTask.owner ?? '-', 'text'))
+    detailLines.push(renderDetailField(theme, 'Owner', selectedTask.owner ?? '-', 'text'))
     if (selectedTask.blockedBy.length > 0) {
-      detailLines.push(detailKV(theme, 'Blocked by', selectedTask.blockedBy.join(','), 'error'))
+      detailLines.push(renderDetailField(theme, 'Blocked by', selectedTask.blockedBy.join(','), 'error'))
     }
     
+    const latest = selectedTask.notes[selectedTask.notes.length - 1]
     if (state.isDetailExpanded) {
-      detailLines.push(detailKV(theme, 'Description', ''))
-      const descLines = (selectedTask.description || '(none)').split('\n')
-      for (const dLine of descLines) {
-        wordWrap(dLine, textWidth - 17).forEach(wLine => detailLines.push(`                 ${theme.fg('text', wLine)}`))
-      }
+      detailLines.push('')
+      detailLines.push(renderDetailSeparator(theme, textWidth))
+      detailLines.push(...renderDetailBlock(theme, 'Description', selectedTask.description || '(none)', textWidth, 'text'))
 
-      const latest = selectedTask.notes[selectedTask.notes.length - 1]
       if (latest) {
-        detailLines.push(detailKV(theme, `Note (${latest.author})`, ''))
-        const noteLines = latest.text.split('\n')
-        for (const nLine of noteLines) {
-          wordWrap(nLine, textWidth - 17).forEach(wLine => detailLines.push(`                 ${theme.fg('text', wLine)}`))
-        }
+        detailLines.push('')
+        detailLines.push(...renderDetailBlock(theme, `Latest note · ${latest.author}`, latest.text, textWidth, 'text'))
       }
     } else {
       const desc = (selectedTask.description || '(none)').replace(/\n/g, ' ')
-      detailLines.push(detailKV(theme, 'Description', short(desc, textWidth - 18), 'text'))
-      const latest = selectedTask.notes[selectedTask.notes.length - 1]
+      detailLines.push(renderDetailField(theme, 'Description', short(desc, Math.max(12, textWidth - 16)), 'text'))
       if (latest) {
-        detailLines.push(detailKV(theme, 'Latest note', short(latest.text.replace(/\n/g, ' '), textWidth - 18), 'text'))
+        detailLines.push(renderDetailField(theme, 'Latest note', short(latest.text.replace(/\n/g, ' '), Math.max(12, textWidth - 16)), 'text'))
       }
     }
     
     detailLines.push('')
-    detailLines.push(theme.fg('dim', '👉 ') + theme.fg('accent', '↑↓ ') + theme.fg('dim', 'select task · ') + theme.fg('accent', 'o ') + theme.fg('dim', 'toggle details'))
+    detailLines.push(theme.fg('dim', '👉 ') + theme.fg('accent', 'Enter ') + theme.fg('dim', 'actions'))
     return detailLines
   }
 
@@ -468,30 +655,24 @@ function renderDetailLines(
     const type = mailboxType(selectedMailbox)
     detailLines.push(`📬 ${theme.fg(mailboxTypeColor(type), mailboxTypeIcon(type))} ${theme.bold(theme.fg(mailboxTypeColor(type), type))}  ${theme.fg('dim', `from `)}${theme.fg('accent', selectedMailbox.from)}`)
     detailLines.push('')
-    detailLines.push(detailKV(theme, 'Time', new Date(selectedMailbox.createdAt).toLocaleTimeString(), 'text'))
-    detailLines.push(detailKV(theme, 'References', `${selectedMailbox.taskId ?? '-'} / ${selectedMailbox.threadId ?? '-'}`, 'text'))
+    detailLines.push(renderDetailField(theme, 'Time', new Date(selectedMailbox.createdAt).toLocaleTimeString(), 'text'))
+    detailLines.push(renderDetailField(theme, 'References', `${selectedMailbox.taskId ?? '-'} / ${selectedMailbox.threadId ?? '-'}`, 'text'))
     
     if (state.isDetailExpanded) {
-      detailLines.push(detailKV(theme, 'Summary', ''))
-      const summaryLines = (selectedMailbox.summary ?? '(none)').split('\n')
-      for (const sLine of summaryLines) {
-        wordWrap(sLine, textWidth - 17).forEach(wLine => detailLines.push(`                 ${theme.fg('text', wLine)}`))
-      }
-
-      detailLines.push(detailKV(theme, 'Text', ''))
-      const textLines = (selectedMailbox.text || '(none)').split('\n')
-      for (const tLine of textLines) {
-        wordWrap(tLine, textWidth - 17).forEach(wLine => detailLines.push(`                 ${theme.fg('text', wLine)}`))
-      }
+      detailLines.push('')
+      detailLines.push(renderDetailSeparator(theme, textWidth))
+      detailLines.push(...renderDetailBlock(theme, 'Summary', selectedMailbox.summary ?? '(none)', textWidth, 'text'))
+      detailLines.push('')
+      detailLines.push(...renderDetailBlock(theme, 'Text', selectedMailbox.text || '(none)', textWidth, 'text'))
     } else {
       const summary = (selectedMailbox.summary ?? '(none)').replace(/\n/g, ' ')
-      detailLines.push(detailKV(theme, 'Summary', short(summary, textWidth - 18), 'text'))
+      detailLines.push(renderDetailField(theme, 'Summary', short(summary, Math.max(12, textWidth - 16)), 'text'))
       const text = (selectedMailbox.text || '(none)').replace(/\n/g, ' ')
-      detailLines.push(detailKV(theme, 'Text', short(text, textWidth - 18), 'text'))
+      detailLines.push(renderDetailField(theme, 'Text', short(text, Math.max(12, textWidth - 16)), 'text'))
     }
     
     detailLines.push('')
-    detailLines.push(theme.fg('dim', '👉 ') + theme.fg('accent', 's ') + theme.fg('dim', 'sync · ') + theme.fg('accent', 'o ') + theme.fg('dim', 'toggle details'))
+    detailLines.push(theme.fg('dim', '👉 ') + theme.fg('accent', 'Enter ') + theme.fg('dim', 'actions'))
     return detailLines
   }
 
@@ -505,52 +686,117 @@ export function renderTeamPanelLines(
   const { width, data, state, selection } = input
 
   const safeWidth = Math.max(56, width)
+
+  const escHint = state.interactionMode === 'action-menu'
+    ? 'back'
+    : state.isDetailExpanded
+      ? 'collapse details'
+      : 'close'
+  const globalHint = theme.fg(
+    'dim',
+    '⌨ ') + theme.fg('accent', '↑↓ ') + theme.fg('dim', 'move · ') + theme.fg('accent', 'Tab ') + theme.fg('dim', 'section · ') + theme.fg('accent', 'Enter ') + theme.fg('dim', 'actions · ') + theme.fg('accent', 'Esc ') + theme.fg('dim', escHint)
+
+  const overviewStr = truncateToWidth(renderOverviewLine(theme, data), width - 2)
+  const overviewLine = `  ${overviewStr}`
+
+  if (data.mode === 'global') {
+    const teamsLines = renderGlobalTeamLines(theme, data, state)
+    const panesLines = renderGlobalPaneLines(theme, data, state)
+    const detailLines = state.interactionMode === 'action-menu' && state.actionMenu
+      ? renderActionMenuLines(theme, state.actionMenu)
+      : renderGlobalDetailLines(theme, data, state, selection)
+    const useGlobalColumns = safeWidth >= 112
+    const gap = 2
+    const leftWidth = useGlobalColumns ? Math.max(54, Math.floor((safeWidth - gap) * 0.45)) : safeWidth
+    const rightWidth = useGlobalColumns ? Math.max(54, safeWidth - gap - leftWidth) : safeWidth
+    const listHeight = Math.max(teamsLines.length, panesLines.length, 8)
+    const teamsBox = drawBox(theme, {
+      width: leftWidth,
+      title: `🤝 Teams (${data.teams.length})${state.focus === 'teams' ? '  ✦' : ''}`,
+      lines: teamsLines,
+      focused: state.focus === 'teams',
+      minContentLines: useGlobalColumns ? listHeight : undefined,
+    })
+    const panesBox = drawBox(theme, {
+      width: leftWidth,
+      title: `🧹 Stale panes (${data.orphanPanes.length})${state.focus === 'panes' ? '  ✦' : ''}`,
+      lines: panesLines,
+      focused: state.focus === 'panes',
+      minContentLines: useGlobalColumns ? listHeight : undefined,
+    })
+    const detailsBox = drawBox(theme, {
+      width: useGlobalColumns ? rightWidth : safeWidth,
+      title: state.interactionMode === 'action-menu' ? '⚙ Actions' : `🔎 Details${state.isDetailExpanded ? '  expanded' : ''}`,
+      lines: detailLines,
+      focused: state.interactionMode === 'action-menu',
+      minContentLines: useGlobalColumns ? (listHeight * 2 + 3) : undefined,
+    })
+    if (!useGlobalColumns) {
+      return [
+        overviewLine,
+        '',
+        ...teamsBox,
+        '',
+        ...panesBox,
+        '',
+        ...detailsBox,
+        '',
+        `  ${globalHint}`,
+      ].map(line => truncateToWidth(line, width, ''))
+    }
+    const leftColumn = [...teamsBox, '', ...panesBox]
+    const grid = mergeColumns(leftColumn, detailsBox, leftWidth, rightWidth, gap)
+    return [
+      overviewLine,
+      '',
+      ...grid,
+      '',
+      `  ${globalHint}`,
+    ].map(line => truncateToWidth(line, width, ''))
+  }
+
   const membersLines = renderMembersLines(theme, data, state)
   const taskLines = renderTaskLines(theme, state, selection)
   const mailboxLines = renderMailboxLines(theme, state, selection)
-  const detailLines = renderDetailLines(theme, data, state, selection, safeWidth)
-
-  const globalHint = theme.fg(
-    'dim',
-    '⌨ ') + theme.fg('accent', '↑↓ ') + theme.fg('dim', 'move · ') + theme.fg('accent', 'Tab ') + theme.fg('dim', 'cycle section · ') + theme.fg('accent', 'Enter ') + theme.fg('dim', 'open/focus target · ') + theme.fg('accent', 'r ') + theme.fg('dim', 'refresh · ') + theme.fg('accent', 's ') + theme.fg('dim', 'sync · ') + theme.fg('accent', 'Esc ') + theme.fg('dim', 'close')
-
-  const overviewStr = truncateToWidth(renderOverviewLine(theme, data, state.focus), width - 2)
-  const overviewLine = `  ${overviewStr}`
-
   const useTwoColumns = safeWidth >= 112
   const gap = 2
-  const leftWidth = useTwoColumns ? Math.max(54, Math.floor((safeWidth - gap) / 2)) : safeWidth
+  const leftWidth = useTwoColumns ? Math.max(54, Math.floor((safeWidth - gap) * 0.45)) : safeWidth
   const rightWidth = useTwoColumns ? Math.max(54, safeWidth - gap - leftWidth) : safeWidth
 
-  const topGridHeight = Math.max(membersLines.length, mailboxLines.length, 6)
-  const bottomGridHeight = Math.max(taskLines.length, 6)
+  const leftListHeight = Math.max(membersLines.length, taskLines.length, 7)
 
   const membersBox = drawBox(theme, {
     width: leftWidth,
     title: `👥 Members (${data.members.length})${state.focus === 'members' ? '  ✦' : ''}`,
     lines: membersLines,
     focused: state.focus === 'members',
-    minContentLines: useTwoColumns ? topGridHeight : undefined,
+    minContentLines: useTwoColumns ? leftListHeight : undefined,
   })
   const tasksBox = drawBox(theme, {
     width: leftWidth,
     title: `📋 Tasks (${selection.visibleTasks.length})${state.focus === 'tasks' ? '  ✦' : ''}`,
     lines: taskLines,
     focused: state.focus === 'tasks',
-    minContentLines: useTwoColumns ? bottomGridHeight : undefined,
+    minContentLines: useTwoColumns ? leftListHeight : undefined,
   })
   const mailboxBox = drawBox(theme, {
     width: rightWidth,
     title: `📬 Mailbox (${selection.visibleMailbox.length})${state.focus === 'mailbox' ? '  ✦' : ''}`,
     lines: mailboxLines,
     focused: state.focus === 'mailbox',
-    minContentLines: useTwoColumns ? Math.max(topGridHeight, bottomGridHeight) : undefined,
+    minContentLines: useTwoColumns ? leftListHeight : undefined,
   })
 
+  const detailWidth = useTwoColumns ? rightWidth : safeWidth
+  const detailLines = state.interactionMode === 'action-menu' && state.actionMenu
+    ? renderActionMenuLines(theme, state.actionMenu)
+    : renderDetailLines(theme, data, state, selection, detailWidth)
   const detailBox = drawBox(theme, {
-    width: safeWidth,
-    title: '🔎 Details',
+    width: detailWidth,
+    title: state.interactionMode === 'action-menu' ? '⚙ Actions' : `🔎 Details${state.isDetailExpanded ? '  expanded' : ''}`,
     lines: detailLines,
+    focused: state.interactionMode === 'action-menu',
+    minContentLines: useTwoColumns ? leftListHeight : undefined,
   })
 
   if (!useTwoColumns) {
@@ -571,15 +817,13 @@ export function renderTeamPanelLines(
   }
 
   const leftColumn = [...membersBox, '', ...tasksBox]
-  const rightColumn = [...mailboxBox]
+  const rightColumn = [...mailboxBox, '', ...detailBox]
   const grid = mergeColumns(leftColumn, rightColumn, leftWidth, rightWidth, gap)
 
   const lines = [
     overviewLine,
     '',
     ...grid,
-    '',
-    ...detailBox,
     '',
     `  ${globalHint}`,
   ]
