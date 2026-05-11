@@ -44,21 +44,26 @@ pi install npm:pi-agentteam
 
 ```text
 You (leader):
-  Create a team and spawn a researcher to analyze the build pipeline.
+  Create a team and ask the leader to handle the routing work.
 
-  > agentteam_create({ team_name: "my-project", description: "Optimize the build pipeline" })
-  > agentteam_spawn({ name: "research", role: "researcher",
-                      task: "Analyze the build pipeline and report bottlenecks" })
-  > agentteam_spawn({ name: "plan", role: "planner" })
+  > Create an agentteam for this project.
+  > Spawn one researcher to analyze the build pipeline.
+  > When the research task is done, ask a planner for an optimization plan.
 
-  ... researcher works in its own tmux pane ...
+  The leader should create/assign shared tasks, choose the matching teammate
+  from the roster, send short task-id based assignments, then receive and
+  synthesize completion reports.
+```
 
-  > agentteam_send({ to: "plan", message: "Research done, draft an optimization plan",
-                     type: "fyi" })
+Equivalent low-level tool flow when you need it:
 
-  ... planner drafts plan ...
-
-  > agentteam_receive()   ← pick up completion_report from planner
+```text
+> agentteam_create({ team_name: "my-project", description: "Optimize the build pipeline" })
+> agentteam_spawn({ name: "research", role: "researcher",
+                    task: "Analyze the build pipeline and report bottlenecks" })
+> agentteam_spawn({ name: "plan", role: "planner" })
+> agentteam_send({ to: "plan", message: "Research done, draft an optimization plan", type: "fyi" })
+> agentteam_receive()
 ```
 
 Or open the unified local console:
@@ -78,15 +83,23 @@ Use agentteam when work benefits from visible role separation, not for every sma
 | Understand unfamiliar code | Spawn `researcher` → task note with files, facts, risks → leader synthesizes |
 | Plan a risky change | `researcher` for facts → `planner` for options and acceptance criteria |
 | Execute an approved plan | Assign one focused task to `implementer` → run checks → complete with files changed |
-| Keep a handoff from stalling | Send `fyi` or `assignment` with a task id to an idle teammate |
+| Keep a handoff from stalling | Ask the leader to route a task-id based `fyi` or `assignment` to the right teammate |
 | Resolve uncertainty | Worker sends `question` or `blocked` → leader `agentteam_receive()` → decide next step |
 | Check team health | Open `/team` for status, mailbox attention, stale panes, recovery, or cleanup |
 
 Recommended loop:
 
 ```text
-clarify → create task → delegate → teammate works visibly → receive → inspect task notes → synthesize
+clarify → create task → choose/assign owner → send task-id assignment → teammate works visibly → receive → inspect task notes → synthesize
 ```
+
+Use natural language first:
+
+```text
+Let a researcher inspect this area. Create the task, choose the matching teammate, send the assignment, then summarize the result when it reports back.
+```
+
+The leader should not make you memorize teammate names when the intent is clear. If one teammate matches the requested role, reuse it. If several could match, ask a short clarification. If none exists, ask before spawning. Never broadcast by default.
 
 Keep the leader as coordinator: teammates produce facts, plans, edits, and reports; the leader decides what to adopt and how to answer the user.
 
@@ -197,7 +210,7 @@ Runtime state is stored under `~/.pi/agent/agentteam/` (`teams/`, `mailboxes/`, 
 |------|-------------|
 | `agentteam_create` | Create a new team |
 | `agentteam_spawn` | Spawn a teammate (omit `task` for idle) |
-| `agentteam_send` | Send a typed message |
+| `agentteam_send` | Send a typed message to a specific teammate or explicit broadcast |
 | `agentteam_receive` | Pull unread mailbox messages |
 | `agentteam_task` | Manage shared tasks (`create` · `claim` · `update` · `complete` · `list` · `note`) |
 
