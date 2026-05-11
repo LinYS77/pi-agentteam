@@ -5,6 +5,7 @@ module.exports = {
     const workerRole = env.helpers.requireDist('tools/workerRole.js')
     const workerPrompt = env.helpers.requireDist('tools/workerPrompt.js')
     const messagePolicy = env.helpers.requireDist('tools/messagePolicy.js')
+    const messageRouting = env.helpers.requireDist('tools/messageRouting.js')
     const taskPolicy = env.helpers.requireDist('tools/taskPolicy.js')
     const contextService = env.helpers.requireDist('hooks/contextService.js')
 
@@ -88,6 +89,37 @@ module.exports = {
       }),
       false,
     )
+
+    const routingTeam = {
+      members: {
+        'team-lead': { name: 'team-lead' },
+        alpha: { name: 'alpha' },
+        beta: { name: 'beta' },
+      },
+    }
+    const sanitizeDeps = {
+      sanitizeWorkerName: name => name.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-'),
+    }
+    let routing = messageRouting.resolveMessageRecipients({
+      team: routingTeam,
+      sender: 'team-lead',
+      params: { to: 'Alpha Worker', message: 'hello' },
+      deps: sanitizeDeps,
+    })
+    assert.deepEqual(routing.recipients, ['alpha-worker'])
+    assert.equal(routing.routing.mode, 'explicit')
+    assert.equal(routing.routing.explicitTo, 'Alpha Worker')
+    assert.equal(routing.routing.resolvedRecipient, 'alpha-worker')
+
+    routing = messageRouting.resolveMessageRecipients({
+      team: routingTeam,
+      sender: 'alpha',
+      params: { to: '*', message: 'hello everyone' },
+      deps: sanitizeDeps,
+    })
+    assert.deepEqual(routing.recipients.sort(), ['beta', 'team-lead'])
+    assert.equal(routing.routing.mode, 'broadcast')
+    assert.equal(routing.routing.explicitTo, '*')
 
     const team = {
       members: {

@@ -340,6 +340,7 @@ function loadModules() {
     runtime: req('runtime.js'),
     runtimePanes: req('runtimePanes.js'),
     runtimeService: req('runtimeService.js'),
+    messageRouting: req('tools/messageRouting.js'),
     viewModel: req('teamPanel/viewModel.js'),
     layout: req('teamPanel/layout.js'),
   }

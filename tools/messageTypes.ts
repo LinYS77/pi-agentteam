@@ -1,4 +1,5 @@
 import type { TeamMessagePriority, TeamMessageType, TeamState } from '../types.js'
+import type { MessageRoutingDetails } from './messageRouting.js'
 import type { ToolHandlerDeps } from './shared.js'
 
 export type TeamSendInput = {
@@ -25,6 +26,7 @@ export type MessageDeliveryState = {
   resolvedThreadId: string | undefined
   priority: TeamMessagePriority
   metadata?: Record<string, unknown>
+  routing: MessageRoutingDetails
   sent: string[]
   leaderMirrors: string[]
   wakeByRecipient: Array<{ recipient: string; wakeHint: string }>

@@ -226,7 +226,7 @@ Runtime state is stored under `~/.pi/agent/agentteam/` (`teams/`, `mailboxes/`, 
 
 ```
 index.ts              ← Extension entry point
-├── tools/            ← Thin tool registrations plus team/message/task/worker services & policy helpers
+├── tools/            ← Thin tool registrations plus team/message/task/worker services, routing, and policy helpers
 ├── commands/         ← /team console command and runtime action handlers
 ├── hooks/            ← Thin hook registrations plus lifecycle/context services and tool guard
 ├── teamPanel/        ← Interactive console (layout, view model, input, actions)

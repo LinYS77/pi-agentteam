@@ -14,6 +14,7 @@ import {
 import { TEAM_LEAD } from '../types.js'
 import { appendPeerMessageEvent, deliverMessageToRecipient } from './messageDelivery.js'
 import { executeReceiveMessages } from './messageReceive.js'
+import { resolveMessageRecipients } from './messageRouting.js'
 import type { MessageDeliveryState, TeamReceiveInput, TeamSendInput } from './messageTypes.js'
 
 export type { TeamReceiveInput, TeamSendInput }
@@ -46,12 +47,7 @@ export async function executeSendMessage(
     return { content: [{ type: 'text', text: 'No current team context.' }], details: {} }
   }
   const sender = deps.currentActor(ctx)
-  const recipients =
-    params.to === '*'
-      ? Object.values(team.members)
-          .map(m => m.name)
-          .filter(name => name !== sender)
-      : [deps.sanitizeWorkerName(params.to)]
+  const resolvedRecipients = resolveMessageRecipients({ team, sender, params, deps })
   const messageType: TeamMessageType = normalizeMessageType(params.type ?? 'question')
   const senderRole = (team.members[sender]?.role ?? '').trim().toLowerCase()
   const plannerPolicyDenied = enforcePlannerSendPolicy({
@@ -89,13 +85,14 @@ export async function executeSendMessage(
     resolvedThreadId: defaultThreadIdForTask(params.taskId),
     priority: normalizePriority(params.priority),
     metadata: params.metadata,
+    routing: resolvedRecipients.routing,
     sent: [],
     leaderMirrors: [],
     wakeByRecipient: [],
     skippedRecipients: [],
   }
 
-  for (const recipient of recipients) {
+  for (const recipient of resolvedRecipients.recipients) {
     await deliverMessageToRecipient(deliveryState, recipient)
   }
 
@@ -119,6 +116,7 @@ export async function executeSendMessage(
       priority: deliveryState.priority,
       taskId: params.taskId,
       threadId: deliveryState.resolvedThreadId,
+      routing: deliveryState.routing,
       mirroredToLeader: deliveryState.leaderMirrors,
     },
   }
