@@ -199,6 +199,66 @@ module.exports = {
     assert.equal(statusCalls, 2, 'invalidateStatus should still force one status refresh')
     assert.equal(widgetCalls, 2, 'invalidateStatus should still force one widget refresh')
 
+    const runtimePanes = env.modules.runtimePanes
+    const cleanupTeam = env.modules.state.createInitialTeamState({
+      teamName: 'cleanup-helper-suite',
+      leaderSessionFile: '/tmp/cleanup-helper-leader.jsonl',
+      leaderCwd: '/tmp/cleanup-helper-project',
+      description: 'cleanup helper test',
+    })
+    env.modules.state.upsertMember(cleanupTeam, {
+      name: 'cleanup-worker',
+      role: 'researcher',
+      cwd: '/tmp/cleanup-helper-project',
+      sessionFile: '/tmp/cleanup-helper-worker.jsonl',
+      paneId: '%cleanup-worker',
+      windowTarget: 'test:@1',
+      status: 'idle',
+    })
+    cleanupTeam.members['team-lead'].paneId = '%cleanup-leader'
+    cleanupTeam.members['team-lead'].windowTarget = 'test:@1'
+    env.patches.livePanes.add('%cleanup-worker')
+    env.patches.livePanes.add('%cleanup-leader')
+    env.modules.state.writeTeamState(cleanupTeam)
+
+    runtimePanes.clearAndKillTeamPanes(cleanupTeam, {
+      includeLeaderPane: true,
+      preservePaneId: '%cleanup-worker',
+    })
+    assert.equal(env.patches.livePanes.has('%cleanup-worker'), true, 'preservePaneId should keep selected current pane alive')
+    assert.equal(env.patches.livePanes.has('%cleanup-leader'), false, 'clearAndKillTeamPanes should still remove non-preserved leader pane')
+    assert.ok(env.patches.clearedPaneLabels.includes('%cleanup-worker'), 'preservePaneId should clear label even when pane survives')
+    env.modules.state.deleteTeamState('cleanup-helper-suite')
+
+    const deleteRuntimeTeam = env.modules.state.createInitialTeamState({
+      teamName: 'delete-runtime-helper-suite',
+      leaderSessionFile: '/tmp/delete-runtime-helper-leader.jsonl',
+      leaderCwd: '/tmp/delete-runtime-helper-project',
+      description: 'delete runtime helper test',
+    })
+    env.modules.state.upsertMember(deleteRuntimeTeam, {
+      name: 'delete-runtime-worker',
+      role: 'researcher',
+      cwd: '/tmp/delete-runtime-helper-project',
+      sessionFile: '/tmp/delete-runtime-helper-worker.jsonl',
+      paneId: '%delete-runtime-worker',
+      windowTarget: 'test:@1',
+      status: 'idle',
+    })
+    deleteRuntimeTeam.members['team-lead'].paneId = '%delete-runtime-leader'
+    deleteRuntimeTeam.members['team-lead'].windowTarget = 'test:@1'
+    env.patches.livePanes.add('%delete-runtime-worker')
+    env.patches.livePanes.add('%delete-runtime-leader')
+    env.modules.state.writeTeamState(deleteRuntimeTeam)
+    env.modules.runtime.deleteTeamRuntime(deleteRuntimeTeam, {
+      includeLeaderPane: true,
+      preservePaneId: '%delete-runtime-worker',
+    })
+    assert.equal(env.modules.state.readTeamState('delete-runtime-helper-suite'), null, 'deleteTeamRuntime should delete team state')
+    assert.equal(env.patches.livePanes.has('%delete-runtime-worker'), true, 'deleteTeamRuntime should preserve current pane')
+    assert.equal(env.patches.livePanes.has('%delete-runtime-leader'), false, 'deleteTeamRuntime should still remove non-preserved leader pane')
+    assert.ok(env.patches.clearedPaneLabels.includes('%delete-runtime-worker'), 'deleteTeamRuntime should clear preserved pane label')
+
     const originalResolvePaneBinding = env.modules.tmux.resolvePaneBinding
     let resolveCalls = 0
     try {

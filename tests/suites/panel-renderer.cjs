@@ -94,6 +94,11 @@ module.exports = {
     assert.ok(attachedLines.some(line => line.includes('Attention') && line.includes('blocked task')), 'overview should include blocked task attention')
     assert.ok(attachedLines.some(line => line.includes('unread')), 'overview/list should include unread attention')
     assert.ok(attachedLines.some(line => line.includes('unowned')), 'overview/list should include unowned task attention')
+    assert.ok(attachedLines.some(line => line.includes('Name') && line.includes('Status') && line.includes('Context')), 'member list should include a lightweight column header')
+    assert.ok(attachedLines.some(line => line.includes('Task') && line.includes('Title') && line.includes('Owner')), 'task list should include a lightweight column header')
+    assert.ok(attachedLines.some(line => line.includes('From') && line.includes('Summary') && line.includes('Time')), 'mailbox list should include a lightweight column header')
+    assert.ok(attachedLines.some(line => line.includes('Status')), 'overview/detail hierarchy should show a section label')
+    assert.ok(attachedLines.some(line => line.includes('Content')), 'task detail hierarchy should show a content section label')
 
     state.focus = 'tasks'
     state.selectedIndex = data.tasks.findIndex(item => item.id === blockedTask.id)
@@ -123,6 +128,7 @@ module.exports = {
     assert.ok(memberLines.some(line => line.includes('pane %2') && line.includes('tasks 1') && line.includes('age')), 'member row should show stable health fields')
     assert.ok(memberLines.some(line => line.includes('Health') && line.includes('idle')), 'member details should show health label')
     assert.ok(memberLines.some(line => line.includes('Pane') && line.includes('%2')), 'member details should show pane id')
+    assert.ok(memberLines.some(line => line.includes('Session')), 'member detail hierarchy should show a session section label')
     assert.ok(memberLines.some(line => line.includes('Updated') && line.includes('ago')), 'member details should show updated age')
 
     const noPaneTeam = modules.state.readTeamState('render-suite')
