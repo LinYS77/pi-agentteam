@@ -20,6 +20,24 @@ function requireTask(team: TaskCommandContext['team'], taskId: string) {
   return task
 }
 
+function resolveTaskOwner(
+  input: TaskCommandContext,
+  team: TaskCommandContext['team'],
+  ownerName: string | undefined,
+  fallbackOwner?: string,
+): string {
+  const owner = ownerName !== undefined ? input.deps.normalizeOwnerName(ownerName) : fallbackOwner
+  if (!owner) throw new Error('owner cannot be empty')
+  input.deps.assertValidOwner(team, owner)
+  return owner
+}
+
+function assignTaskOwner(task: ReturnType<typeof requireTask>, owner: string): void {
+  task.owner = owner
+  task.status = 'in_progress'
+  task.updatedAt = Date.now()
+}
+
 export function listTasksCommand(input: TaskCommandContext): TaskCommandResult {
   const text =
     Object.values(input.team.tasks)
@@ -36,6 +54,9 @@ export function createTaskCommand(input: TaskCommandContext, params: TeamTaskInp
 
   let createdTaskId = ''
   const updated = requireUpdatedTeam(updateTeamState(input.teamName, latest => {
+    const owner = params.owner !== undefined
+      ? resolveTaskOwner(input, latest, params.owner)
+      : undefined
     const task = createTask(latest, {
       title: params.title!,
       description: params.description!,
@@ -46,6 +67,13 @@ export function createTaskCommand(input: TaskCommandContext, params: TeamTaskInp
       messageType: 'assignment',
       threadId: defaultThreadIdForTask(task.id),
     })
+    if (owner) {
+      assignTaskOwner(task, owner)
+      input.deps.appendStructuredTaskNote(task, input.actor, `Assigned to ${owner} on create`, {
+        messageType: 'assignment',
+        threadId: defaultThreadIdForTask(task.id),
+      })
+    }
   }), input.teamName)
   const task = requireTask(updated, createdTaskId)
   return { task, text: `Created ${formatTask(task)}`, details: { task } }
@@ -54,12 +82,8 @@ export function createTaskCommand(input: TaskCommandContext, params: TeamTaskInp
 export function claimTaskCommand(input: TaskCommandContext, taskId: string, params: TeamTaskInput): TaskCommandResult {
   const updated = requireUpdatedTeam(updateTeamState(input.teamName, latest => {
     const task = requireTask(latest, taskId)
-    const owner = params.owner !== undefined ? input.deps.normalizeOwnerName(params.owner) : input.actor
-    if (!owner) throw new Error('owner cannot be empty')
-    input.deps.assertValidOwner(latest, owner)
-    task.owner = owner
-    task.status = 'in_progress'
-    task.updatedAt = Date.now()
+    const owner = resolveTaskOwner(input, latest, params.owner, input.actor)
+    assignTaskOwner(task, owner)
     input.deps.appendStructuredTaskNote(task, input.actor, `Claimed by ${owner}`, {
       messageType: 'assignment',
       threadId: defaultThreadIdForTask(task.id),

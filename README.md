@@ -90,7 +90,7 @@ Use agentteam when work benefits from visible role separation, not for every sma
 Recommended loop:
 
 ```text
-clarify → create task → choose/assign owner → send task-id assignment → teammate works visibly → receive → inspect task notes → synthesize
+clarify → create task with owner when clear → send task-id assignment → teammate works visibly → receive → inspect task notes → synthesize
 ```
 
 Use natural language first:
@@ -212,7 +212,7 @@ Runtime state is stored under `~/.pi/agent/agentteam/` (`teams/`, `mailboxes/`, 
 | `agentteam_spawn` | Spawn a teammate (omit `task` for idle) |
 | `agentteam_send` | Send a typed message to a specific teammate or explicit broadcast |
 | `agentteam_receive` | Pull unread mailbox messages |
-| `agentteam_task` | Manage shared tasks (`create` · `claim` · `update` · `complete` · `list` · `note`) |
+| `agentteam_task` | Manage shared tasks (`create` can include `owner`; `claim` · `update` · `complete` · `list` · `note`) |
 
 ### Command
 
@@ -283,6 +283,7 @@ npm run test:e2e   # optional local tmux smoke; requires tmux
 ## ⚠️ Limitations
 
 - Workers are separate `pi` sessions in tmux panes, not in-process subagents
+- `agentteam_task action=create` can include `owner` when the responsible teammate is already clear; this assigns shared state only and does not send/wake by itself
 - Passing `task` to `agentteam_spawn` starts work immediately; omitting it creates an idle teammate for later `send`/`task` follow-up
 - State is local to one machine (no remote/distributed support)
 - Requires tmux; Windows terminals not supported (WSL works)

@@ -68,6 +68,49 @@ module.exports = {
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.members['research-one'].status, 'idle', 'claim should update shared state only and not wake worker')
 
+    const promptsBeforeOwnedCreate = env.sentPrompts.length
+    res = await tool('agentteam_task').execute('task-create-owned', {
+      action: 'create',
+      title: 'Owned on create',
+      description: 'Validate owner assignment at creation time',
+      owner: 'Plan One',
+    }, null, () => {}, leaderCtx)
+    helpers.assertContains(res.content[0].text, 'Created T002')
+    assert.equal(res.details.task.owner, 'plan-one')
+    assert.equal(res.details.task.status, 'in_progress')
+    assert.equal(
+      env.sentPrompts.length,
+      promptsBeforeOwnedCreate,
+      'create with owner should update task state only and not wake worker',
+    )
+
+    team = modules.state.readTeamState('full-suite-team')
+    assert.equal(team.tasks['T002'].owner, 'plan-one')
+    assert.equal(team.tasks['T002'].status, 'in_progress')
+    assert.ok(
+      team.tasks['T002'].notes.some(note => note.text === 'Assigned to plan-one on create'),
+      'create with owner should record assignment note',
+    )
+
+    await assert.rejects(
+      () => tool('agentteam_task').execute('task-create-empty-owner', {
+        action: 'create',
+        title: 'Bad owner',
+        description: 'empty owner should be rejected',
+        owner: '   ',
+      }, null, () => {}, leaderCtx),
+      /owner cannot be empty/,
+    )
+    await assert.rejects(
+      () => tool('agentteam_task').execute('task-create-missing-owner', {
+        action: 'create',
+        title: 'Missing owner',
+        description: 'missing owner should be rejected',
+        owner: 'missing-worker',
+      }, null, () => {}, leaderCtx),
+      /Owner missing-worker not found in current team/,
+    )
+
     res = await tool('agentteam_send').execute('assign-1', {
       to: 'research-one',
       message: 'You were assigned shared task T001: Inspect project\n\nExplore project and report findings',
@@ -167,6 +210,13 @@ module.exports = {
 
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.tasks['T001'].status, 'completed')
+
+    res = await tool('agentteam_task').execute('task-complete-owned-create', {
+      action: 'complete',
+      taskId: 'T002',
+      note: 'planner completed task created with owner',
+    }, null, () => {}, planCtx)
+    helpers.assertContains(res.content[0].text, 'Completed T002')
 
     const mergeTeam = modules.state.createInitialTeamState({
       teamName: 'merge-freshness-suite',

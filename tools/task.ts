@@ -25,7 +25,9 @@ export function registerTaskTools(pi: ExtensionAPI, deps: ToolHandlerDeps): void
     promptSnippet: 'Manage the shared agentteam task board: create, list, claim, update, note, and complete tasks.',
     promptGuidelines: [
       'Use agentteam_task before delegation so teammate work is tracked by taskId.',
-      'Use agentteam_task action=create for concrete work items, action=claim to assign an owner, action=note for durable findings, and action=complete for explicit completion reports.',
+      'Use agentteam_task action=create for concrete work items; include owner when the responsible teammate is already clear so the task is assigned immediately without a separate claim.',
+      'Creating or claiming a task only updates shared state; still use agentteam_send for the actual assignment message/wake.',
+      'Use action=claim to assign or reassign an existing task, action=note for durable findings, and action=complete for explicit completion reports.',
       'When reporting implementation completion through agentteam_task, include files changed and checks run in the note when possible.',
     ],
     parameters: TeamTaskParams,
