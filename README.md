@@ -69,6 +69,29 @@ Or open the unified local console:
 
 ---
 
+## 🧭 Recommended Workflows
+
+Use agentteam when work benefits from visible role separation, not for every small edit.
+
+| Want | Suggested flow |
+|------|----------------|
+| Understand unfamiliar code | Spawn `researcher` → task note with files, facts, risks → leader synthesizes |
+| Plan a risky change | `researcher` for facts → `planner` for options and acceptance criteria |
+| Execute an approved plan | Assign one focused task to `implementer` → run checks → complete with files changed |
+| Keep a handoff from stalling | Send `fyi` or `assignment` with a task id to an idle teammate |
+| Resolve uncertainty | Worker sends `question` or `blocked` → leader `agentteam_receive()` → decide next step |
+| Check team health | Open `/team` for status, mailbox attention, stale panes, recovery, or cleanup |
+
+Recommended loop:
+
+```text
+clarify → create task → delegate → teammate works visibly → receive → inspect task notes → synthesize
+```
+
+Keep the leader as coordinator: teammates produce facts, plans, edits, and reports; the leader decides what to adopt and how to answer the user.
+
+---
+
 ## 🎮 `/team` Console
 
 `/team` is the only slash command exposed by agentteam. It opens a local console instead of a pile of maintenance commands.
