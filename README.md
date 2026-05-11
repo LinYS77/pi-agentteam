@@ -99,7 +99,7 @@ Use natural language first:
 Let a researcher inspect this area. Create the task, choose the matching teammate, send the assignment, then summarize the result when it reports back.
 ```
 
-The leader should not make you memorize teammate names when the intent is clear. If one teammate matches the requested role, reuse it. If several could match, ask a short clarification. If none exists, ask before spawning. Never broadcast by default.
+The leader should not make you memorize teammate names when the intent is clear. If one teammate matches the requested role, reuse it. If several could match, ask a short clarification. If none exists, ask before spawning. Once a task has an owner, `agentteam_send` can omit `to` and route through `taskId`. Never broadcast by default.
 
 Keep the leader as coordinator: teammates produce facts, plans, edits, and reports; the leader decides what to adopt and how to answer the user.
 
@@ -162,6 +162,8 @@ Messages carry an implicit **wake hint** that controls how the recipient reacts.
 > \* *Peer handoff exception:* when a non-leader sends `fyi` to an idle teammate, wake is auto-upgraded to `soft` so the handoff doesn't stall silently.
 >
 > Peer `completion_report` and `blocked` messages are also mirrored to `team-lead` so the leader can always converge completed work and blockers.
+>
+> Task-based routing: when `taskId` is provided and `to` is omitted, leader messages route to the task owner; messages from the task owner route back to `team-lead`. Unowned, missing, or ambiguous tasks return an error instead of falling back to broadcast.
 
 ---
 
@@ -210,7 +212,7 @@ Runtime state is stored under `~/.pi/agent/agentteam/` (`teams/`, `mailboxes/`, 
 |------|-------------|
 | `agentteam_create` | Create a new team |
 | `agentteam_spawn` | Spawn a teammate (omit `task` for idle) |
-| `agentteam_send` | Send a typed message to a specific teammate or explicit broadcast |
+| `agentteam_send` | Send a typed message to a specific teammate, an owned task, or explicit broadcast |
 | `agentteam_receive` | Pull unread mailbox messages |
 | `agentteam_task` | Manage shared tasks (`create` can include `owner`; `claim` · `update` · `complete` · `list` · `note`) |
 
@@ -284,6 +286,7 @@ npm run test:e2e   # optional local tmux smoke; requires tmux
 
 - Workers are separate `pi` sessions in tmux panes, not in-process subagents
 - `agentteam_task action=create` can include `owner` when the responsible teammate is already clear; this assigns shared state only and does not send/wake by itself
+- `agentteam_send` can omit `to` only when `taskId` safely routes through an owned task; it never falls back to implicit broadcast
 - Passing `task` to `agentteam_spawn` starts work immediately; omitting it creates an idle teammate for later `send`/`task` follow-up
 - State is local to one machine (no remote/distributed support)
 - Requires tmux; Windows terminals not supported (WSL works)

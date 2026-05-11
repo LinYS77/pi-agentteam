@@ -58,6 +58,14 @@ module.exports = {
     }, null, () => {}, leaderCtx)
     helpers.assertContains(res.content[0].text, 'Created T001')
 
+    res = await tool('agentteam_send').execute('send-unowned-no-to-denied', {
+      message: 'This should not route without an owner',
+      type: 'fyi',
+      taskId: 'T001',
+    }, null, () => {}, leaderCtx)
+    assert.equal(res.details.denied, true)
+    assert.equal(res.details.reason, 'task_owner_missing')
+
     res = await tool('agentteam_task').execute('claim-1', {
       action: 'claim',
       taskId: 'T001',
@@ -112,13 +120,14 @@ module.exports = {
     )
 
     res = await tool('agentteam_send').execute('assign-1', {
-      to: 'research-one',
       message: 'You were assigned shared task T001: Inspect project\n\nExplore project and report findings',
       summary: 'Assigned T001',
       type: 'assignment',
       taskId: 'T001',
     }, null, () => {}, leaderCtx)
     assert.deepEqual(res.details.recipients, ['research-one'])
+    assert.equal(res.details.routing.mode, 'task_owner')
+    assert.equal(res.details.routing.taskOwner, 'research-one')
 
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.tasks['T001'].owner, 'research-one')
@@ -191,11 +200,12 @@ module.exports = {
     let leadMailbox = modules.state.readMailbox('full-suite-team', 'team-lead')
 
     res = await tool('agentteam_send').execute('send-2', {
-      to: 'team-lead',
       message: 'Task T001 completed',
       type: 'completion_report',
       taskId: 'T001',
     }, null, () => {}, researchCtx)
+    assert.deepEqual(res.details.recipients, ['team-lead'])
+    assert.equal(res.details.routing.mode, 'owner_to_leader')
     assert.equal(res.details.wakeByRecipient[0].wakeHint, 'hard')
 
     leadMailbox = modules.state.readMailbox('full-suite-team', 'team-lead')

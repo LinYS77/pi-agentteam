@@ -32,7 +32,7 @@ export async function deliverMessageToRecipient(
   } = state
 
   if (!recipient) {
-    skippedRecipients.push({ recipient: params.to, reason: 'recipient name is empty after normalization' })
+    skippedRecipients.push({ recipient: params.to ?? '', reason: 'recipient name is empty after normalization' })
     return
   }
   if (!team.members[recipient]) {

@@ -5,7 +5,7 @@ import type { ToolHandlerDeps } from './shared.js'
 import { executeReceiveMessages, executeSendMessage } from './messageService.js'
 
 const TeamSendParams = Type.Object({
-  to: Type.String({ description: 'Recipient member name or * for broadcast' }),
+  to: Type.Optional(Type.String({ description: 'Recipient member name or * for explicit broadcast; omit when taskId can safely route through task owner' })),
   message: Type.String({ description: 'Message content' }),
   summary: Type.Optional(Type.String({ description: 'Short summary preview' })),
   type: Type.Optional(
@@ -27,10 +27,12 @@ export function registerMessageTools(pi: ExtensionAPI, deps: ToolHandlerDeps): v
   pi.registerTool({
     name: 'agentteam_send',
     label: 'AgentTeam Send',
-    description: 'Send a typed message to one teammate or broadcast within the current team.',
-    promptSnippet: 'Send typed coordination messages such as assignment, question, blocked, completion_report, or fyi within the current team.',
+    description: 'Send a typed message to one teammate, a task owner, or explicit broadcast within the current team.',
+    promptSnippet: 'Send typed coordination messages such as assignment, question, blocked, completion_report, or fyi within the current team. When taskId has an owner, to can be omitted for safe task-based routing.',
     promptGuidelines: [
       'Use agentteam_send after creating or claiming a shared task so the message can reference taskId when possible.',
+      'When sending from leader about an owned task, you may omit to and let taskId route to the task owner; when the owner reports back on their task, omitting to routes to team-lead.',
+      'Specify to when overriding task-owner routing; use to="*" only for intentional broadcast to everyone else.',
       'Use agentteam_send with type assignment for direct delegation, question for clarification, blocked for escalation, completion_report for finished work, and fyi for lightweight handoffs.',
       'Prefer concise summaries in agentteam_send and keep long artifacts in shared task notes or files.',
     ],

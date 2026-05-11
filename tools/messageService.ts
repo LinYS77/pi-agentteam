@@ -33,7 +33,7 @@ async function mirrorPeerEscalationToLeaderIfNeeded(
   }
 
   await deliverMessageToRecipient(state, TEAM_LEAD, {
-    mirrorOf: state.sent.join(',') || state.params.to,
+    mirrorOf: state.sent.join(',') || state.params.to || state.routing.resolvedRecipient || state.routing.mode,
   })
 }
 
@@ -47,7 +47,6 @@ export async function executeSendMessage(
     return { content: [{ type: 'text', text: 'No current team context.' }], details: {} }
   }
   const sender = deps.currentActor(ctx)
-  const resolvedRecipients = resolveMessageRecipients({ team, sender, params, deps })
   const messageType: TeamMessageType = normalizeMessageType(params.type ?? 'question')
   const senderRole = (team.members[sender]?.role ?? '').trim().toLowerCase()
   const plannerPolicyDenied = enforcePlannerSendPolicy({
@@ -73,6 +72,17 @@ export async function executeSendMessage(
     return {
       content: [{ type: 'text', text: `Message type ${messageType} is leader-only for non-leader actors` }],
       details: { denied: true, sender, type: messageType },
+    }
+  }
+
+  const resolvedRecipients = resolveMessageRecipients({ team, sender, params, deps })
+  if (!resolvedRecipients.ok) {
+    return {
+      content: [{ type: 'text', text: resolvedRecipients.text }],
+      details: {
+        ...resolvedRecipients.details,
+        type: messageType,
+      },
     }
   }
 

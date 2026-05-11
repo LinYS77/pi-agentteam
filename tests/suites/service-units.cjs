@@ -106,6 +106,7 @@ module.exports = {
       params: { to: 'Alpha Worker', message: 'hello' },
       deps: sanitizeDeps,
     })
+    assert.equal(routing.ok, true)
     assert.deepEqual(routing.recipients, ['alpha-worker'])
     assert.equal(routing.routing.mode, 'explicit')
     assert.equal(routing.routing.explicitTo, 'Alpha Worker')
@@ -117,9 +118,98 @@ module.exports = {
       params: { to: '*', message: 'hello everyone' },
       deps: sanitizeDeps,
     })
+    assert.equal(routing.ok, true)
     assert.deepEqual(routing.recipients.sort(), ['beta', 'team-lead'])
     assert.equal(routing.routing.mode, 'broadcast')
     assert.equal(routing.routing.explicitTo, '*')
+
+    const ownedRoutingTeam = {
+      members: {
+        'team-lead': { name: 'team-lead' },
+        owner: { name: 'owner' },
+        other: { name: 'other' },
+      },
+      tasks: {
+        T001: { id: 'T001', owner: 'owner' },
+        T002: { id: 'T002' },
+        T003: { id: 'T003', owner: 'missing' },
+        T004: { id: 'T004', owner: 'team-lead' },
+      },
+    }
+    routing = messageRouting.resolveMessageRecipients({
+      team: ownedRoutingTeam,
+      sender: 'team-lead',
+      params: { taskId: 'T001', message: 'assignment' },
+      deps: sanitizeDeps,
+    })
+    assert.equal(routing.ok, true)
+    assert.deepEqual(routing.recipients, ['owner'])
+    assert.equal(routing.routing.mode, 'task_owner')
+    assert.equal(routing.routing.taskOwner, 'owner')
+
+    routing = messageRouting.resolveMessageRecipients({
+      team: ownedRoutingTeam,
+      sender: 'owner',
+      params: { taskId: 'T001', message: 'done' },
+      deps: sanitizeDeps,
+    })
+    assert.equal(routing.ok, true)
+    assert.deepEqual(routing.recipients, ['team-lead'])
+    assert.equal(routing.routing.mode, 'owner_to_leader')
+
+    routing = messageRouting.resolveMessageRecipients({
+      team: ownedRoutingTeam,
+      sender: 'team-lead',
+      params: { message: 'missing recipient' },
+      deps: sanitizeDeps,
+    })
+    assert.equal(routing.ok, false)
+    assert.equal(routing.details.reason, 'missing_recipient')
+
+    routing = messageRouting.resolveMessageRecipients({
+      team: ownedRoutingTeam,
+      sender: 'team-lead',
+      params: { taskId: 'T999', message: 'missing task' },
+      deps: sanitizeDeps,
+    })
+    assert.equal(routing.ok, false)
+    assert.equal(routing.details.reason, 'task_not_found')
+
+    routing = messageRouting.resolveMessageRecipients({
+      team: ownedRoutingTeam,
+      sender: 'team-lead',
+      params: { taskId: 'T002', message: 'unowned task' },
+      deps: sanitizeDeps,
+    })
+    assert.equal(routing.ok, false)
+    assert.equal(routing.details.reason, 'task_owner_missing')
+
+    routing = messageRouting.resolveMessageRecipients({
+      team: ownedRoutingTeam,
+      sender: 'team-lead',
+      params: { taskId: 'T003', message: 'removed owner' },
+      deps: sanitizeDeps,
+    })
+    assert.equal(routing.ok, false)
+    assert.equal(routing.details.reason, 'task_owner_member_not_found')
+
+    routing = messageRouting.resolveMessageRecipients({
+      team: ownedRoutingTeam,
+      sender: 'team-lead',
+      params: { taskId: 'T004', message: 'leader owned' },
+      deps: sanitizeDeps,
+    })
+    assert.equal(routing.ok, false)
+    assert.equal(routing.details.reason, 'task_owner_is_leader')
+
+    routing = messageRouting.resolveMessageRecipients({
+      team: ownedRoutingTeam,
+      sender: 'other',
+      params: { taskId: 'T001', message: 'non-owner' },
+      deps: sanitizeDeps,
+    })
+    assert.equal(routing.ok, false)
+    assert.equal(routing.details.reason, 'task_sender_not_owner')
 
     const team = {
       members: {

@@ -3,7 +3,7 @@ import type { MessageRoutingDetails } from './messageRouting.js'
 import type { ToolHandlerDeps } from './shared.js'
 
 export type TeamSendInput = {
-  to: string
+  to?: string
   message: string
   summary?: string
   type?: 'assignment' | 'question' | 'blocked' | 'completion_report' | 'fyi'

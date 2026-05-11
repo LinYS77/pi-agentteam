@@ -154,13 +154,22 @@ module.exports = {
     assert.deepEqual(res.details.recipients, ['team-lead'])
 
     res = await tool('agentteam_send').execute('guard-planner-completion-valid', {
-      to: 'team-lead',
       type: 'completion_report',
       summary: 'Planning package ready',
       message: 'T002 planning handoff finalized. See task notes for structured plan decomposition.',
       taskId: 'T002',
     }, null, () => {}, plannerCtx)
     assert.deepEqual(res.details.recipients, ['team-lead'])
+    assert.equal(res.details.routing.mode, 'owner_to_leader')
+
+    res = await tool('agentteam_send').execute('guard-planner-completion-non-owner-denied', {
+      type: 'completion_report',
+      summary: 'Planning package ready',
+      message: 'Planner cannot implicitly route for a researcher-owned task.',
+      taskId: 'T001',
+    }, null, () => {}, plannerCtx)
+    assert.equal(res.details.denied, true)
+    assert.equal(res.details.reason, 'task_sender_not_owner')
 
     res = await tool('agentteam_task').execute('guard-task-create-impl-owned', {
       action: 'create',
@@ -239,6 +248,14 @@ module.exports = {
       type: 'assignment',
     }, null, () => {}, plannerCtx)
     assert.equal(res.details.denied, true)
+
+    res = await tool('agentteam_send').execute('guard-assignment-no-to-denied-before-routing', {
+      message: 'unauthorized assignment should be denied before implicit routing',
+      type: 'assignment',
+      taskId: 'T002',
+    }, null, () => {}, plannerCtx)
+    assert.equal(res.details.denied, true)
+    assert.equal(res.details.type, 'assignment')
 
     const teamBeforeLeaderWake = modules.state.readTeamState('guard-suite-team')
     modules.state.updateMemberStatus(teamBeforeLeaderWake, 'team-lead', {
