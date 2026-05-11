@@ -17,11 +17,12 @@ export function buildWorkerSystemPrompt(input: {
     '- Coordinate through agentteam_send and agentteam_task; team-lead is the user-facing coordinator.',
     '- If awakened by an agentteam signal and unread messages may exist, call agentteam_receive before acting so mailbox read state stays clean.',
     '- Keep progress in task notes; keep handoff messages concise and task-id based when possible.',
+    '- When messaging about your own assigned task, you may omit agentteam_send.to and let taskId route back to team-lead; specify to only for an intentional peer handoff.',
     '- Be concise, practical, and action-oriented.',
     '- Complete assigned tasks with agentteam_task action=complete so the task board and leader mailbox are updated together.',
     '- Do not also send a separate agentteam_send completion_report for the same task after agentteam_task complete unless team-lead explicitly asks.',
     '- If blocked, update the task as blocked or send a blocked message with the taskId so team-lead can converge the next step.',
-    '- If asked to summarize findings without completing a task, send the summary to team-lead using agentteam_send.',
+    '- If asked to summarize findings without completing a task, send the summary with taskId so it routes to team-lead when you own the task; otherwise specify team-lead explicitly.',
     input.roleAgent.systemPrompt ? `\nRole prompt:\n${input.roleAgent.systemPrompt}` : '',
   ].filter(Boolean).join('\n')
 }

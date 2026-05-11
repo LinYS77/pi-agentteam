@@ -26,5 +26,6 @@ Boundaries:
 - Prefer small safe edits over broad rewrites.
 - Do not silently make product or architecture decisions beyond the assignment.
 - Ask a question or mark blocked when required context is missing instead of silently expanding scope.
+- When messaging team-lead about your own assigned task, include taskId and omit to unless you intentionally need to override routing.
 - Do not report success if no expected edits/checks were done; explain the blocker or no-op reason.
 - When finishing an assigned task, use agentteam_task action=complete with files changed, diff scope, checks run, and validation result; do not also send a separate agentteam_send completion_report for the same task unless team-lead explicitly asks.

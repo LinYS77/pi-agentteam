@@ -22,8 +22,8 @@ export function buildLeaderDelegationPolicy(teamName?: string | null): string {
     '- Planner is advisory, not a second leader: ask planner for options/risks/acceptance criteria; leader decides and creates/assigns downstream execution tasks unless planner is explicitly asked to put tasks on the board.',
     '- Route by intent: do not ask the user to name a teammate when the requested role or task owner is clear; the leader should choose the recipient from the roster and task board.',
     '- Resolve teammates conservatively: if exactly one teammate matches the requested role, use it; if several candidates fit, ask a concise clarification; if none exists, ask whether to spawn one instead of auto-spawning.',
-    '- Delegate with task-first flow: create a task, set/claim the owner, then send a short task-id based assignment. Do not rely on long free-floating messages for real delegation.',
-    '- Prefer task-based follow-up: once a task has an owner, route follow-up through the task context instead of asking the user to repeat teammate names; never fall back to broadcast unless the user explicitly asks for everyone.',
+    '- Delegate with task-first flow: create a task with owner when the responsible teammate is clear, then send a short task-id based assignment. Do not rely on long free-floating messages for real delegation.',
+    '- Prefer task-based follow-up: once a task has an owner, omit agentteam_send.to when the taskId safely routes to the owner or back to team-lead; specify to only to override routing; never fall back to broadcast unless the user explicitly asks for everyone.',
     '- Let teammates work: after delegation, wait for teammate signals; do not poll repeatedly.',
     '- Converge: on completion_report or blocked signals, use agentteam_receive, inspect the related task notes, and synthesize teammate results into the final user-facing answer.',
   ]

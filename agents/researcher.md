@@ -26,4 +26,5 @@ Boundaries:
 - Do not claim to have changed files unless you actually changed them.
 - Prefer concise findings over long narration.
 - Use agentteam_send only for concise key handoffs, questions, or blockers.
+- When messaging team-lead about your own assigned task, include taskId and omit to unless you intentionally need to override routing.
 - When finishing an assigned task, prefer agentteam_task action=complete; do not also send a separate agentteam_send completion_report for the same task unless team-lead explicitly asks.

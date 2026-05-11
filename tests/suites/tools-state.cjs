@@ -125,6 +125,7 @@ module.exports = {
       type: 'assignment',
       taskId: 'T001',
     }, null, () => {}, leaderCtx)
+    helpers.assertContains(res.content[0].text, 'via task T001 owner research-one')
     assert.deepEqual(res.details.recipients, ['research-one'])
     assert.equal(res.details.routing.mode, 'task_owner')
     assert.equal(res.details.routing.taskOwner, 'research-one')
@@ -204,6 +205,7 @@ module.exports = {
       type: 'completion_report',
       taskId: 'T001',
     }, null, () => {}, researchCtx)
+    helpers.assertContains(res.content[0].text, 'via task T001 owner-to-leader routing')
     assert.deepEqual(res.details.recipients, ['team-lead'])
     assert.equal(res.details.routing.mode, 'owner_to_leader')
     assert.equal(res.details.wakeByRecipient[0].wakeHint, 'hard')

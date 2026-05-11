@@ -20,6 +20,20 @@ import type { MessageDeliveryState, TeamReceiveInput, TeamSendInput } from './me
 export type { TeamReceiveInput, TeamSendInput }
 export { executeReceiveMessages }
 
+function formatRoutingSuffix(state: MessageDeliveryState): string {
+  const { routing } = state
+  if (routing.mode === 'task_owner') {
+    return ` via task ${routing.taskId} owner ${routing.taskOwner}`
+  }
+  if (routing.mode === 'owner_to_leader') {
+    return ` via task ${routing.taskId} owner-to-leader routing`
+  }
+  if (routing.mode === 'broadcast') {
+    return ' via explicit broadcast'
+  }
+  return ''
+}
+
 async function mirrorPeerEscalationToLeaderIfNeeded(
   state: MessageDeliveryState,
 ): Promise<void> {
@@ -110,8 +124,9 @@ export async function executeSendMessage(
   appendPeerMessageEvent(deliveryState)
 
   deps.invalidateStatus(ctx)
+  const routingSuffix = deliveryState.sent.length > 0 ? formatRoutingSuffix(deliveryState) : ''
   const summary = deliveryState.sent.length > 0
-    ? `Sent message to ${deliveryState.sent.join(', ')}`
+    ? `Sent message to ${deliveryState.sent.join(', ')}${routingSuffix}`
     : 'Sent message to nobody'
   const skippedSummary = deliveryState.skippedRecipients.length > 0
     ? `; skipped ${deliveryState.skippedRecipients.map(item => `${item.recipient} (${item.reason})`).join(', ')}`

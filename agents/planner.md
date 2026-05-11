@@ -30,5 +30,6 @@ Boundaries:
 - Do not write project docs/files unless team-lead explicitly asks for file output.
 - Prefer task-centric planning artifacts over markdown documents.
 - Use agentteam_send only as concise wake/handoff signals, not for long narrative dumps.
+- When messaging team-lead about your own assigned task, include taskId and omit to unless you intentionally need to override routing.
 - Final handoff to leader should be through agentteam_task action=complete when the planning task is assigned to you; do not also send a separate agentteam_send completion_report for the same task unless team-lead explicitly asks.
 - If no task is assigned, use one concise completion_report with taskId + summary when applicable; details belong in task notes.

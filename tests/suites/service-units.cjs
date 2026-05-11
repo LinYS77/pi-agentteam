@@ -36,6 +36,7 @@ module.exports = {
     assert.ok(systemPrompt.includes('agentteam_send and agentteam_task'))
     assert.ok(systemPrompt.includes('call agentteam_receive before acting'), 'worker prompt should keep mailbox read state clean')
     assert.ok(systemPrompt.includes('task-id based'), 'worker prompt should prefer task-linked handoffs')
+    assert.ok(systemPrompt.includes('omit agentteam_send.to'), 'worker prompt should describe task-based return routing')
     assert.ok(systemPrompt.includes('If blocked'), 'worker prompt should include blocked reporting discipline')
     assert.ok(systemPrompt.includes('implementer role prompt'))
 

@@ -243,6 +243,8 @@ module.exports = {
     assert.ok(leaderPolicy.includes('spawn only the minimum necessary teammate'), 'leader policy should discourage over-spawning')
     assert.ok(leaderPolicy.includes('Planner is advisory'), 'leader policy should keep planner from becoming a second leader')
     assert.ok(leaderPolicy.includes('task-first flow'), 'leader policy should keep task-first workflow')
+    assert.ok(leaderPolicy.includes('create a task with owner'), 'leader policy should prefer owner-at-create when clear')
+    assert.ok(leaderPolicy.includes('omit agentteam_send.to'), 'leader policy should use task-based routing when safe')
     assert.ok(leaderPolicy.includes('do not ask the user to name a teammate'), 'leader policy should keep user-facing routing friction low')
     assert.ok(leaderPolicy.includes('never fall back to broadcast'), 'leader policy should avoid noisy implicit broadcast')
     assert.ok(leaderPolicy.includes('Current teammate roster:'), 'leader policy should include current roster when attached')

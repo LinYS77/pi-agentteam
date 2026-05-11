@@ -59,12 +59,15 @@ Equivalent low-level tool flow when you need it:
 
 ```text
 > agentteam_create({ team_name: "my-project", description: "Optimize the build pipeline" })
-> agentteam_spawn({ name: "research", role: "researcher",
-                    task: "Analyze the build pipeline and report bottlenecks" })
-> agentteam_spawn({ name: "plan", role: "planner" })
-> agentteam_send({ to: "plan", message: "Research done, draft an optimization plan", type: "fyi" })
+> agentteam_spawn({ name: "research", role: "researcher" })
+> agentteam_task({ action: "create", title: "Analyze build pipeline",
+                   description: "Report bottlenecks with evidence", owner: "research" })
+> agentteam_send({ taskId: "T001", message: "Analyze the build pipeline and report bottlenecks",
+                   type: "assignment" })
 > agentteam_receive()
 ```
+
+Because `T001` has owner `research`, the assignment can omit `to`. Explicit `to` is still available when you need to override task-owner routing.
 
 Or open the unified local console:
 
