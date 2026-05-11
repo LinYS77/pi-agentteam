@@ -20,6 +20,7 @@ import {
   syncPaneLabelsForTeam,
 } from '../tmux.js'
 import { TEAM_LEAD } from '../types.js'
+import type { TeamPaneCleanupOptions } from '../runtime.js'
 import type { TeamState } from '../types.js'
 import type { CommandHandlerDeps } from './shared.js'
 
@@ -51,11 +52,7 @@ export function removeSelectedMember(
   clearSessionFileAndBinding(sessionFile)
   removeMailbox(team.name, memberName)
 
-  if (paneId === currentPane) {
-    clearPaneLabelSync(paneId)
-  } else if (paneId && paneExists(paneId)) {
-    killPane(paneId)
-  }
+  clearOrKillMemberPane(paneId, currentPane)
 
   deps.invalidateStatus(ctx)
   ctx.ui.notify(`Removed ${memberName}`, 'info')
@@ -70,32 +67,40 @@ function currentPaneId(): string | undefined {
   return currentPane()?.paneId
 }
 
+function clearOrKillMemberPane(paneId: string | undefined, preservePaneId: string | undefined): void {
+  if (!paneId) return
+  if (paneId === preservePaneId) {
+    clearPaneLabelSync(paneId)
+    return
+  }
+  if (paneExists(paneId)) {
+    killPane(paneId)
+  }
+}
+
+function quietRemovePath(path?: string): void {
+  if (!path) return
+  try {
+    fs.rmSync(path, { force: true })
+  } catch {
+    // ignore
+  }
+}
+
 function clearSessionFileAndBinding(sessionFile?: string): void {
   if (!sessionFile) return
   clearSessionContext(sessionFile)
   if (sessionFile.startsWith('ephemeral:')) return
-  try {
-    fs.rmSync(sessionFile, { force: true })
-  } catch {
-    // ignore
-  }
+  quietRemovePath(sessionFile)
 }
 
 function removeMailbox(teamName: string, memberName: string): void {
-  try {
-    fs.rmSync(getMailboxPath(teamName, memberName), { force: true })
-  } catch {
-    // ignore
-  }
+  quietRemovePath(getMailboxPath(teamName, memberName))
 }
 
 function removeSessionContextOnly(sessionFile?: string): void {
   if (!sessionFile) return
-  try {
-    fs.rmSync(getSessionContextPath(sessionFile), { force: true })
-  } catch {
-    // ignore
-  }
+  quietRemovePath(getSessionContextPath(sessionFile))
 }
 
 function staleMemberForMissingLeader(
@@ -112,6 +117,14 @@ function staleMemberForMissingLeader(
   return undefined
 }
 
+function cleanupOptionsPreservingCurrentPane(team: TeamState, currentPane: string | undefined): TeamPaneCleanupOptions {
+  const leaderPaneId = team.members[TEAM_LEAD]?.paneId
+  return {
+    includeLeaderPane: leaderPaneId !== currentPane,
+    preservePaneId: currentPane,
+  }
+}
+
 export function deleteSelectedTeam(
   ctx: ExtensionContext,
   deps: CommandHandlerDeps,
@@ -125,12 +138,8 @@ export function deleteSelectedTeam(
 
   const currentTeamName = getCurrentTeamName(ctx)
   const currentPane = currentPaneId()
-  const leaderPaneId = team.members[TEAM_LEAD]?.paneId
 
-  deps.deleteTeamRuntime(team, {
-    includeLeaderPane: leaderPaneId !== currentPane,
-    preservePaneId: currentPane,
-  })
+  deps.deleteTeamRuntime(team, cleanupOptionsPreservingCurrentPane(team, currentPane))
 
   if (currentTeamName === team.name) {
     clearSessionContext(getSessionFile(ctx))
@@ -161,11 +170,7 @@ export function cleanupAllAgentTeamData(
 
   let deletedTeams = 0
   for (const team of teams) {
-    const leaderPaneId = team.members[TEAM_LEAD]?.paneId
-    deps.deleteTeamRuntime(team, {
-      includeLeaderPane: leaderPaneId !== currentPane,
-      preservePaneId: currentPane,
-    })
+    deps.deleteTeamRuntime(team, cleanupOptionsPreservingCurrentPane(team, currentPane))
     deletedTeams += 1
   }
 

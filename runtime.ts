@@ -45,6 +45,7 @@ import {
   invalidatePaneReconcileCache,
   reconcileTeamPanes,
 } from './runtimePanes.js'
+import type { TeamPaneCleanupOptions } from './runtimePanes.js'
 import {
   cancelPendingNudge,
   wakeLeaderIfNeeded,
@@ -57,7 +58,7 @@ export type AttachedSessionContext = {
   source: 'cached' | 'derived' | 'cleared' | 'none'
 }
 
-export type { WakeNudgeConfig, WakeResult }
+export type { TeamPaneCleanupOptions, WakeNudgeConfig, WakeResult }
 
 export {
   assertValidOwner,
@@ -204,7 +205,7 @@ export function buildSessionStatusKey(
   return `${sessionFile}|${attached.source}|${teamName}|${memberName}|rev:${revision}|members:${memberCount}|tasks:${taskCount}|actor:${actor.status}:${actor.updatedAt}:${actor.lastWakeReason ?? ''}:${actor.lastError ?? ''}`
 }
 
-export function deleteTeamRuntime(team: TeamState, options?: { includeLeaderPane?: boolean; preservePaneId?: string }): void {
+export function deleteTeamRuntime(team: TeamState, options?: TeamPaneCleanupOptions): void {
   clearAndKillTeamPanes(team, options)
   deleteTeamState(team.name)
   invalidateMailboxEnsureCache(team.name)

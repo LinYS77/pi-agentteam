@@ -8,6 +8,11 @@ import {
 import type { TeamState } from './types.js'
 import { TEAM_LEAD } from './types.js'
 
+export type TeamPaneCleanupOptions = {
+  includeLeaderPane?: boolean
+  preservePaneId?: string
+}
+
 const paneReconcileCache = new Map<string, number>()
 const paneReconcileRevisionCache = new Map<string, number>()
 const PANE_RECONCILE_TTL_MS = 2000
@@ -77,9 +82,9 @@ export function reconcileTeamPanes(team: TeamState, options?: { force?: boolean 
   return changed
 }
 
-function killTeamPanes(team: TeamState, options?: { includeLeader?: boolean; preservePaneId?: string }): void {
+function killTeamPanes(team: TeamState, options?: TeamPaneCleanupOptions): void {
   for (const member of Object.values(team.members)) {
-    if (!options?.includeLeader && member.name === TEAM_LEAD) continue
+    if (!options?.includeLeaderPane && member.name === TEAM_LEAD) continue
     if (!member.paneId) continue
     if (member.paneId === options?.preservePaneId) continue
     if (!paneExists(member.paneId)) continue
@@ -87,13 +92,10 @@ function killTeamPanes(team: TeamState, options?: { includeLeader?: boolean; pre
   }
 }
 
-export function clearAndKillTeamPanes(team: TeamState, options?: { includeLeaderPane?: boolean; preservePaneId?: string }): void {
+export function clearAndKillTeamPanes(team: TeamState, options?: TeamPaneCleanupOptions): void {
   void clearPaneLabelsForTeam(team)
   if (options?.preservePaneId) {
     clearPaneLabelSync(options.preservePaneId)
   }
-  killTeamPanes(team, {
-    includeLeader: options?.includeLeaderPane,
-    preservePaneId: options?.preservePaneId,
-  })
+  killTeamPanes(team, options)
 }
