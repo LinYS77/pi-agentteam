@@ -354,7 +354,7 @@ function renderMembersLines(
       unread > 0 ? theme.fg('warning', `unread ${unread}`) : '',
     ].filter(Boolean).join(theme.fg('dim', ' · '))
     
-    const statsStr = `${theme.fg('dim', short(member.role, 10))} · ${theme.fg(paneColor, paneStr)} · ${theme.fg('dim', `tasks ${activeTasks}`)} · ${theme.fg('dim', `unread ${unread}`)} · ${theme.fg('dim', `age ${ageStr}`)}`
+    const statsStr = `${theme.fg('dim', short(member.role, 10))} · ${theme.fg(paneColor, paneStr)} · ${theme.fg('dim', `tasks ${activeTasks}`)} · ${theme.fg('dim', `age ${ageStr}`)}`
     const attentionStr = attention ? `  ${attention}` : ''
     const nameStr = short(member.name, 14)
     const nameCol = isSelected ? padCell(theme.bold(theme.fg('accent', nameStr)), 14) : padCell(theme.fg('text', nameStr), 14)
@@ -478,7 +478,7 @@ function teamStatusLine(
   const taskCount = Object.keys(team.tasks).length
   const attention = summary ? foldCompactAttentionParts(theme, compactAttentionSummaryParts(theme, summary)) : []
   const attentionSuffix = attention.length > 0 ? attention.join(' ') : theme.fg('success', 'OK')
-  return `${teammates.length}m · ${taskCount}t · ${attentionSuffix}`
+  return `${theme.fg('dim', `${teammates.length}m`)} · ${theme.fg('dim', `${taskCount}t`)} · ${attentionSuffix}`
 }
 
 function renderGlobalTeamLines(
@@ -499,7 +499,7 @@ function renderGlobalTeamLines(
     const isSelected = state.focus === 'teams' && absolute === state.selectedIndex
     const pointer = isSelected ? theme.fg('accent', '›') : ' '
     const name = isSelected ? theme.bold(theme.fg('accent', short(team.name, 24))) : theme.fg('text', short(team.name, 24))
-    lines.push(`${pointer}  ${padCell(name, 24)} ${theme.fg('dim', teamStatusLine(theme, team, data.teamSummaries[team.name]))}`)
+    lines.push(`${pointer}  ${padCell(name, 24)} ${theme.fg('dim', '│')} ${teamStatusLine(theme, team, data.teamSummaries[team.name])}`)
   }
   const hiddenBelow = data.teams.length - (teamsWindow.offset + teamsWindow.items.length)
   if (hiddenBelow > 0) lines.push(theme.fg('dim', `… ${hiddenBelow} below`))

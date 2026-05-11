@@ -223,7 +223,7 @@ module.exports = {
     assert.equal(globalData.teamMailboxes['render-suite'].blocked, 1, 'global data should include blocked mailbox projection')
     const globalLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: globalData, state: globalState, selection: globalSelection })
     assert.ok(globalLines.some(line => line.includes('Attention') && line.includes('blocked task')), 'global overview should summarize team attention')
-    assert.ok(globalLines.some(line => line.includes('render-suite') && line.includes('✉')), 'global team row should show compact attention markers')
+    assert.ok(globalLines.some(line => line.includes('render-suite') && line.includes('│') && line.includes('✉')), 'global team row should visually separate name from summary')
     assert.equal(globalLines.some(line => line.includes('render-suite') && line.includes('leader missing')), false, 'global team row should keep leader pane diagnostics in details')
     assert.ok(globalLines.some(line => line.includes('render-clean-suite') && line.includes('OK')), 'clean global team row should show OK')
     assert.ok(globalLines.some(line => line.includes('Attention') && line.includes('+')), 'global overview should fold lower-priority attention categories')
