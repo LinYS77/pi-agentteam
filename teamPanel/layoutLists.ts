@@ -30,6 +30,8 @@ export function renderMembersLines(
     return lines
   }
 
+  lines.push(theme.fg('dim', `   ${padCell('Name', 14)} Status          Context`))
+
   if (membersWindow.offset > 0) {
     lines.push(theme.fg('dim', `… ${membersWindow.offset} above`))
   }
@@ -83,6 +85,8 @@ export function renderTaskLines(
     return lines
   }
 
+  lines.push(theme.fg('dim', `   ${padCell('Task', 8)}  Status          ${padCell('Title', 30)}  Owner`))
+
   if (tasksWindow.offset > 0) {
     lines.push(theme.fg('dim', `… ${tasksWindow.offset} above`))
   }
@@ -127,6 +131,8 @@ export function renderMailboxLines(
     lines.push(theme.fg('muted', 'No messages'))
     return lines
   }
+
+  lines.push(theme.fg('dim', `   T  ${padCell('From', 14)}  ${padCell('Summary', 36)}  Time`))
 
   if (mailboxWindow.offset > 0) {
     lines.push(theme.fg('dim', `… ${mailboxWindow.offset} above`))
@@ -190,6 +196,7 @@ export function renderGlobalTeamLines(
     lines.push(theme.fg('muted', 'No saved teams'))
     return lines
   }
+  lines.push(theme.fg('dim', `   ${padCell('Team', 24)} │ Summary`))
   if (teamsWindow.offset > 0) lines.push(theme.fg('dim', `… ${teamsWindow.offset} above`))
   for (let i = 0; i < teamsWindow.items.length; i += 1) {
     const team = teamsWindow.items[i]!
@@ -215,6 +222,7 @@ export function renderGlobalPaneLines(
     lines.push(theme.fg('muted', 'No stale panes with agentteam labels'))
     return lines
   }
+  lines.push(theme.fg('dim', `   ${padCell('Pane', 8)} Label / command`))
   if (panesWindow.offset > 0) lines.push(theme.fg('dim', `… ${panesWindow.offset} above`))
   for (let i = 0; i < panesWindow.items.length; i += 1) {
     const pane = panesWindow.items[i]!

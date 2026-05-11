@@ -48,12 +48,16 @@ type RenderLayoutInput = {
   selection: PanelSelectionView
 }
 
+function overviewPart(theme: ExtensionContext['ui']['theme'], label: string, value: string): string {
+  return `${theme.fg('dim', `${label} `)}${value}`
+}
+
 function renderOverviewLine(theme: ExtensionContext['ui']['theme'], data: PanelData): string {
   if (data.mode === 'global') {
     const globalAttention = sumAttentionSummaries(Object.values(data.teamSummaries))
     const attention = foldAttentionParts(theme, attentionSummaryParts(theme, globalAttention))
     const attentionText = attention.length > 0 ? attention.join(theme.fg('dim', ' · ')) : theme.fg('dim', 'OK')
-    return `${theme.bold(theme.fg('text', '✦  AgentTeam Console '))} ${theme.fg('dim', '│')} Attention ${attentionText} ${theme.fg('dim', '│')} Teams ${data.teams.length} ${theme.fg('dim', '│')} Stale panes ${data.orphanPanes.length}`
+    return `${theme.bold(theme.fg('text', '✦  AgentTeam Console '))} ${theme.fg('dim', '│')} ${overviewPart(theme, 'Attention', attentionText)} ${theme.fg('dim', '│')} ${overviewPart(theme, 'Teams', String(data.teams.length))} ${theme.fg('dim', '│')} ${overviewPart(theme, 'Stale panes', String(data.orphanPanes.length))}`
   }
 
   const runningCount = data.members.filter(member => member.status === 'running').length
@@ -77,7 +81,11 @@ function renderOverviewLine(theme: ExtensionContext['ui']['theme'], data: PanelD
   const attention = foldAttentionParts(theme, attentionSummaryParts(theme, buildTeamAttentionSummary(data.team, data.mailbox)))
   const attentionText = attention.length > 0 ? attention.join(theme.fg('dim', ' · ')) : theme.fg('dim', 'OK')
 
-  return `${tName} ${theme.fg('dim', '│')} Attention ${attentionText}  ${theme.fg('dim', '│')} 👥 Members  ${mStatus}  ${theme.fg('dim', '│')} 📋 Tasks  ${tStatus}  ${theme.fg('dim', '│')} 📬 Mail  ${sStatus}`
+  return `${tName} ${theme.fg('dim', '│')} ${overviewPart(theme, 'Attention', attentionText)}  ${theme.fg('dim', '│')} ${overviewPart(theme, '👥 Members', mStatus)}  ${theme.fg('dim', '│')} ${overviewPart(theme, '📋 Tasks', tStatus)}  ${theme.fg('dim', '│')} ${overviewPart(theme, '📬 Mail', sStatus)}`
+}
+
+function renderDetailSection(theme: ExtensionContext['ui']['theme'], label: string): string {
+  return theme.bold(theme.fg('dim', label))
 }
 
 function renderGlobalDetailLines(
@@ -94,6 +102,7 @@ function renderGlobalDetailLines(
     } else {
       detailLines.push(`🧹 ${theme.bold(theme.fg('text', pane.paneId))}`)
       detailLines.push('')
+      detailLines.push(renderDetailSection(theme, 'Pane state'))
       detailLines.push(renderDetailField(theme, 'Pane', pane.paneId, 'text'))
       detailLines.push(renderDetailField(theme, 'Target', pane.target || '-', 'text'))
       detailLines.push(renderDetailField(theme, 'Label', pane.label || '-', pane.label ? 'warning' : 'dim'))
@@ -123,11 +132,14 @@ function renderGlobalDetailLines(
       const completedCount = tasks.filter(task => task.status === 'completed').length
       const unownedCount = tasks.filter(task => task.status !== 'completed' && !task.owner).length
       const attentionParts = summary ? attentionSummaryParts(theme, summary) : []
+      detailLines.push(renderDetailSection(theme, 'Status'))
       detailLines.push(renderDetailField(theme, 'Teammates', String(teammates.length), 'text'))
       detailLines.push(renderDetailField(theme, 'Health', `running ${runningCount} · queued ${queuedCount} · idle ${idleCount} · error ${errorCount} · no pane ${missingPaneCount}`, errorCount || missingPaneCount ? 'warning' : 'text'))
       detailLines.push(renderDetailField(theme, 'Tasks', `pending ${pendingCount} · active ${inProgressCount} · blocked ${blockedCount} · done ${completedCount} · unowned ${unownedCount}`, blockedCount || unownedCount ? 'warning' : 'text'))
       detailLines.push(renderDetailField(theme, 'Mailbox', mailbox ? `unread ${mailbox.unread} · blocked ${mailbox.blocked} · total ${mailbox.total}` : 'unread 0 · blocked 0 · total 0', mailbox && (mailbox.unread || mailbox.blocked) ? 'warning' : 'text'))
       detailLines.push(renderDetailField(theme, 'Attention', attentionParts.join(' · ') || 'OK', attentionParts.length > 0 ? 'warning' : 'text'))
+      detailLines.push('')
+      detailLines.push(renderDetailSection(theme, 'Identity'))
       detailLines.push(renderDetailField(theme, 'Leader pane', leader?.paneId ?? 'missing', leader?.paneId ? 'text' : 'warning'))
       detailLines.push(renderDetailField(theme, 'Created', new Date(team.createdAt).toLocaleString(), 'text'))
 
@@ -135,6 +147,7 @@ function renderGlobalDetailLines(
         const latest = mailbox.latestAttention
         const latestType = mailboxType(latest)
         detailLines.push('')
+        detailLines.push(renderDetailSection(theme, 'Latest attention'))
         detailLines.push(...renderDetailBlock(theme, `Latest mail attention · ${latestType} · ${latest.from}`, latest.summary ?? latest.text, 44, latestType === 'blocked' ? 'error' : 'text'))
       } else {
         const latestBlocked = tasks
@@ -143,6 +156,7 @@ function renderGlobalDetailLines(
         if (latestBlocked) {
           const kind = latestBlocked.status === 'blocked' ? 'blocked task' : 'unowned task'
           detailLines.push('')
+          detailLines.push(renderDetailSection(theme, 'Latest attention'))
           detailLines.push(...renderDetailBlock(theme, `Latest task attention · ${kind} · ${latestBlocked.id}`, latestBlocked.title, 44, latestBlocked.status === 'blocked' ? 'error' : 'warning'))
         }
       }
@@ -150,7 +164,7 @@ function renderGlobalDetailLines(
       if (teammates.length > 0) {
         detailLines.push('')
         detailLines.push(renderDetailSeparator(theme, 44))
-        detailLines.push(theme.bold(theme.fg('dim', 'Roster')))
+        detailLines.push(renderDetailSection(theme, 'Roster'))
         for (const member of teammates.slice(0, 4)) {
           const health = memberHealthLabel(member)
           const pane = memberPaneLabel(member)
@@ -191,11 +205,14 @@ function renderDetailLines(
     const msgCount = data.mailbox.filter(item => item.from === selectedMember.name).length
     detailLines.push(`👤 ${theme.bold(theme.fg('text', selectedMember.name))}  ${memberStatusBadge(theme, selectedMember.status)}  ${theme.fg('dim', selectedMember.role)}`)
     detailLines.push('')
+    detailLines.push(renderDetailSection(theme, 'Status'))
     detailLines.push(renderDetailField(theme, 'Health', memberHealthLabel(selectedMember), memberHealthColor(selectedMember)))
     detailLines.push(renderDetailField(theme, 'Pane', memberPaneLabel(selectedMember), selectedMember.paneId ? 'text' : 'warning'))
     if (selectedMember.windowTarget) detailLines.push(renderDetailField(theme, 'Window', selectedMember.windowTarget, 'text'))
     detailLines.push(renderDetailField(theme, 'Tasks', String(activeTasks), 'text'))
     detailLines.push(renderDetailField(theme, 'Mailbox', String(msgCount), 'text'))
+    detailLines.push('')
+    detailLines.push(renderDetailSection(theme, 'Session'))
     detailLines.push(renderDetailField(theme, 'Session', basename(selectedMember.sessionFile), 'text'))
     detailLines.push(renderDetailField(theme, 'Updated', `${formatDateTime(selectedMember.updatedAt)} (${formatAge(Date.now() - selectedMember.updatedAt)} ago)`, 'text'))
     detailLines.push(renderDetailField(theme, 'Created', formatDateTime(selectedMember.createdAt), 'text'))
@@ -216,6 +233,7 @@ function renderDetailLines(
 
     detailLines.push(`📋 ${theme.bold(theme.fg('accent', selectedTask.id))}  ${taskStatusBadge(theme, selectedTask.status)}  ${theme.fg('text', short(selectedTask.title, Math.max(12, textWidth - 25)))}`)
     detailLines.push('')
+    detailLines.push(renderDetailSection(theme, 'Status'))
     detailLines.push(renderDetailField(theme, 'Owner', selectedTask.owner ?? '-', 'text'))
     if (selectedTask.blockedBy.length > 0) {
       detailLines.push(renderDetailField(theme, 'Blocked by', selectedTask.blockedBy.join(','), 'error'))
@@ -225,6 +243,7 @@ function renderDetailLines(
     if (state.isDetailExpanded) {
       detailLines.push('')
       detailLines.push(renderDetailSeparator(theme, textWidth))
+      detailLines.push(renderDetailSection(theme, 'Content'))
       detailLines.push(...renderDetailBlock(theme, 'Description', selectedTask.description || '(none)', textWidth, 'text'))
 
       if (latest) {
@@ -233,6 +252,8 @@ function renderDetailLines(
       }
     } else {
       const desc = (selectedTask.description || '(none)').replace(/\n/g, ' ')
+      detailLines.push('')
+      detailLines.push(renderDetailSection(theme, 'Content'))
       detailLines.push(renderDetailField(theme, 'Description', short(desc, Math.max(12, textWidth - 16)), 'text'))
       if (latest) {
         detailLines.push(renderDetailField(theme, 'Latest note', short(latest.text.replace(/\n/g, ' '), Math.max(12, textWidth - 16)), 'text'))
@@ -254,17 +275,21 @@ function renderDetailLines(
     const type = mailboxType(selectedMailbox)
     detailLines.push(`📬 ${theme.fg(mailboxTypeColor(type), mailboxTypeIcon(type))} ${theme.bold(theme.fg(mailboxTypeColor(type), type))}  ${theme.fg('dim', `from `)}${theme.fg('accent', selectedMailbox.from)}`)
     detailLines.push('')
+    detailLines.push(renderDetailSection(theme, 'Routing'))
     detailLines.push(renderDetailField(theme, 'Time', new Date(selectedMailbox.createdAt).toLocaleTimeString(), 'text'))
     detailLines.push(renderDetailField(theme, 'References', `${selectedMailbox.taskId ?? '-'} / ${selectedMailbox.threadId ?? '-'}`, 'text'))
     
     if (state.isDetailExpanded) {
       detailLines.push('')
       detailLines.push(renderDetailSeparator(theme, textWidth))
+      detailLines.push(renderDetailSection(theme, 'Content'))
       detailLines.push(...renderDetailBlock(theme, 'Summary', selectedMailbox.summary ?? '(none)', textWidth, 'text'))
       detailLines.push('')
       detailLines.push(...renderDetailBlock(theme, 'Text', selectedMailbox.text || '(none)', textWidth, 'text'))
     } else {
       const summary = (selectedMailbox.summary ?? '(none)').replace(/\n/g, ' ')
+      detailLines.push('')
+      detailLines.push(renderDetailSection(theme, 'Content'))
       detailLines.push(renderDetailField(theme, 'Summary', short(summary, Math.max(12, textWidth - 16)), 'text'))
       const text = (selectedMailbox.text || '(none)').replace(/\n/g, ' ')
       detailLines.push(renderDetailField(theme, 'Text', short(text, Math.max(12, textWidth - 16)), 'text'))
