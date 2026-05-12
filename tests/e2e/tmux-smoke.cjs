@@ -20,6 +20,7 @@ let lastStep = 'bootstrap'
 let leaderPaneId = ''
 let leaderTarget = ''
 let tmuxSession = process.env.AGENTTEAM_E2E_TMUX_SESSION || ''
+let tmuxSocket = process.env.AGENTTEAM_E2E_TMUX_SOCKET || ''
 let buildRoot = process.env.AGENTTEAM_E2E_BUILD_ROOT || ''
 let distRoot = buildRoot ? path.join(buildRoot, 'dist') : ''
 let stubRoot = distRoot ? path.join(distRoot, 'stubs') : ''
@@ -46,7 +47,8 @@ function shellEscape(text) {
 }
 
 function tmux(args, options = {}) {
-  return execFileSync('tmux', args, {
+  const socketArgs = tmuxSocket ? ['-S', tmuxSocket] : []
+  return execFileSync('tmux', [...socketArgs, ...args], {
     encoding: 'utf8',
     env: { ...process.env, PI_AGENTTEAM_HOME: homeRoot },
     ...options,
@@ -336,6 +338,7 @@ function debugSnapshot() {
   lines.push(`step: ${lastStep}`)
   lines.push(`PI_AGENTTEAM_HOME: ${homeRoot}`)
   lines.push(`tmux session: ${tmuxSession}`)
+  lines.push(`tmux socket: ${tmuxSocket || '(default)'}`)
   lines.push(`leader pane: ${leaderPaneId}`)
   lines.push(`leader target: ${leaderTarget}`)
   lines.push(`panes:\n${listPanesDebug() || '(none)'}`)
@@ -364,6 +367,7 @@ export PI_AGENTTEAM_HOME=${shellEscape(homeRoot)}
 export AGENTTEAM_E2E_BUILD_ROOT=${shellEscape(buildRoot)}
 export AGENTTEAM_E2E_RESULT_FILE=${shellEscape(resultFile)}
 export AGENTTEAM_E2E_TMUX_SESSION=${shellEscape(tmuxSession)}
+export AGENTTEAM_E2E_TMUX_SOCKET=${shellEscape(tmuxSocket)}
 cd ${shellEscape(EXT_ROOT)}
 node ${shellEscape(__filename)} --inside > ${shellEscape(logFile)} 2>&1
 status=$?
@@ -552,6 +556,9 @@ async function runOuterDriver() {
   homeRoot = path.join(buildRoot, 'agentteam-home')
   resultFile = path.join(buildRoot, 'result.json')
   tmuxSession = `agentteam-e2e-${runId}`
+  // Use a private tmux server: this e2e intentionally exercises cleanup/orphan-pane
+  // behavior and must never see or kill panes from the user's real tmux server.
+  tmuxSocket = path.join(buildRoot, 'tmux.sock')
 
   const runner = writeInsideRunnerScript()
 
@@ -573,14 +580,14 @@ async function runOuterDriver() {
     }
     log('✅ tmux e2e smoke passed')
   } finally {
-    tmuxNoThrow(['kill-session', '-t', tmuxSession])
+    tmuxNoThrow(['kill-server'])
     fs.rmSync(buildRoot, { recursive: true, force: true })
   }
 }
 
 async function main() {
   if (IS_INSIDE_TMUX) {
-    if (!buildRoot || !homeRoot || !resultFile || !tmuxSession) {
+    if (!buildRoot || !homeRoot || !resultFile || !tmuxSession || !tmuxSocket) {
       throw new Error('missing required AGENTTEAM_E2E_* environment for --inside mode')
     }
     try {

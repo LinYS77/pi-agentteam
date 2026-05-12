@@ -90,7 +90,7 @@ export async function executeSendMessage(
   }
 
   const resolvedRecipients = resolveMessageRecipients({ team, sender, params, deps })
-  if (!resolvedRecipients.ok) {
+  if (resolvedRecipients.ok === false) {
     return {
       content: [{ type: 'text', text: resolvedRecipients.text }],
       details: {

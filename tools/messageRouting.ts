@@ -1,9 +1,8 @@
 import { TEAM_LEAD } from '../types.js'
 import type { TeamState } from '../types.js'
 import type { ToolHandlerDeps } from './shared.js'
-import type { TeamSendInput } from './messageTypes.js'
 
-export type MessageRoutingMode = 'explicit' | 'broadcast' | 'task_owner' | 'owner_to_leader'
+type MessageRoutingMode = 'explicit' | 'broadcast' | 'task_owner' | 'owner_to_leader'
 
 export type MessageRoutingDetails = {
   mode: MessageRoutingMode
@@ -14,7 +13,7 @@ export type MessageRoutingDetails = {
   taskOwner?: string
 }
 
-export type MessageRoutingErrorReason =
+type MessageRoutingErrorReason =
   | 'missing_recipient'
   | 'task_not_found'
   | 'task_owner_missing'
@@ -23,7 +22,7 @@ export type MessageRoutingErrorReason =
   | 'task_sender_not_owner'
   | 'leader_member_not_found'
 
-export type MessageRoutingErrorDetails = {
+type MessageRoutingErrorDetails = {
   denied: true
   reason: MessageRoutingErrorReason
   sender: string
@@ -31,7 +30,7 @@ export type MessageRoutingErrorDetails = {
   taskOwner?: string
 }
 
-export type MessageRoutingResult =
+type MessageRoutingResult =
   | {
       ok: true
       recipients: string[]
@@ -66,7 +65,10 @@ function routingError(input: {
 export function resolveMessageRecipients(input: {
   team: TeamState
   sender: string
-  params: TeamSendInput
+  params: {
+    to?: string
+    taskId?: string
+  }
   deps: Pick<ToolHandlerDeps, 'sanitizeWorkerName'>
 }): MessageRoutingResult {
   const { team, sender, params, deps } = input
