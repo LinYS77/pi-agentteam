@@ -370,7 +370,6 @@ status=$?
 if [ ! -f ${shellEscape(resultFile)} ]; then
   node -e "const fs=require('fs'); const result=process.argv[1]; const log=process.argv[2]; fs.writeFileSync(result, JSON.stringify({ ok:false, error:'inside e2e runner exited without result', exitCode:Number(process.argv[3]||0), log: fs.existsSync(log) ? fs.readFileSync(log,'utf8') : '' }, null, 2) + '\\n')" ${shellEscape(resultFile)} ${shellEscape(logFile)} "$status"
 fi
-sleep 3600
 `)
   fs.chmodSync(runner, 0o755)
   return runner

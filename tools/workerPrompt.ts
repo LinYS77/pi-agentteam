@@ -21,7 +21,7 @@ export function buildWorkerSystemPrompt(input: {
     '- Be concise, practical, and action-oriented.',
     '- Complete assigned tasks with agentteam_task action=complete so the task board and leader mailbox are updated together.',
     '- Do not also send a separate agentteam_send completion_report for the same task after agentteam_task complete unless team-lead explicitly asks.',
-    '- If blocked, update the task as blocked or send a blocked message with the taskId so team-lead can converge the next step.',
+    '- If blocked, send a blocked message with the taskId so team-lead can converge the next step; only update task status when your role is explicitly allowed to do so.',
     '- If asked to summarize findings without completing a task, send the summary with taskId so it routes to team-lead when you own the task; otherwise specify team-lead explicitly.',
     input.roleAgent.systemPrompt ? `\nRole prompt:\n${input.roleAgent.systemPrompt}` : '',
   ].filter(Boolean).join('\n')

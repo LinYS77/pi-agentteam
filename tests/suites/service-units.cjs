@@ -37,7 +37,7 @@ module.exports = {
     assert.ok(systemPrompt.includes('call agentteam_receive before acting'), 'worker prompt should keep mailbox read state clean')
     assert.ok(systemPrompt.includes('task-id based'), 'worker prompt should prefer task-linked handoffs')
     assert.ok(systemPrompt.includes('omit agentteam_send.to'), 'worker prompt should describe task-based return routing')
-    assert.ok(systemPrompt.includes('If blocked'), 'worker prompt should include blocked reporting discipline')
+    assert.ok(systemPrompt.includes('send a blocked message with the taskId'), 'worker prompt should prefer blocked reporting over unsupported task updates')
     assert.ok(systemPrompt.includes('implementer role prompt'))
 
     const launch = workerPrompt.buildWorkerLaunchCommand({
