@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
-import type { SessionTeamContext, TeamState } from '../types.js'
-import { TEAM_LEAD } from '../types.js'
+import type { SessionTeamContext, TeamState } from '../internalTypes.js'
+import { TEAM_LEAD } from '../internalTypes.js'
 import { readJsonFile, writeJsonFile } from './fsStore.js'
 import { getSessionContextPath } from './paths.js'
 
@@ -24,27 +24,55 @@ export function configureSessionBindingStore(input: {
   listTeamsRef = input.listTeams
 }
 
+function ensureConfigured(): void {
+  if (readTeamStateRef && listTeamsRef) return
+  throw new Error('session binding store not configured; call initializeStateStores() before deriving session bindings')
+}
+
 function readTeamState(teamName: string): TeamState | null {
-  if (!readTeamStateRef) {
-    throw new Error('session binding store not configured: readTeamState missing')
-  }
-  return readTeamStateRef(teamName)
+  ensureConfigured()
+  return readTeamStateRef!(teamName)
 }
 
 function listTeams(): TeamState[] {
-  if (!listTeamsRef) {
-    throw new Error('session binding store not configured: listTeams missing')
+  ensureConfigured()
+  return listTeamsRef!()
+}
+
+function emptySessionContext(): SessionTeamContext {
+  return { teamName: null, memberName: null }
+}
+
+function isReadableSessionContext(value: SessionTeamContext | null): value is SessionTeamContext {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<SessionTeamContext>
+  const teamNameOk = candidate.teamName === null || typeof candidate.teamName === 'string'
+  const memberNameOk = candidate.memberName === null || typeof candidate.memberName === 'string'
+  return teamNameOk && memberNameOk
+}
+
+function readSessionContextFile(filePath: string): SessionTeamContext | null {
+  try {
+    const parsed = readJsonFile<SessionTeamContext>(filePath)
+    return isReadableSessionContext(parsed) ? parsed : null
+  } catch {
+    return null
   }
-  return listTeamsRef()
+}
+
+function removePathBestEffort(filePath: string): void {
+  try {
+    fs.rmSync(filePath, { force: true })
+  } catch {
+    // ignore ENAMETOOLONG and any other filesystem cleanup failure
+  }
 }
 
 export function readSessionContext(sessionFile: string): SessionTeamContext {
-  return (
-    readJsonFile<SessionTeamContext>(getSessionContextPath(sessionFile)) ?? {
-      teamName: null,
-      memberName: null,
-    }
-  )
+  const hashed = readSessionContextFile(getSessionContextPath(sessionFile))
+  if (hashed) return hashed
+
+  return emptySessionContext()
 }
 
 export function writeSessionContext(
@@ -56,12 +84,7 @@ export function writeSessionContext(
 }
 
 export function clearSessionContext(sessionFile: string): void {
-  const p = getSessionContextPath(sessionFile)
-  try {
-    fs.rmSync(p, { force: true })
-  } catch {
-    // ignore
-  }
+  removePathBestEffort(getSessionContextPath(sessionFile))
   invalidateSessionContextCache(sessionFile)
 }
 
@@ -169,7 +192,7 @@ export function ensureAttachedSessionContext(
 
   clearSessionContext(sessionFile)
   const result = {
-    context: { teamName: null, memberName: null } as SessionTeamContext,
+    context: emptySessionContext(),
     source: (cached.teamName || cached.memberName ? 'cleared' : 'none') as 'cleared' | 'none',
   }
   sessionContextCache.set(sessionFile, { result, at: now })

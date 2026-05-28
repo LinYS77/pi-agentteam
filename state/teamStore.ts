@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import type { TeamMember, TeamState } from '../types.js'
-import { TEAM_LEAD } from '../types.js'
+import type { TeamMember, TeamState } from '../internalTypes.js'
+import { TEAM_LEAD } from '../internalTypes.js'
 import { readJsonFile, writeJsonFile, withFileLock } from './fsStore.js'
 import {
   getTeamDir,
@@ -12,6 +12,7 @@ import {
 } from './paths.js'
 import { mergeTeamStates, normalizeTeamState } from './merge.js'
 import { clearSessionContext } from './sessionBinding.js'
+import { validateOrQuarantineTeam, validatePersistedTeamState } from './validation.js'
 
 // ---------------------------------------------------------------------------
 // Team state persistence and in-memory member mutations.
@@ -77,6 +78,13 @@ function cloneTeamState(state: TeamState): TeamState {
   return normalizeTeamState(JSON.parse(JSON.stringify(state)) as TeamState)
 }
 
+function assertWritableTeamState(state: TeamState): void {
+  const reasons = validatePersistedTeamState(state, 'team.json')
+  if (reasons.length === 0) return
+  const first = reasons[0]!
+  throw new Error(`Unsupported vNext team state write for ${state.name}: ${first.code} at ${first.path}`)
+}
+
 function ensureLeaderMemberShape(merged: TeamState): void {
   if (!merged.leaderSessionFile) return
 
@@ -104,11 +112,16 @@ function ensureLeaderMemberShape(merged: TeamState): void {
 }
 
 export function readTeamState(teamName: string): TeamState | null {
+  if (validateOrQuarantineTeam(teamName)) return null
   const state = readJsonFile<TeamState>(getTeamStatePath(teamName))
   return state ? normalizeTeamState(state) : null
 }
 
 export function writeTeamState(state: TeamState): void {
+  if (validateOrQuarantineTeam(state.name)) {
+    throw new Error(`Team ${state.name} was quarantined because persisted state is unsupported by vNext`)
+  }
+  assertWritableTeamState(state)
   const statePath = getTeamStatePath(state.name)
   withFileLock(statePath, () => {
     const current = readJsonFile<TeamState>(statePath)
@@ -119,6 +132,7 @@ export function writeTeamState(state: TeamState): void {
     }
 
     ensureLeaderMemberShape(merged)
+    assertWritableTeamState(merged)
     writeJsonFile(statePath, merged)
     Object.assign(state, merged)
   })
@@ -128,6 +142,7 @@ export function updateTeamState(
   teamName: string,
   updater: (team: TeamState) => void | TeamState,
 ): TeamState | null {
+  if (validateOrQuarantineTeam(teamName)) return null
   const statePath = getTeamStatePath(teamName)
   return withFileLock(statePath, () => {
     const current = readJsonFile<TeamState>(statePath)
@@ -139,6 +154,7 @@ export function updateTeamState(
     if (replacement) next = replacement
     next = normalizeTeamState(next)
     ensureLeaderMemberShape(next)
+    assertWritableTeamState(next)
 
     if (teamContentKey(next) === teamContentKey(normalizedCurrent)) {
       return normalizedCurrent
@@ -182,7 +198,7 @@ export function upsertMember(
 export function updateMemberStatus(
   state: TeamState,
   memberName: string,
-  patch: Partial<Pick<TeamMember, 'status' | 'lastWakeReason' | 'lastError' | 'cwd' | 'bootPrompt'>>,
+  patch: Partial<Pick<TeamMember, 'status' | 'lastWakeReason' | 'lastError' | 'cwd' | 'paneId' | 'windowTarget' | 'bootPrompt' | 'bridgeAvailable' | 'bridgeVersion' | 'bridgeLastSeenAt' | 'bridgeLastDeliveryAt' | 'bridgeLastError' | 'bridgeWorkRequestedAt' | 'bridgeWorkRequestCount' | 'bridgeWorkRequestMessageIds' | 'bridgeWorkRequestBootPrompt'>>,
 ): TeamState {
   const existing = state.members[memberName]
   if (!existing) return state
@@ -206,14 +222,14 @@ export function removeMember(state: TeamState, memberName: string): TeamState {
     [memberName]: removedAt,
   }
   for (const task of Object.values(state.tasks)) {
-    if (task.owner === memberName && task.status !== 'completed') {
+    if (task.owner === memberName && task.status !== 'done') {
       task.owner = undefined
-      task.status = 'pending'
+      task.status = 'open'
       task.updatedAt = removedAt
       task.notes.push({
         at: removedAt,
         author: TEAM_LEAD,
-        text: `Owner ${memberName} removed from team; task returned to pending`,
+        text: `Owner ${memberName} removed from team; task returned to open`,
       })
     }
   }

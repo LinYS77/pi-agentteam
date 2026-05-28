@@ -21,3 +21,6 @@ Thumbs.db
 # Build artifacts
 dist/
 *.js.map
+
+# npm pack dry-run artifacts
+*.tgz

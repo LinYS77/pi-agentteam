@@ -1,5 +1,5 @@
-import { discoverAgents } from '../agents.js'
-import type { AgentDefinition } from '../agents.js'
+import { discoverAgentsWithDiagnostics } from '../agents.js'
+import type { AgentDefinition, AgentTeamConfigDiagnostic } from '../agents.js'
 
 export function normalizeSpawnRole(role: string, memberName?: string): string {
   const raw = role.trim()
@@ -28,13 +28,21 @@ export function normalizeSpawnRole(role: string, memberName?: string): string {
 export function resolveSpawnRole(
   role: string,
   memberName?: string,
-): { ok: true; normalizedRole: string; roleAgent: AgentDefinition } | { ok: false; normalizedRole: string; text: string } {
-  const discovered = discoverAgents()
+):
+  | { ok: true; normalizedRole: string; roleAgent: AgentDefinition; configDiagnostics: AgentTeamConfigDiagnostic[] }
+  | { ok: false; normalizedRole: string; text: string; configDiagnostics: AgentTeamConfigDiagnostic[] } {
+  const discovery = discoverAgentsWithDiagnostics()
+  const discovered = discovery.agents
   const normalizedRole = normalizeSpawnRole(role, memberName)
   const roleAgent = discovered.find(a => a.name === normalizedRole)
   if (!roleAgent) {
     const available = discovered.map(agent => agent.name).sort().join(', ') || '(none)'
-    return { ok: false, normalizedRole, text: `Unknown teammate role ${normalizedRole}. Available roles: ${available}` }
+    return {
+      ok: false,
+      normalizedRole,
+      text: `Unknown teammate role ${normalizedRole}. Available roles: ${available}`,
+      configDiagnostics: discovery.diagnostics,
+    }
   }
-  return { ok: true, normalizedRole, roleAgent }
+  return { ok: true, normalizedRole, roleAgent, configDiagnostics: discovery.diagnostics }
 }

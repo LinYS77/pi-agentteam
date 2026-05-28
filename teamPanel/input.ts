@@ -1,7 +1,7 @@
 import {
   Key,
   matchesKey,
-} from '@mariozechner/pi-tui'
+} from '@earendil-works/pi-tui'
 import { buildPanelActions } from './actions.js'
 import type {
   PanelData,

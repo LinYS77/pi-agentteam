@@ -1,4 +1,4 @@
-import { TEAM_LEAD } from '../types.js'
+import { TEAM_LEAD } from '../internalTypes.js'
 import type {
   PanelAction,
   PanelData,
@@ -22,7 +22,7 @@ function commonAttachedActions(teamName: string): PanelAction[] {
     {
       id: 'delete-team',
       label: `Delete current team ${teamName}`,
-      description: 'Current pane is never killed; its agentteam label is cleared if needed. Danger: remove this team state, mailboxes, bindings, and teammate panes.',
+      description: 'Current pane is never killed; its agentteam label is cleared if needed. Danger: remove this team data, inboxes, bindings, and teammate panes.',
       danger: true,
       result: { type: 'delete-team', teamName },
     },
@@ -75,7 +75,7 @@ export function buildPanelActions(
         {
           id: 'delete-team',
           label: `Delete team ${selection.selectedTeam.name}`,
-          description: 'Current pane is never killed; its agentteam label is cleared if needed. Danger: remove selected team state, mailboxes, bindings, and teammate panes.',
+          description: 'Current pane is never killed; its agentteam label is cleared if needed. Danger: remove selected team data, inboxes, bindings, and teammate panes.',
           danger: true,
           result: { type: 'delete-team', teamName: selection.selectedTeam.name },
         },
@@ -109,7 +109,7 @@ export function buildPanelActions(
       actions.push({
         id: 'remove-member',
         label: member.status === 'error' ? `Remove stale teammate ${member.name}` : `Remove teammate ${member.name}`,
-        description: 'Current pane is never killed. Danger: clear this teammate pane binding, worker session, and mailbox; active owned tasks return to pending.',
+        description: 'Current pane is never killed. Danger: clear this teammate pane binding, worker session, and mailbox; active owned tasks return to open.',
         danger: true,
         result: { type: 'remove-member', teamName: data.team.name, memberName: member.name },
       })

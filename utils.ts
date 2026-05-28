@@ -1,4 +1,4 @@
-import { TEAM_LEAD } from './types.js'
+import { TEAM_LEAD } from './internalTypes.js'
 
 export function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim()

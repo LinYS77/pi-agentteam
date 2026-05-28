@@ -1,7 +1,9 @@
-import type { ExtensionContext } from '@mariozechner/pi-coding-agent'
-import { updateMemberStatus, updateTeamState } from '../state.js'
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
+import { updateMemberStatus, updateTeamState } from '../state/teamStore.js'
+import { markBridgeAgentEnd, markBridgeAgentStart, type BridgeLifecycleContext } from '../adapters/bridge/index.js'
+import { transitionWorkerFsm } from '../runtime/workerFsm.js'
 import { getCurrentMemberName, getCurrentTeamName } from '../session.js'
-import { TEAM_LEAD } from '../types.js'
+import { TEAM_LEAD } from '../internalTypes.js'
 
 export type HookDigestState = {
   lastLeaderDigestKey: string
@@ -39,28 +41,16 @@ export function markWorkerAgentRunning(ctx: ExtensionContext): string | null {
   const memberName = getCurrentMemberName(ctx)
   if (!teamName || !memberName || memberName === TEAM_LEAD) return null
 
-  updateTeamState(teamName, team => {
-    updateMemberStatus(team, memberName, {
-      status: 'running',
-      lastWakeReason: 'processing prompt',
-      lastError: undefined,
-    })
-  })
+  markBridgeAgentStart(teamName, memberName)
   return memberName
 }
 
-export function markWorkerAgentIdleAfterTurn(ctx: ExtensionContext): void {
+export function markWorkerAgentIdleAfterTurn(ctx: ExtensionContext, lifecycleCtx: BridgeLifecycleContext = {}): void {
   const teamName = getCurrentTeamName(ctx)
   const memberName = getCurrentMemberName(ctx)
   if (!teamName || !memberName || memberName === TEAM_LEAD) return
 
-  updateTeamState(teamName, team => {
-    updateMemberStatus(team, memberName, {
-      status: 'idle',
-      lastWakeReason: 'finished turn',
-      lastError: undefined,
-    })
-  })
+  markBridgeAgentEnd(teamName, memberName, lifecycleCtx)
 }
 
 export function markWorkerSessionShutdown(ctx: ExtensionContext): void {
@@ -69,8 +59,16 @@ export function markWorkerSessionShutdown(ctx: ExtensionContext): void {
   if (!teamName || !memberName || memberName === TEAM_LEAD) return
 
   updateTeamState(teamName, team => {
+    const member = team.members[memberName]
+    if (!member) return
+    if (member.status === 'error') {
+      updateMemberStatus(team, memberName, {
+        lastWakeReason: member.lastWakeReason ?? 'session shutdown while error',
+      })
+      return
+    }
     updateMemberStatus(team, memberName, {
-      status: 'idle',
+      ...transitionWorkerFsm({ member, event: 'sessionShutdown', reason: 'session shutdown' }).patch,
       lastWakeReason: 'session shutdown',
     })
   })

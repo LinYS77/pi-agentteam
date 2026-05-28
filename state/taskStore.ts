@@ -1,10 +1,12 @@
+import { createTask as createCoreTask } from '../core/taskReducer.js'
+import { isCommunicationReferenceNote } from './taskNotes.js'
 import type {
   TeamEvent,
   TeamMessageType,
   TeamState,
   TeamTask,
   TeamTaskNote,
-} from '../types.js'
+} from '../internalTypes.js'
 
 // ---------------------------------------------------------------------------
 // In-memory mutations for tasks, task notes, and bounded team event history.
@@ -13,21 +15,23 @@ import type {
 
 export function createTask(
   state: TeamState,
-  input: { title: string; description: string; blockedBy?: string[] },
+  input: { title: string; description: string; owner?: string },
 ): TeamTask {
   const now = Date.now()
   const id = `T${String(state.nextTaskSeq).padStart(3, '0')}`
   state.nextTaskSeq += 1
-  const task: TeamTask = {
+  const coreTask = createCoreTask({
     id,
     title: input.title,
     description: input.description,
-    status: input.blockedBy && input.blockedBy.length > 0 ? 'blocked' : 'pending',
-    owner: undefined,
-    blockedBy: input.blockedBy ?? [],
-    notes: [],
+    owner: input.owner,
     createdAt: now,
-    updatedAt: now,
+  })
+  const task: TeamTask = {
+    ...coreTask,
+    description: coreTask.description ?? '',
+    blockedBy: [],
+    notes: [],
   }
   state.tasks[id] = task
   return task
@@ -43,6 +47,7 @@ export function appendTaskNote(
     requestId?: string
     linkedMessageId?: string
     metadata?: Record<string, unknown>
+    hidden?: boolean
   },
 ): TeamTaskNote {
   const note: TeamTaskNote = {
@@ -54,9 +59,10 @@ export function appendTaskNote(
     requestId: extra?.requestId,
     linkedMessageId: extra?.linkedMessageId,
     metadata: extra?.metadata,
+    hidden: extra?.hidden,
   }
   task.notes.push(note)
-  task.updatedAt = note.at
+  if (!isCommunicationReferenceNote(note)) task.updatedAt = note.at
   return note
 }
 
@@ -65,15 +71,19 @@ const TEAM_EVENT_LIMIT = 300
 export function appendTeamEvent(
   team: TeamState,
   input: {
+    id?: string
+    at?: number
     type: string
     by: string
     text: string
     metadata?: Record<string, unknown>
   },
 ): TeamEvent {
+  const existing = input.id ? team.events?.find(event => event.id === input.id) : undefined
+  if (existing) return existing
   const event: TeamEvent = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    at: Date.now(),
+    id: input.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    at: input.at ?? Date.now(),
     type: input.type,
     by: input.by,
     text: input.text,

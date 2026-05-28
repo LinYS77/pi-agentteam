@@ -1,13 +1,13 @@
 import { isMailboxMessageUnread } from '../messageLifecycle.js'
 import type { PanelActionMenu, PanelData, PanelSelectionView, TeamPanelState } from './viewModel.js'
-import { hasPaneLostAttention, mailboxType } from './viewModel.js'
+import { hasPaneLostAttention, hasUnreadBlockedReportAttention, mailboxType, taskReferenceSummary } from './viewModel.js'
 import {
   compactAttentionSummaryParts,
   foldCompactAttentionParts,
   mailboxTypeColor,
   mailboxTypeIcon,
+  memberHealthBadge,
   memberPaneLabel,
-  memberStatusBadge,
   taskStatusBadge,
 } from './layoutFormat.js'
 import type { PanelTheme } from './layoutPrimitives.js'
@@ -30,7 +30,7 @@ export function renderMembersLines(
     return lines
   }
 
-  lines.push(theme.fg('dim', `   ${padCell('Name', 14)} Status          Context`))
+  lines.push(theme.fg('dim', `   ${padCell('Name', 14)} Health          Context`))
 
   if (membersWindow.offset > 0) {
     lines.push(theme.fg('dim', `… ${membersWindow.offset} above`))
@@ -43,15 +43,17 @@ export function renderMembersLines(
     const pointer = isSelected ? theme.fg('accent', '›') : ' '
 
     const unread = data.mailbox.filter(m => m.from === member.name && isMailboxMessageUnread(m)).length
-    const activeTasks = data.tasks.filter(t => t.owner === member.name && t.status !== 'completed').length
+    const activeTasks = data.tasks.filter(t => t.owner === member.name && t.status !== 'done').length
     const blockedTasks = data.tasks.filter(t => t.owner === member.name && t.status === 'blocked').length
     const paneLost = hasPaneLostAttention(member)
     const ageStr = formatAge(Date.now() - member.updatedAt)
-    const paneStr = paneLost ? 'pane lost' : memberPaneLabel(member)
-    const paneColor = paneLost ? 'error' : member.paneId ? 'dim' : 'warning'
+    const paneStr = memberPaneLabel(member)
+    const paneColor = paneLost || !member.paneId ? 'warning' : 'dim'
     const attention = [
+      paneLost || member.bridgeLastError ? theme.fg('error', 'error') : '',
       blockedTasks > 0 ? theme.fg('error', `blocked ${blockedTasks}`) : '',
       unread > 0 ? theme.fg('warning', `unread ${unread}`) : '',
+      member.bridgeWorkRequestedAt ? theme.fg('accent', 'busy') : '',
     ].filter(Boolean).join(theme.fg('dim', ' · '))
 
     const statsStr = `${theme.fg('dim', short(member.role, 10))} · ${theme.fg(paneColor, paneStr)} · ${theme.fg('dim', `tasks ${activeTasks}`)} · ${theme.fg('dim', `age ${ageStr}`)}`
@@ -60,7 +62,7 @@ export function renderMembersLines(
     const nameCol = isSelected ? padCell(theme.bold(theme.fg('accent', nameStr)), 14) : padCell(theme.fg('text', nameStr), 14)
 
     lines.push(
-      `${pointer}  ${nameCol} ${memberStatusBadge(theme, member.status)}  ${statsStr}${attentionStr}`,
+      `${pointer}  ${nameCol} ${memberHealthBadge(theme, member)}  ${statsStr}${attentionStr}`,
     )
   }
 
@@ -100,9 +102,11 @@ export function renderTaskLines(
     const idCol = padCell(isSelected ? theme.bold(theme.fg('accent', task.id)) : theme.fg('dim', task.id), 8)
     const ownerCol = theme.fg('dim', `@${short(task.owner ?? '-', 10)}`)
     const titleCol = padCell(isSelected ? theme.fg('text', short(task.title, 30)) : theme.fg('text', short(task.title, 30)), 30)
+    const refs = taskReferenceSummary(task)
     const attention = [
       task.status === 'blocked' ? theme.fg('error', 'blocked') : '',
-      task.status !== 'completed' && !task.owner ? theme.fg('warning', 'unowned') : '',
+      task.status !== 'done' && !task.owner ? theme.fg('warning', 'unowned') : '',
+      refs.total > 0 ? theme.fg('dim', `refs ${refs.total}`) : '',
     ].filter(Boolean).join(theme.fg('dim', ' · '))
     const attentionStr = attention ? `  ${attention}` : ''
 
@@ -154,7 +158,7 @@ export function renderMailboxLines(
     const summaryCol = padCell(summaryFmt, 36)
     const attention = [
       isUnread ? theme.fg('warning', 'unread') : '',
-      type === 'blocked' ? theme.fg('error', 'blocked') : '',
+      hasUnreadBlockedReportAttention(item) ? theme.fg('error', 'blocked report') : '',
     ].filter(Boolean).join(theme.fg('dim', ' · '))
     const attentionStr = attention ? `  ${attention}` : ''
 
@@ -193,7 +197,9 @@ export function renderGlobalTeamLines(
   const teamsWindow = windowSlice(data.teams, state.selectedTeamIndex, 8)
   const lines: string[] = []
   if (data.teams.length === 0) {
-    lines.push(theme.fg('muted', 'No saved teams'))
+    lines.push(theme.fg('muted', data.quarantinedTeams.length > 0
+      ? `No active teams; ${data.quarantinedTeams.length} legacy team(s) quarantined`
+      : 'No saved teams'))
     return lines
   }
   lines.push(theme.fg('dim', `   ${padCell('Team', 24)} │ Summary`))

@@ -1,34 +1,38 @@
-import type { ExtensionAPI } from '@mariozechner/pi-coding-agent'
-import { StringEnum } from '@mariozechner/pi-ai'
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
+import { StringEnum } from '@earendil-works/pi-ai'
 import { Type } from 'typebox'
 import type { ToolHandlerDeps } from './shared.js'
 import { executeTaskAction } from './taskService.js'
 
 const TeamTaskParams = Type.Object({
-  action: StringEnum(['create', 'list', 'claim', 'update', 'complete', 'note'] as const),
+  action: StringEnum(['create', 'assign', 'block', 'unblock', 'close', 'note', 'report_done', 'report_blocked', 'list'] as const),
   taskId: Type.Optional(Type.String()),
   title: Type.Optional(Type.String()),
   description: Type.Optional(Type.String()),
   owner: Type.Optional(Type.String()),
-  status: Type.Optional(
-    StringEnum(['pending', 'in_progress', 'blocked', 'completed'] as const),
-  ),
   note: Type.Optional(Type.String()),
   blockedBy: Type.Optional(Type.Array(Type.String())),
+  status: Type.Optional(
+    StringEnum(['open', 'blocked', 'done'] as const, { description: 'For action=list, filter by task status.' }),
+  ),
+  limit: Type.Optional(Type.Number({ description: 'For action=list, maximum number of matching tasks to show.' })),
+  all: Type.Optional(Type.Boolean({ description: 'For action=list, show all matching tasks instead of the concise default.' })),
 })
 
 export function registerTaskTools(pi: ExtensionAPI, deps: ToolHandlerDeps): void {
   pi.registerTool({
     name: 'agentteam_task',
     label: 'AgentTeam Task',
-    description: 'Create, list, claim, update, annotate, and complete shared team tasks.',
-    promptSnippet: 'Manage the shared agentteam task board: create, list, claim, update, note, and complete tasks.',
+    description: 'Leader-gated shared task workflow: create, assign, block, unblock, close, append task-local notes, and send owner-only done/blocked reports.',
+    promptSnippet: 'Manage the shared agentteam task board: create, assign, block, unblock, close, note, report_done, report_blocked, and list tasks with leader-gated mutations. note is task-local memory only; use agentteam_send for communication.',
     promptGuidelines: [
       'Use agentteam_task before delegation so teammate work is tracked by taskId.',
-      'Use agentteam_task action=create for concrete work items; include owner when the responsible teammate is already clear so the task is assigned immediately without a separate claim.',
-      'Creating or claiming a task only updates shared state; still use agentteam_send for the actual assignment message/wake.',
-      'Use action=claim to assign or reassign an existing task, action=note for durable findings, and action=complete for explicit completion reports.',
-      'When reporting implementation completion through agentteam_task, include files changed and checks run in the note when possible.',
+      'For research→planning or other multi-role chains, use sequential leader-gated tasks: create/assign the research task first; after the report-only result is reviewed, create/assign or unblock the planner task. Do not rely on researcher inform messages or task reports to start planner work.',
+      'Only team-lead should create, assign, factually block/unblock, close tasks, or change owners; planner is advisory by default, not a second leader.',
+      'action=note appends task-local memory only: it does not notify team-lead, create mailbox/projection/attention side effects, or add linked communication notes.',
+      'Non-leader action=report_done is only for the current task owner: it sends an owner-to-leader action request and does not set task.status=done until leader close; non-owners should use inform/question for context.',
+      'Non-leader action=report_blocked is only for the current task owner: it sends an owner-to-leader action request and does not mutate task.status or blockedBy until leader review; non-owners should use inform/question for context.',
+      'Blocked tasks are non-actionable for worker assignment/delivery until team-lead unblocks them; leader close can still accept/close the task after review.',
     ],
     parameters: TeamTaskParams,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

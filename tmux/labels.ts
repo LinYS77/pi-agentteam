@@ -1,4 +1,5 @@
-import type { TeamMember, TeamState } from '../types.js'
+import { projectWorkerHealth, type WorkerHealthProjectionInput } from '../core/workerHealth.js'
+import type { TeamMember, TeamState } from '../internalTypes.js'
 import { runTmuxNoThrowAsync } from './client.js'
 import { targetForPaneId, windowExists } from './core.js'
 
@@ -9,41 +10,46 @@ function roleIcon(member: TeamMember): string {
   return '👤'
 }
 
+function workerHealth(member: TeamMember): ReturnType<typeof projectWorkerHealth> {
+  const projection: WorkerHealthProjectionInput = {
+    isOperational: Boolean(member.paneId) && member.status !== 'offline',
+    hasError: member.status === 'error' || Boolean(member.bridgeLastError),
+    hasActiveTurn: member.status === 'running' || member.status === 'draining',
+    hasPendingWork: member.status === 'queued' || member.status === 'pending_delivery' || Boolean(member.bridgeWorkRequestedAt),
+  }
+  return projectWorkerHealth(projection)
+}
+
 function statusWord(member: TeamMember): string {
-  if (member.status === 'running') return 'running'
-  if (member.status === 'queued') return 'queued'
-  if (member.status === 'error') return 'error'
-  return 'idle'
+  return workerHealth(member)
 }
 
 function compactCounts(items: string[]): string {
   return items.filter(Boolean).join(' · ')
 }
 
-function formatMemberPaneLabel(member: TeamMember): string {
+export function formatMemberPaneLabel(member: TeamMember): string {
   const role = member.role === 'leader' ? 'leader' : member.role
   return `${roleIcon(member)} ${member.name} · ${role} · ${statusWord(member)}`
 }
 
-function formatLeaderPaneLabel(team: TeamState): string {
+export function formatLeaderPaneLabel(team: TeamState): string {
   const teammates = Object.values(team.members).filter(member => member.name !== 'team-lead')
-  const running = teammates.filter(member => member.status === 'running').length
-  const queued = teammates.filter(member => member.status === 'queued').length
-  const idle = teammates.filter(member => member.status === 'idle').length
-  const error = teammates.filter(member => member.status === 'error').length
+  const offline = teammates.filter(member => workerHealth(member) === 'offline').length
+  const idle = teammates.filter(member => workerHealth(member) === 'idle').length
+  const busy = teammates.filter(member => workerHealth(member) === 'busy').length
+  const error = teammates.filter(member => workerHealth(member) === 'error').length
   const tasks = Object.values(team.tasks)
-  const pending = tasks.filter(task => task.status === 'pending').length
-  const active = tasks.filter(task => task.status === 'in_progress').length
+  const open = tasks.filter(task => task.status === 'open').length
   const blocked = tasks.filter(task => task.status === 'blocked').length
   const taskBits = compactCounts([
-    pending > 0 ? `${pending} pending` : '',
-    active > 0 ? `${active} active` : '',
+    open > 0 ? `${open} open` : '',
     blocked > 0 ? `${blocked} blocked` : '',
   ])
   const teammateBits = compactCounts([
-    running > 0 ? `${running} running` : '',
-    queued > 0 ? `${queued} queued` : '',
-    idle > 0 && running === 0 && queued === 0 ? `${idle} idle` : '',
+    offline > 0 ? `${offline} offline` : '',
+    busy > 0 ? `${busy} busy` : '',
+    idle > 0 && offline === 0 && busy === 0 ? `${idle} idle` : '',
     error > 0 ? `${error} error` : '',
   ])
   const bits = compactCounts([

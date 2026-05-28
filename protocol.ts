@@ -1,16 +1,25 @@
-import { TEAM_LEAD } from './types.js'
+import { decideMessagePolicy } from './core/messagePolicy.js'
+import { isMessageType, isTaskReportType } from './core/publicModel.js'
+import type { MessageType, TaskReportType } from './core/publicModel.js'
+import { TEAM_LEAD } from './internalTypes.js'
 import type {
   TeamMessagePriority,
   TeamMessageType,
   TeamMessageWakeHint,
-} from './types.js'
+} from './internalTypes.js'
+
+export function parsePersistedMessageType(type: unknown): TeamMessageType | null {
+  if (isMessageType(type)) return type as MessageType
+  if (isTaskReportType(type)) return type as TaskReportType
+  return null
+}
+
+export function displayMessageType(type?: string): TeamMessageType {
+  return parsePersistedMessageType(type) ?? 'inform'
+}
 
 export function normalizeMessageType(type?: string): TeamMessageType {
-  if (type === 'assignment') return 'assignment'
-  if (type === 'question') return 'question'
-  if (type === 'blocked') return 'blocked'
-  if (type === 'completion_report') return 'completion_report'
-  return 'fyi'
+  return displayMessageType(type)
 }
 
 export function normalizeWakeHint(
@@ -20,12 +29,13 @@ export function normalizeWakeHint(
 ): TeamMessageWakeHint {
   if (wakeHint) return wakeHint
 
-  const toLeader = recipient === TEAM_LEAD
-
-  if (type === 'assignment') return 'hard'
-  if (type === 'question') return 'soft'
-  if (type === 'blocked') return 'hard'
-  if (type === 'completion_report') return toLeader ? 'hard' : 'soft'
+  const recipientKind = recipient === TEAM_LEAD ? 'leader' : recipient ? 'worker' : 'unknown'
+  if (isTaskReportType(type)) {
+    return decideMessagePolicy({ kind: 'task_report', reportType: type, recipientKind: 'leader' }).wakeHint
+  }
+  if (isMessageType(type)) {
+    return decideMessagePolicy({ kind: 'message', messageType: type, recipientKind }).wakeHint
+  }
   return 'none'
 }
 
@@ -44,10 +54,11 @@ export function shouldWakeRecipient(
 }
 
 export function mailboxUrgencyRank(type: TeamMessageType, priority?: TeamMessagePriority): number {
-  if (type === 'blocked') return 0
+  if (type === 'report_blocked') return 0
   if (type === 'question') return 1
   if (type === 'assignment') return 2
-  if (type === 'completion_report') return 3
+  if (type === 'report_done') return 3
+  if (type === 'inform') return priority === 'high' ? 4 : priority === 'normal' ? 5 : 6
   if (priority === 'high') return 4
   if (priority === 'normal') return 5
   return 6

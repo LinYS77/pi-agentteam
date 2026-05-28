@@ -3,6 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
 const assert = require('node:assert/strict')
+const { createStateBundle } = require('./stateBundle.cjs')
 
 const DEFAULT_EXT_ROOT = path.resolve(__dirname, '..')
 const EXT_ROOT = process.env.AGENTTEAM_EXT_ROOT
@@ -167,18 +168,29 @@ module.exports = { Type, StringEnum }
 }
 
 function mapImport(specifier) {
-  if (specifier === '@mariozechner/pi-coding-agent') return path.join(STUB_ROOT, 'pi-coding-agent.js')
-  if (specifier === '@mariozechner/pi-ai') return path.join(STUB_ROOT, 'pi-ai.js')
-  if (specifier === '@mariozechner/pi-tui') return path.join(STUB_ROOT, 'pi-tui.js')
+  if (specifier === '@earendil-works/pi-coding-agent') return path.join(STUB_ROOT, 'pi-coding-agent.js')
+  if (specifier === '@earendil-works/pi-ai') return path.join(STUB_ROOT, 'pi-ai.js')
+  if (specifier === '@earendil-works/pi-tui') return path.join(STUB_ROOT, 'pi-tui.js')
   if (specifier === 'typebox') return path.join(STUB_ROOT, 'typebox.js')
   return specifier
 }
 
 function transpile() {
   ensureDir(DIST_ROOT)
+  for (const agentFile of fs.readdirSync(path.join(EXT_ROOT, 'agents')).filter(name => name.endsWith('.md'))) {
+    const sourceFile = path.join(EXT_ROOT, 'agents', agentFile)
+    const target = path.join(DIST_ROOT, 'agents', agentFile)
+    writeFile(target, fs.readFileSync(sourceFile, 'utf8'))
+  }
+  const configExamplePath = path.join(EXT_ROOT, 'config.example.json')
+  if (fs.existsSync(configExamplePath)) {
+    writeFile(path.join(DIST_ROOT, 'config.example.json'), fs.readFileSync(configExamplePath, 'utf8'))
+  }
+
   const files = walkFiles(EXT_ROOT)
   for (const sourceFile of files) {
-    const sourceText = fs.readFileSync(sourceFile, 'utf8')
+    let sourceText = fs.readFileSync(sourceFile, 'utf8')
+    sourceText = sourceText.replace(/import\.meta\.url/g, `require('node:url').pathToFileURL(__filename).href`)
     let out = ts.transpileModule(sourceText, {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -214,6 +226,7 @@ function createStubPi() {
   const hooks = new Map()
   const renderers = new Map()
   const messages = []
+  let idle = true
 
   return {
     registerTool(def) { tools.set(def.name, def) },
@@ -224,7 +237,10 @@ function createStubPi() {
       hooks.set(name, list)
     },
     registerMessageRenderer(type, renderer) { renderers.set(type, renderer) },
-    sendMessage(message) { messages.push(message) },
+    isIdle() { return idle },
+    setIdle(value) { idle = Boolean(value) },
+    hasPendingMessages() { return false },
+    sendMessage(message, options) { messages.push({ ...message, options: options || {} }) },
     sendUserMessage(content, options) {
       messages.push({ customType: 'user-message', content, details: options || {} })
     },
@@ -242,6 +258,8 @@ function createCtx(cwd, sessionFile, notifications) {
     sessionManager: {
       getSessionFile() { return sessionFile },
     },
+    isIdle() { return true },
+    hasPendingMessages() { return false },
     ui: {
       notify(message, level) {
         notifications.push({ message, level })
@@ -274,12 +292,11 @@ function setupRuntimePatches(modules) {
 
   const original = {
     captureCurrentPaneBinding: tmux.captureCurrentPaneBinding,
+    inspectPane: tmux.inspectPane,
     resolvePaneBinding: tmux.resolvePaneBinding,
     paneExists: tmux.paneExists,
     createTeammatePane: tmux.createTeammatePane,
     waitForPaneAppStart: tmux.waitForPaneAppStart,
-    sendPromptToPane: tmux.sendPromptToPane,
-    sendEnterToPane: tmux.sendEnterToPane,
     syncPaneLabelsForTeam: tmux.syncPaneLabelsForTeam,
     clearPaneLabelsForTeam: tmux.clearPaneLabelsForTeam,
     clearPaneLabelSync: tmux.clearPaneLabelSync,
@@ -292,16 +309,36 @@ function setupRuntimePatches(modules) {
   let nextPane = 10
 
   tmux.captureCurrentPaneBinding = () => ({ paneId: '%leader', target: 'test:@1' })
+  tmux.inspectPane = paneId => livePanes.has(paneId)
+    ? { paneId, exists: true, currentCommand: 'pi', inMode: false, mode: undefined, copyMode: false }
+    : { paneId, exists: false, error: `tmux pane ${paneId} not found` }
   tmux.resolvePaneBinding = paneId => (livePanes.has(paneId) ? { paneId, target: 'test:@1' } : null)
   tmux.paneExists = paneId => livePanes.has(paneId)
-  tmux.createTeammatePane = async () => {
+  tmux.createTeammatePane = async input => {
     const paneId = `%${nextPane++}`
     livePanes.add(paneId)
-    return { paneId, target: 'test:@1' }
+    return { paneId, target: 'test:@1', input }
   }
   tmux.waitForPaneAppStart = async () => true
-  tmux.sendPromptToPane = async (paneId, prompt) => { sentPrompts.push({ paneId, prompt }) }
-  tmux.sendEnterToPane = () => {}
+  const originalCreateTeammatePaneForBridge = tmux.createTeammatePane
+  tmux.createTeammatePane = async input => {
+    const pane = await originalCreateTeammatePaneForBridge(input)
+    if (input?.name && process.env.PI_AGENTTEAM_TEST_AUTO_BRIDGE !== '0') {
+      const state = modules.state
+      queueMicrotask(() => {
+        for (const team of state.listTeams()) {
+          const member = team.members[input.name]
+          if (!member?.sessionFile) continue
+          modules.runtimeBridge.publishBridgeLease({
+            teamName: team.name,
+            memberName: input.name,
+            sessionFile: member.sessionFile,
+          })
+        }
+      })
+    }
+    return pane
+  }
   tmux.syncPaneLabelsForTeam = () => {}
   tmux.clearPaneLabelsForTeam = () => {}
   tmux.clearPaneLabelSync = paneId => { clearedPaneLabels.push(paneId) }
@@ -309,51 +346,82 @@ function setupRuntimePatches(modules) {
   tmux.killPane = paneId => { livePanes.delete(paneId) }
   tmux.listAgentTeamPanes = () => []
 
-  const agents = modules.agents
-  const originalDiscoverAgents = agents.discoverAgents
-  agents.discoverAgents = () => [
-    { name: 'planner', description: 'planner', tools: ['read', 'grep', 'find', 'ls', 'agentteam_send', 'agentteam_receive', 'agentteam_task'], model: '077-gpt-5.4', systemPrompt: 'planner prompt', source: 'builtin', filePath: '/tmp/planner.md' },
-    { name: 'researcher', description: 'researcher', tools: ['read', 'grep', 'find', 'ls', 'agentteam_send', 'agentteam_receive', 'agentteam_task'], model: '077-glm-5.1', systemPrompt: 'researcher prompt', source: 'builtin', filePath: '/tmp/researcher.md' },
-    { name: 'implementer', description: 'implementer', tools: ['read', 'grep', 'find', 'ls', 'bash', 'edit', 'write', 'agentteam_send', 'agentteam_receive', 'agentteam_task'], model: '077-gpt-5.3-codex', systemPrompt: 'implementer prompt', source: 'builtin', filePath: '/tmp/implementer.md' },
-  ]
+  const deps = {
+    sanitizeTeamName: modules.runtime.sanitizeTeamName,
+    sanitizeWorkerName: modules.runtime.sanitizeWorkerName,
+    normalizeOwnerName: modules.runtime.normalizeOwnerName,
+    assertValidOwner: modules.runtime.assertValidOwner,
+    classifySpawnTask: modules.runtime.classifySpawnTask,
+    ensureTeamForSession: modules.runtime.ensureTeamForSession,
+    currentActor: modules.runtime.currentActor,
+    healMemberPaneBinding: modules.runtime.healMemberPaneBinding,
+    isLeaderInsideTmux: () => true,
+    requestWorkerDelivery: modules.runtime.requestWorkerDelivery,
+    requestLeaderAttentionIfNeeded: modules.runtime.requestLeaderAttentionIfNeeded,
+    appendStructuredTaskNote: modules.runtime.appendStructuredTaskNote,
+    invalidateStatus: () => {},
+  }
 
   return {
     sentPrompts,
     livePanes,
     clearedPaneLabels,
+    deps,
     restore() {
       Object.assign(tmux, original)
-      agents.discoverAgents = originalDiscoverAgents
     },
   }
 }
 
 function loadModules() {
   const req = rel => require(path.join(DIST_ROOT, rel))
+  const state = createStateBundle(req)
   return {
     index: req('index.js'),
-    state: req('state.js'),
-    tmux: req('tmux.js'),
+    state,
+    tmux: req('adapters/tmux/index.js'),
     agents: req('agents.js'),
     protocol: req('protocol.js'),
     orchestration: req('orchestration.js'),
-    runtime: req('runtime.js'),
-    runtimePanes: req('runtimePanes.js'),
-    runtimeService: req('runtimeService.js'),
-    messageRouting: req('tools/messageRouting.js'),
+    runtime: req('adapters/runtime/session.js'),
+    runtimeBridge: req('adapters/bridge/index.js'),
+    runtimeDelivery: req('adapters/bridge/delivery.js'),
+    deliveryPolicy: req('deliveryPolicy.js'),
+    runtimePanes: req('adapters/tmux/teamPanes.js'),
+    runtimeRules: req('adapters/runtime/rules.js'),
+    bridgeStore: req('state/bridgeStore.js'),
+    deliveryStore: req('state/deliveryStore.js'),
+    lifecycleService: req('hooks/lifecycleService.js'),
+    workerTurnPrompt: req('workerTurnPrompt.js'),
+    runtimeService: req('adapters/runtime/service.js'),
+    leaderProjectionService: req('runtime/leaderProjectionService.js'),
+    leaderAttention: req('runtime/leaderAttention.js'),
+    messageRouting: req('app/messageRouting.js'),
+    shared: req('tools/shared.js'),
+    types: req('types.js'),
+    workerSpawnService: req('tools/workerSpawnService.js'),
     viewModel: req('teamPanel/viewModel.js'),
+    panelDataSource: req('teamPanel/dataSource.js'),
     layout: req('teamPanel/layout.js'),
+    tmuxLabels: req('tmux/labels.js'),
   }
 }
 
 function loadSuites() {
   const suitesDir = path.join(__dirname, 'suites')
   const preferredOrder = [
+    'core-vocabulary.cjs',
+    'core-task-reducer.cjs',
+    'core-message-policy.cjs',
+    'core-worker-health.cjs',
     'package-install-smoke.cjs',
     'tools-state.cjs',
     'commands.cjs',
     'protocol-decisions-orchestration.cjs',
     'panel-renderer.cjs',
+    'public-output-leak-guards.cjs',
+    'outbox-store-runner.cjs',
+    'data-layout-vnext.cjs',
   ]
   const existing = new Set(
     fs.readdirSync(suitesDir).filter(name => name.endsWith('.cjs')),
@@ -384,11 +452,37 @@ async function main() {
         createFakeTheme,
         assertContains,
         requireDist: rel => require(path.join(DIST_ROOT, rel)),
+        createBridgeDeliveryRequest: require(path.join(DIST_ROOT, 'runtime/bridgeRequest.js')).createBridgeDeliveryRequest,
+        readSource: rel => fs.readFileSync(path.join(EXT_ROOT, rel), 'utf8'),
+        distRoot: DIST_ROOT,
+        extRoot: EXT_ROOT,
+        stubRoot: STUB_ROOT,
         visibleWidth: require(path.join(STUB_ROOT, 'pi-tui.js')).visibleWidth,
         tuiKeys: require(path.join(STUB_ROOT, 'pi-tui.js')).Key,
       }
       const toolsSuite = require(path.join(__dirname, 'suites', 'tools-state.cjs'))
-      const env = { pi, modules, leaderCtx, notifications, sentPrompts: patches.sentPrompts, patches, helpers, toolsSuite }
+      const env = {
+        pi,
+        modules,
+        leaderCtx,
+        notifications,
+        sentPrompts: patches.sentPrompts,
+        patches,
+        helpers,
+        toolsSuite,
+        publishAllWorkerBridges() {
+          for (const team of modules.state.listTeams()) {
+            for (const member of Object.values(team.members)) {
+              if (!member || member.name === modules.types.TEAM_LEAD || !member.sessionFile) continue
+              modules.runtimeBridge.publishBridgeLease({
+                teamName: team.name,
+                memberName: member.name,
+                sessionFile: member.sessionFile,
+              })
+            }
+          }
+        },
+      }
 
       for (const suite of loadSuites()) {
         log(`▶ suite: ${suite.name}`)

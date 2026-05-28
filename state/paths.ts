@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { ensureDir } from './fsStore.js'
@@ -29,6 +30,12 @@ export function getTeamsDir(): string {
   return dir
 }
 
+export function getQuarantineRoot(): string {
+  const dir = path.join(getAgentTeamRoot(), '_quarantine')
+  ensureDir(dir)
+  return dir
+}
+
 export function getTeamDir(teamName: string): string {
   const dir = path.join(getTeamsDir(), sanitizeName(teamName))
   ensureDir(dir)
@@ -36,11 +43,11 @@ export function getTeamDir(teamName: string): string {
 }
 
 export function getTeamStatePath(teamName: string): string {
-  return path.join(getTeamDir(teamName), 'state.json')
+  return path.join(getTeamDir(teamName), 'team.json')
 }
 
 export function getMailboxDir(teamName: string): string {
-  const dir = path.join(getTeamDir(teamName), 'mailboxes')
+  const dir = path.join(getTeamDir(teamName), 'inboxes')
   ensureDir(dir)
   return dir
 }
@@ -49,8 +56,20 @@ export function getMailboxPath(teamName: string, memberName: string): string {
   return path.join(getMailboxDir(teamName), `${sanitizeName(memberName)}.json`)
 }
 
+export function getRuntimeStatePath(teamName: string): string {
+  return path.join(getTeamDir(teamName), 'runtime.json')
+}
+
+export function getOutboxStatePath(teamName: string): string {
+  return path.join(getTeamDir(teamName), 'outbox.json')
+}
+
+export function getOutboxDiagnosticsPath(teamName: string): string {
+  return path.join(getTeamDir(teamName), 'outbox-diagnostics.json')
+}
+
 export function getSessionsDir(): string {
-  const dir = path.join(getAgentTeamRoot(), 'session-bindings')
+  const dir = path.join(getAgentTeamRoot(), 'sessions')
   ensureDir(dir)
   return dir
 }
@@ -61,10 +80,23 @@ export function getWorkerSessionsDir(): string {
   return dir
 }
 
-export function sanitizeSessionFile(sessionFile: string): string {
-  return Buffer.from(sessionFile).toString('base64url')
+export function hashSessionFile(sessionFile: string): string {
+  return crypto.createHash('sha256').update(sessionFile).digest('hex')
 }
 
 export function getSessionContextPath(sessionFile: string): string {
-  return path.join(getSessionsDir(), `${sanitizeSessionFile(sessionFile)}.json`)
+  return path.join(getSessionsDir(), `session-${hashSessionFile(sessionFile)}.json`)
+}
+
+function readablePathPrefix(value: string, maxLength: number): string {
+  const sanitized = sanitizeName(value).replace(/^-+|-+$/g, '') || 'item'
+  return sanitized.slice(0, maxLength).replace(/[-._]+$/g, '') || 'item'
+}
+
+export function getWorkerSessionPath(teamName: string, workerName: string): string {
+  const key = `${teamName}\n${workerName}`
+  const hash = crypto.createHash('sha256').update(key).digest('hex').slice(0, 24)
+  const teamPrefix = readablePathPrefix(teamName, 32)
+  const workerPrefix = readablePathPrefix(workerName, 32)
+  return path.join(getWorkerSessionsDir(), `worker-${teamPrefix}-${workerPrefix}-${hash}.jsonl`)
 }

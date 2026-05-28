@@ -1,8 +1,8 @@
-import type { ExtensionContext } from '@mariozechner/pi-coding-agent'
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import {
   truncateToWidth,
   visibleWidth,
-} from '@mariozechner/pi-tui'
+} from '@earendil-works/pi-tui'
 
 export type PanelTheme = ExtensionContext['ui']['theme']
 export type PanelColor = 'dim' | 'accent' | 'warning' | 'error' | 'success' | 'text'

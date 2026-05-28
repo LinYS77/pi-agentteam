@@ -1,12 +1,12 @@
-import type { ExtensionContext } from '@mariozechner/pi-coding-agent'
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { handleTeamPanelInput } from './teamPanel/input.js'
 import { renderTeamPanelLines } from './teamPanel/layout.js'
 import {
   buildPanelSelectionView,
   clampPanelStateToData,
   createInitialPanelState,
-  loadPanelData,
 } from './teamPanel/viewModel.js'
+import { loadPanelData } from './teamPanel/dataSource.js'
 import type { TeamPanelResult } from './teamPanel/viewModel.js'
 
 export type { TeamPanelResult } from './teamPanel/viewModel.js'

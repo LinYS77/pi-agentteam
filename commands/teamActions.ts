@@ -1,15 +1,9 @@
 import * as fs from 'node:fs'
-import type { ExtensionContext } from '@mariozechner/pi-coding-agent'
-import {
-  clearSessionContext,
-  getMailboxPath,
-  getSessionContextPath,
-  listTeams,
-  readTeamState,
-  removeMember,
-  updateTeamState,
-  writeSessionContext,
-} from '../state.js'
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
+import { getMailboxPath } from '../state/paths.js'
+import { clearSessionContext, writeSessionContext } from '../state/sessionBinding.js'
+import { listTeams, readTeamState, removeMember, updateTeamState } from '../state/teamStore.js'
+import { readLatestQuarantineForTeam } from '../state/validation.js'
 import { getCurrentTeamName, getSessionFile } from '../session.js'
 import {
   captureCurrentPaneBinding,
@@ -18,10 +12,10 @@ import {
   listAgentTeamPanes,
   paneExists,
   syncPaneLabelsForTeam,
-} from '../tmux.js'
-import { TEAM_LEAD } from '../types.js'
-import type { TeamPaneCleanupOptions } from '../runtime.js'
-import type { TeamState } from '../types.js'
+} from '../adapters/tmux/index.js'
+import { TEAM_LEAD } from '../internalTypes.js'
+import type { TeamPaneCleanupOptions } from '../adapters/runtime/session.js'
+import type { TeamState } from '../internalTypes.js'
 import type { CommandHandlerDeps } from './shared.js'
 
 export function removeSelectedMember(
@@ -100,7 +94,7 @@ function removeMailbox(teamName: string, memberName: string): void {
 
 function removeSessionContextOnly(sessionFile?: string): void {
   if (!sessionFile) return
-  quietRemovePath(getSessionContextPath(sessionFile))
+  clearSessionContext(sessionFile)
 }
 
 function staleMemberForMissingLeader(
@@ -234,7 +228,14 @@ export function recoverTeamAsCurrentLeader(
   })
 
   if (!recovered) {
-    ctx.ui.notify(`Team ${teamName} no longer exists`, 'warning')
+    const quarantined = readLatestQuarantineForTeam(teamName)
+    if (quarantined) {
+      const firstReason = quarantined.reasons[0]
+      const reasonText = firstReason ? `${firstReason.code} at ${firstReason.path}` : 'unsupported persisted state'
+      ctx.ui.notify(`Team ${teamName} is quarantined as legacy unsupported state (${reasonText}); active recovery is disabled.`, 'warning')
+    } else {
+      ctx.ui.notify(`Team ${teamName} no longer exists`, 'warning')
+    }
     return null
   }
 

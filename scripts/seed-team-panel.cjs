@@ -81,7 +81,7 @@ function teamDir(root, teamName) {
 }
 
 function mailboxPath(root, teamName, memberName) {
-  return path.join(teamDir(root, teamName), 'mailboxes', `${sanitizeName(memberName)}.json`)
+  return path.join(teamDir(root, teamName), 'inboxes', `${sanitizeName(memberName)}.json`)
 }
 
 function workerSession(root, teamName, memberName) {
@@ -111,7 +111,7 @@ function makeTask(id, patch = {}) {
     id,
     title: `Seed task ${id}`,
     description: `Seed description for ${id}`,
-    status: 'pending',
+    status: 'open',
     owner: undefined,
     blockedBy: [],
     notes: [],
@@ -136,7 +136,7 @@ function message(id, patch = {}) {
     from: 'unknown',
     to: 'team-lead',
     text: 'seed message',
-    type: 'fyi',
+    type: 'inform',
     priority: 'normal',
     createdAt,
     deliveredAt: patch.deliveredAt,
@@ -169,7 +169,7 @@ function longDetailText(kind) {
 }
 
 function writeTeam(root, team) {
-  writeJson(path.join(teamDir(root, team.name), 'state.json'), team)
+  writeJson(path.join(teamDir(root, team.name), 'team.json'), team)
 }
 
 function writeMailbox(root, teamName, memberName, messages) {
@@ -264,7 +264,7 @@ function seedAlpha(root) {
   addTask(team, makeTask('T001', {
     title: 'Read very long detail content inside /team',
     description: longDetailText('Task T001 description'),
-    status: 'in_progress',
+    status: 'open',
     owner: 'researcher-alpha',
     notes: [
       note('researcher-alpha', 'Found relevant files: teamPanel/layout.ts, teamPanel/viewModel.ts, tests/suites/panel-renderer.cjs.', 20),
@@ -286,16 +286,16 @@ function seedAlpha(root) {
   addTask(team, makeTask('T003', {
     title: 'Unowned pending follow-up after teammate removal',
     description: 'This intentionally has no owner so /team can show unowned active task attention.',
-    status: 'pending',
+    status: 'open',
     owner: undefined,
     notes: [note('team-lead', 'Owner was removed in a previous test; task returned to pending.', 35)],
     createdAt: minutesAgo(125),
     updatedAt: minutesAgo(35),
   }))
   addTask(team, makeTask('T004', {
-    title: 'Completed baseline render regression',
-    description: 'A completed task for task breakdown testing.',
-    status: 'completed',
+    title: 'Done baseline render regression',
+    description: 'A done task for task breakdown testing.',
+    status: 'done',
     owner: 'implementer-alpha',
     notes: [note('implementer-alpha', 'Files changed: teamPanel/layout.ts. Checks run: npm test. Result: passed.', 55)],
     createdAt: minutesAgo(120),
@@ -304,7 +304,7 @@ function seedAlpha(root) {
   addTask(team, makeTask('T005', {
     title: 'Queued teammate boot prompt review',
     description: 'A pending owned task so the task list has enough rows for scrolling indicators.',
-    status: 'pending',
+    status: 'open',
     owner: 'qa-alpha',
     notes: [note('qa-alpha', 'Waiting for leader to decide whether this should be assigned.', 42)],
     createdAt: minutesAgo(100),
@@ -313,7 +313,7 @@ function seedAlpha(root) {
   addTask(team, makeTask('T006', {
     title: 'Generic wake failure follow-up',
     description: 'Owned by error member to verify member health details and task counts.',
-    status: 'in_progress',
+    status: 'open',
     owner: 'writer-alpha',
     notes: [note('writer-alpha', 'Could not wake pane; needs leader cleanup or respawn decision.', 39)],
     createdAt: minutesAgo(90),
@@ -322,16 +322,16 @@ function seedAlpha(root) {
   addTask(team, makeTask('T007', {
     title: 'Read-only observer audit',
     description: 'Extra task to make the task list taller than the visible window.',
-    status: 'pending',
+    status: 'open',
     owner: 'observer-alpha',
     notes: [note('observer-alpha', 'No action yet.', 70)],
     createdAt: minutesAgo(80),
     updatedAt: minutesAgo(70),
   }))
   addTask(team, makeTask('T008', {
-    title: 'Completed density snapshot',
-    description: 'Additional completed task for global done count.',
-    status: 'completed',
+    title: 'Done density snapshot',
+    description: 'Additional done task for global done count.',
+    status: 'done',
     owner: 'reviewer-alpha-long-name',
     notes: [note('reviewer-alpha-long-name', 'Visual density snapshot accepted.', 65)],
     createdAt: minutesAgo(75),
@@ -342,7 +342,7 @@ function seedAlpha(root) {
   writeMailbox(root, team.name, 'team-lead', [
     message('seed-alpha-m1', {
       from: 'planner-alpha',
-      type: 'blocked',
+      type: 'report_blocked',
       priority: 'high',
       taskId: 'T002',
       threadId: 'task:T002',
@@ -363,7 +363,7 @@ function seedAlpha(root) {
     }),
     message('seed-alpha-m3', {
       from: 'implementer-alpha',
-      type: 'completion_report',
+      type: 'report_done',
       priority: 'normal',
       taskId: 'T004',
       threadId: 'task:T004',
@@ -374,7 +374,7 @@ function seedAlpha(root) {
     }),
     message('seed-alpha-m4', {
       from: 'writer-alpha',
-      type: 'blocked',
+      type: 'report_blocked',
       priority: 'normal',
       taskId: 'T006',
       threadId: 'task:T006',
@@ -384,21 +384,21 @@ function seedAlpha(root) {
     }),
     message('seed-alpha-m5', {
       from: 'qa-alpha',
-      type: 'fyi',
+      type: 'inform',
       priority: 'low',
       taskId: 'T005',
       threadId: 'task:T005',
-      summary: 'FYI unread low priority',
-      text: 'Low priority unread FYI should still count as unread but appear below urgent blocked/question messages.',
+      summary: 'Inform unread low priority',
+      text: 'Low priority unread Inform should still count as unread but appear below urgent blocked/question messages.',
       createdAt: minutesAgo(6),
     }),
     message('seed-alpha-m6', {
       from: 'reviewer-alpha-long-name',
-      type: 'completion_report',
+      type: 'report_done',
       priority: 'normal',
       taskId: 'T008',
       threadId: 'task:T008',
-      summary: 'Already read completion',
+      summary: 'Already read done report',
       text: 'This read message should remain visible in mailbox history but not count as unread.',
       createdAt: minutesAgo(50),
       deliveredAt: minutesAgo(50),
@@ -406,17 +406,17 @@ function seedAlpha(root) {
     }),
     message('seed-alpha-m7', {
       from: 'observer-alpha',
-      type: 'fyi',
+      type: 'inform',
       priority: 'normal',
       summary: 'Old read observer note',
-      text: 'Read FYI used to verify read/unread visual contrast.',
+      text: 'Read Inform used to verify read/unread visual contrast.',
       createdAt: minutesAgo(70),
       deliveredAt: minutesAgo(70),
       readAt: minutesAgo(69),
     }),
     message('seed-alpha-m8', {
       from: 'researcher-alpha',
-      type: 'fyi',
+      type: 'inform',
       priority: 'normal',
       summary: 'Additional unread row to force mailbox windowing',
       text: 'Extra unread mailbox item so the mailbox list can show hidden rows below.',
@@ -454,15 +454,15 @@ function seedBeta(root) {
   addTask(team, makeTask('T002', {
     title: 'Unowned cleanup review',
     description: 'Used to verify unowned task attention in global mode.',
-    status: 'pending',
+    status: 'open',
     owner: undefined,
     createdAt: minutesAgo(250),
     updatedAt: minutesAgo(160),
   }))
   addTask(team, makeTask('T003', {
-    title: 'Completed old implementation',
+    title: 'Done old implementation',
     description: 'Used for global task breakdown done count.',
-    status: 'completed',
+    status: 'done',
     owner: 'implementer-beta',
     createdAt: minutesAgo(245),
     updatedAt: minutesAgo(155),
@@ -472,7 +472,7 @@ function seedBeta(root) {
   writeMailbox(root, team.name, 'team-lead', [
     message('seed-beta-m1', {
       from: 'planner-beta',
-      type: 'blocked',
+      type: 'report_blocked',
       priority: 'high',
       taskId: 'T001',
       summary: 'Old team blocked because worker exited',
@@ -505,9 +505,9 @@ function seedGamma(root) {
     updatedAt: minutesAgo(4),
   })
   addTask(team, makeTask('T001', {
-    title: 'Completed clean team task',
-    description: 'A quiet completed task so /team can show Attention OK for one team.',
-    status: 'completed',
+    title: 'Done clean team task',
+    description: 'A quiet done task so /team can show Attention OK for one team.',
+    status: 'done',
     owner: 'implementer-gamma',
     notes: [note('implementer-gamma', 'All checks passed.', 3)],
     createdAt: minutesAgo(20),
@@ -517,10 +517,10 @@ function seedGamma(root) {
   writeMailbox(root, team.name, 'team-lead', [
     message('seed-gamma-m1', {
       from: 'implementer-gamma',
-      type: 'completion_report',
+      type: 'report_done',
       priority: 'normal',
       taskId: 'T001',
-      summary: 'Already read completion',
+      summary: 'Already read done report',
       text: 'This clean team has no unread attention.',
       createdAt: minutesAgo(2),
       deliveredAt: minutesAgo(2),
@@ -566,7 +566,7 @@ if (args.clean) {
 ensureDir(args.home)
 ensureDir(path.join(args.home, 'teams'))
 ensureDir(path.join(args.home, 'worker-sessions'))
-ensureDir(path.join(args.home, 'session-bindings'))
+ensureDir(path.join(args.home, 'sessions'))
 
 const teams = seedCockpit(args.home)
 const stalePane = createStalePaneIfRequested(args.withStalePane)

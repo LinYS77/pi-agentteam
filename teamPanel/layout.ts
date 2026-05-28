@@ -1,12 +1,15 @@
-import type { ExtensionContext } from '@mariozechner/pi-coding-agent'
-import { truncateToWidth } from '@mariozechner/pi-tui'
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
+import { truncateToWidth } from '@earendil-works/pi-tui'
+import { bridgeLeaseMismatchReason, getBridgeLease, staleBridge } from '../state/bridgeStore.js'
+import { BRIDGE_PACKAGE_VERSION, BRIDGE_PROTOCOL_VERSION } from '../adapters/bridge/index.js'
 import { isMailboxMessageUnread } from '../messageLifecycle.js'
 import type {
   PanelData,
   PanelSelectionView,
   TeamPanelState,
+  TeamRuntimeDiagnostics,
 } from './viewModel.js'
-import { buildTeamAttentionSummary, mailboxType } from './viewModel.js'
+import { buildTeamAttentionSummary, hasUnreadBlockedReportAttention, latestVisibleTaskNote, mailboxType, taskReferenceSummary } from './viewModel.js'
 import {
   basename,
   drawBox,
@@ -25,9 +28,10 @@ import {
   mailboxTypeColor,
   mailboxTypeIcon,
   memberHealthColor,
+  memberHealthBadge,
   memberHealthLabel,
   memberPaneLabel,
-  memberStatusBadge,
+  projectMemberHealth,
   sumAttentionSummaries,
   taskStatusBadge,
 } from './layoutFormat.js'
@@ -57,27 +61,29 @@ function renderOverviewLine(theme: ExtensionContext['ui']['theme'], data: PanelD
     const globalAttention = sumAttentionSummaries(Object.values(data.teamSummaries))
     const attention = foldAttentionParts(theme, attentionSummaryParts(theme, globalAttention))
     const attentionText = attention.length > 0 ? attention.join(theme.fg('dim', ' · ')) : theme.fg('dim', 'OK')
-    return `${theme.bold(theme.fg('text', '✦  AgentTeam Console '))} ${theme.fg('dim', '│')} ${overviewPart(theme, 'Attention', attentionText)} ${theme.fg('dim', '│')} ${overviewPart(theme, 'Teams', String(data.teams.length))} ${theme.fg('dim', '│')} ${overviewPart(theme, 'Stale panes', String(data.orphanPanes.length))}`
+    const quarantine = data.quarantinedTeams.length > 0
+      ? ` ${theme.fg('dim', '│')} ${overviewPart(theme, 'Quarantine', theme.fg('warning', String(data.quarantinedTeams.length)))}`
+      : ''
+    return `${theme.bold(theme.fg('text', '✦  AgentTeam Console '))} ${theme.fg('dim', '│')} ${overviewPart(theme, 'Attention', attentionText)} ${theme.fg('dim', '│')} ${overviewPart(theme, 'Teams', String(data.teams.length))} ${theme.fg('dim', '│')} ${overviewPart(theme, 'Stale panes', String(data.orphanPanes.length))}${quarantine}`
   }
 
-  const runningCount = data.members.filter(member => member.status === 'running').length
-  const queuedCount = data.members.filter(member => member.status === 'queued').length
-  const idleCount = data.members.filter(member => member.status === 'idle').length
-  const errorCount = data.members.filter(member => member.status === 'error').length
+  const offlineCount = data.members.filter(member => projectMemberHealth(member) === 'offline').length
+  const idleCount = data.members.filter(member => projectMemberHealth(member) === 'idle').length
+  const busyCount = data.members.filter(member => projectMemberHealth(member) === 'busy').length
+  const errorCount = data.members.filter(member => projectMemberHealth(member) === 'error').length
 
-  const pendingCount = data.tasks.filter(task => task.status === 'pending').length
-  const inProgressCount = data.tasks.filter(task => task.status === 'in_progress').length
+  const openCount = data.tasks.filter(task => task.status === 'open').length
   const blockedCount = data.tasks.filter(task => task.status === 'blocked').length
-  const completedCount = data.tasks.filter(task => task.status === 'completed').length
+  const doneCount = data.tasks.filter(task => task.status === 'done').length
 
-  const blockedMsgCount = data.mailbox.filter(item => mailboxType(item) === 'blocked').length
+  const blockedMsgCount = data.mailbox.filter(hasUnreadBlockedReportAttention).length
   const unreadMsgCount = data.mailbox.filter(isMailboxMessageUnread).length
 
   const tName = theme.bold(theme.fg('text', `✦  ${data.team.name} `))
 
-  const mStatus = `${theme.fg('warning', `⟳ ${runningCount}`)} ${theme.fg('accent', `⋯ ${queuedCount}`)} ${theme.fg('dim', `○ ${idleCount}`)}${errorCount ? ` ${theme.fg('error', `⚠ ${errorCount}`)}` : ''}`
-  const tStatus = `${theme.fg('dim', `○ ${pendingCount}`)} ${theme.fg('warning', `⟳ ${inProgressCount}`)} ${theme.fg('error', `⚠ ${blockedCount}`)} ${theme.fg('success', `✔ ${completedCount}`)}`
-  const sStatus = `${theme.fg(unreadMsgCount > 0 ? 'warning' : 'dim', `${unreadMsgCount} unread`)} · ${theme.fg(blockedMsgCount > 0 ? 'error' : 'dim', `${blockedMsgCount} blocked`)} · total ${data.mailbox.length}`
+  const mStatus = `${theme.fg('warning', `◇ ${offlineCount}`)} ${theme.fg('dim', `○ ${idleCount}`)} ${theme.fg('accent', `⋯ ${busyCount}`)}${errorCount ? ` ${theme.fg('error', `⚠ ${errorCount}`)}` : ''}`
+  const tStatus = `${theme.fg('dim', `○ ${openCount}`)} ${theme.fg('error', `⚠ ${blockedCount}`)} ${theme.fg('success', `✔ ${doneCount}`)}`
+  const sStatus = `${theme.fg(unreadMsgCount > 0 ? 'warning' : 'dim', `${unreadMsgCount} unread`)} · ${theme.fg(blockedMsgCount > 0 ? 'error' : 'dim', `${blockedMsgCount} unread blocked reports`)} · total ${data.mailbox.length}`
   const attention = foldAttentionParts(theme, attentionSummaryParts(theme, buildTeamAttentionSummary(data.team, data.mailbox)))
   const attentionText = attention.length > 0 ? attention.join(theme.fg('dim', ' · ')) : theme.fg('dim', 'OK')
 
@@ -86,6 +92,45 @@ function renderOverviewLine(theme: ExtensionContext['ui']['theme'], data: PanelD
 
 function renderDetailSection(theme: ExtensionContext['ui']['theme'], label: string): string {
   return theme.bold(theme.fg('dim', label))
+}
+
+function renderOutboxDiagnosticsLines(
+  theme: ExtensionContext['ui']['theme'],
+  diagnostics: TeamRuntimeDiagnostics | undefined,
+): string[] {
+  const outbox = diagnostics?.outbox
+  if (!outbox) return []
+  const pending = outbox.pending
+  const failed = outbox.failed
+  const lines = [
+    renderDetailField(theme, 'Outbox', `pending ${pending} · failed ${failed}`, failed ? 'error' : pending ? 'warning' : 'text'),
+  ]
+  if (outbox.lastRunAt) {
+    lines.push(renderDetailField(theme, 'Outbox run', formatDateTime(outbox.lastRunAt), 'text'))
+  }
+  if (outbox.lastFailedEffect) {
+    const failedEffect = outbox.lastFailedEffect
+    lines.push(renderDetailField(theme, 'Outbox failed', `${failedEffect.effectId} · ${failedEffect.kind}`, 'error'))
+    if (failedEffect.error) lines.push(renderDetailField(theme, 'Outbox error', short(failedEffect.error, 80), 'error'))
+  }
+  return lines
+}
+
+function renderQuarantineSummaryLines(
+  theme: ExtensionContext['ui']['theme'],
+  data: Extract<PanelData, { mode: 'global' }>,
+): string[] {
+  if (data.quarantinedTeams.length === 0) return []
+  const latest = data.quarantinedTeams[0]
+  const firstReason = latest?.reasons[0]
+  const lines = [
+    renderDetailField(theme, 'Legacy quarantine', `${data.quarantinedTeams.length} team(s) quarantined`, 'warning'),
+  ]
+  if (latest) {
+    const reasonText = firstReason ? firstReason.code : 'unsupported persisted state'
+    lines.push(renderDetailField(theme, 'Latest quarantine', `${latest.teamName} · ${reasonText}`, 'warning'))
+  }
+  return lines
 }
 
 function renderGlobalDetailLines(
@@ -108,6 +153,12 @@ function renderGlobalDetailLines(
       detailLines.push(renderDetailField(theme, 'Label', pane.label || '-', pane.label ? 'warning' : 'dim'))
       detailLines.push(renderDetailField(theme, 'Command', pane.currentCommand || '-', 'text'))
       detailLines.push(renderDetailField(theme, 'State', 'stale agentteam-labeled pane', 'warning'))
+      if (state.isDetailExpanded && data.quarantinedTeams.length > 0) {
+        detailLines.push('')
+        detailLines.push(renderDetailSeparator(theme, 44))
+        detailLines.push(renderDetailSection(theme, 'Diagnostics'))
+        detailLines.push(...renderQuarantineSummaryLines(theme, data))
+      }
     }
   } else {
     const team = selection.selectedTeam
@@ -121,23 +172,28 @@ function renderGlobalDetailLines(
       const mailbox = data.teamMailboxes[team.name]
       detailLines.push(`🤝 ${theme.bold(theme.fg('text', team.name))}`)
       detailLines.push('')
-      const errorCount = teammates.filter(member => member.status === 'error').length
-      const missingPaneCount = teammates.filter(member => !member.paneId).length
-      const runningCount = teammates.filter(member => member.status === 'running').length
-      const queuedCount = teammates.filter(member => member.status === 'queued').length
-      const idleCount = teammates.filter(member => member.status === 'idle').length
-      const pendingCount = tasks.filter(task => task.status === 'pending').length
-      const inProgressCount = tasks.filter(task => task.status === 'in_progress').length
+      const offlineCount = teammates.filter(member => projectMemberHealth(member) === 'offline').length
+      const idleCount = teammates.filter(member => projectMemberHealth(member) === 'idle').length
+      const busyCount = teammates.filter(member => projectMemberHealth(member) === 'busy').length
+      const errorCount = teammates.filter(member => projectMemberHealth(member) === 'error').length
+      const openCount = tasks.filter(task => task.status === 'open').length
       const blockedCount = tasks.filter(task => task.status === 'blocked').length
-      const completedCount = tasks.filter(task => task.status === 'completed').length
-      const unownedCount = tasks.filter(task => task.status !== 'completed' && !task.owner).length
+      const doneCount = tasks.filter(task => task.status === 'done').length
+      const unownedCount = tasks.filter(task => task.status !== 'done' && !task.owner).length
       const attentionParts = summary ? attentionSummaryParts(theme, summary) : []
       detailLines.push(renderDetailSection(theme, 'Status'))
       detailLines.push(renderDetailField(theme, 'Teammates', String(teammates.length), 'text'))
-      detailLines.push(renderDetailField(theme, 'Health', `running ${runningCount} · queued ${queuedCount} · idle ${idleCount} · error ${errorCount} · no pane ${missingPaneCount}`, errorCount || missingPaneCount ? 'warning' : 'text'))
-      detailLines.push(renderDetailField(theme, 'Tasks', `pending ${pendingCount} · active ${inProgressCount} · blocked ${blockedCount} · done ${completedCount} · unowned ${unownedCount}`, blockedCount || unownedCount ? 'warning' : 'text'))
-      detailLines.push(renderDetailField(theme, 'Mailbox', mailbox ? `unread ${mailbox.unread} · blocked ${mailbox.blocked} · total ${mailbox.total}` : 'unread 0 · blocked 0 · total 0', mailbox && (mailbox.unread || mailbox.blocked) ? 'warning' : 'text'))
+      detailLines.push(renderDetailField(theme, 'Worker health', `offline ${offlineCount} · idle ${idleCount} · busy ${busyCount} · error ${errorCount}`, errorCount ? 'warning' : 'text'))
+      detailLines.push(renderDetailField(theme, 'Tasks', `open ${openCount} · blocked ${blockedCount} · done ${doneCount} · unowned ${unownedCount}`, blockedCount || unownedCount ? 'warning' : 'text'))
+      detailLines.push(renderDetailField(theme, 'Mailbox', mailbox ? `unread ${mailbox.unread} · unread blocked reports ${mailbox.blocked} · total ${mailbox.total}` : 'unread 0 · unread blocked reports 0 · total 0', mailbox && (mailbox.unread || mailbox.blocked) ? 'warning' : 'text'))
       detailLines.push(renderDetailField(theme, 'Attention', attentionParts.join(' · ') || 'OK', attentionParts.length > 0 ? 'warning' : 'text'))
+      if (state.isDetailExpanded) {
+        detailLines.push('')
+        detailLines.push(renderDetailSeparator(theme, 44))
+        detailLines.push(renderDetailSection(theme, 'Diagnostics'))
+        detailLines.push(...renderOutboxDiagnosticsLines(theme, data.teamDiagnostics[team.name]))
+        detailLines.push(...renderQuarantineSummaryLines(theme, data))
+      }
       detailLines.push('')
       detailLines.push(renderDetailSection(theme, 'Identity'))
       detailLines.push(renderDetailField(theme, 'Leader pane', leader?.paneId ?? 'missing', leader?.paneId ? 'text' : 'warning'))
@@ -148,16 +204,27 @@ function renderGlobalDetailLines(
         const latestType = mailboxType(latest)
         detailLines.push('')
         detailLines.push(renderDetailSection(theme, 'Latest attention'))
-        detailLines.push(...renderDetailBlock(theme, `Latest mail attention · ${latestType} · ${latest.from}`, latest.summary ?? latest.text, 44, latestType === 'blocked' ? 'error' : 'text'))
+        detailLines.push(...renderDetailBlock(theme, `Latest mail attention · ${latestType} · ${latest.from}`, latest.summary ?? latest.text, 44, latestType === 'report_blocked' ? 'error' : 'text'))
       } else {
         const latestBlocked = tasks
-          .filter(task => task.status === 'blocked' || (task.status !== 'completed' && !task.owner))
+          .filter(task => task.status === 'blocked' || (task.status !== 'done' && !task.owner))
           .sort((a, b) => b.updatedAt - a.updatedAt)[0]
         if (latestBlocked) {
           const kind = latestBlocked.status === 'blocked' ? 'blocked task' : 'unowned task'
           detailLines.push('')
           detailLines.push(renderDetailSection(theme, 'Latest attention'))
           detailLines.push(...renderDetailBlock(theme, `Latest task attention · ${kind} · ${latestBlocked.id}`, latestBlocked.title, 44, latestBlocked.status === 'blocked' ? 'error' : 'warning'))
+        }
+      }
+
+      if (state.isDetailExpanded && data.quarantinedTeams.length > 0) {
+        detailLines.push('')
+        detailLines.push(renderDetailSeparator(theme, 44))
+        detailLines.push(renderDetailSection(theme, 'Quarantined legacy teams'))
+        for (const item of data.quarantinedTeams.slice(0, 5)) {
+          const firstReason = item.reasons[0]
+          const reasonText = firstReason ? firstReason.code : 'unsupported persisted state'
+          detailLines.push(renderDetailField(theme, item.teamName, reasonText, 'warning'))
         }
       }
 
@@ -201,12 +268,13 @@ function renderDetailLines(
       return detailLines
     }
 
-    const activeTasks = data.tasks.filter(task => task.owner === selectedMember.name && task.status !== 'completed').length
+    const activeTasks = data.tasks.filter(task => task.owner === selectedMember.name && task.status !== 'done').length
     const msgCount = data.mailbox.filter(item => item.from === selectedMember.name).length
-    detailLines.push(`👤 ${theme.bold(theme.fg('text', selectedMember.name))}  ${memberStatusBadge(theme, selectedMember.status)}  ${theme.fg('dim', selectedMember.role)}`)
+    detailLines.push(`👤 ${theme.bold(theme.fg('text', selectedMember.name))}  ${memberHealthBadge(theme, selectedMember)}  ${theme.fg('dim', selectedMember.role)}`)
     detailLines.push('')
     detailLines.push(renderDetailSection(theme, 'Status'))
     detailLines.push(renderDetailField(theme, 'Health', memberHealthLabel(selectedMember), memberHealthColor(selectedMember)))
+    detailLines.push(renderDetailField(theme, 'Model', selectedMember.model || '(default)', selectedMember.model ? 'text' : 'dim'))
     detailLines.push(renderDetailField(theme, 'Pane', memberPaneLabel(selectedMember), selectedMember.paneId ? 'text' : 'warning'))
     if (selectedMember.windowTarget) detailLines.push(renderDetailField(theme, 'Window', selectedMember.windowTarget, 'text'))
     detailLines.push(renderDetailField(theme, 'Tasks', String(activeTasks), 'text'))
@@ -216,9 +284,35 @@ function renderDetailLines(
     detailLines.push(renderDetailField(theme, 'Session', basename(selectedMember.sessionFile), 'text'))
     detailLines.push(renderDetailField(theme, 'Updated', `${formatDateTime(selectedMember.updatedAt)} (${formatAge(Date.now() - selectedMember.updatedAt)} ago)`, 'text'))
     detailLines.push(renderDetailField(theme, 'Created', formatDateTime(selectedMember.createdAt), 'text'))
-    if (selectedMember.lastWakeReason) detailLines.push(renderDetailField(theme, 'Wake', selectedMember.lastWakeReason, 'text'))
-    if (selectedMember.lastError) detailLines.push(renderDetailField(theme, 'Error', selectedMember.lastError, 'error'))
-    
+    if (state.isDetailExpanded) {
+      const hasBridgeDiagnostics = selectedMember.bridgeAvailable !== undefined || selectedMember.bridgeLastSeenAt || selectedMember.bridgeLastError
+      detailLines.push('')
+      detailLines.push(renderDetailSeparator(theme, textWidth))
+      detailLines.push(renderDetailSection(theme, 'Diagnostics'))
+      if (hasBridgeDiagnostics) {
+        const bridgeAge = selectedMember.bridgeLastSeenAt ? `${formatAge(Date.now() - selectedMember.bridgeLastSeenAt)} ago` : 'never'
+        const lease = getBridgeLease(data.team.name, selectedMember.name)
+        const mismatch = bridgeLeaseMismatchReason(lease, {
+          memberName: selectedMember.name,
+          sessionFile: selectedMember.sessionFile,
+          protocolVersion: BRIDGE_PROTOCOL_VERSION,
+          packageVersion: BRIDGE_PACKAGE_VERSION,
+        })
+        const bridgeReady = Boolean(lease && !mismatch && !staleBridge(lease))
+        const bridgeState = bridgeReady
+          ? `ready · seen ${bridgeAge} · gen ${lease?.generation ?? '-'}`
+          : `${selectedMember.bridgeAvailable ? 'stale' : 'unavailable'} · ${mismatch ?? 'no active lease'} · seen ${bridgeAge}`
+        detailLines.push(renderDetailField(theme, 'Bridge', bridgeState, bridgeReady ? 'success' : selectedMember.bridgeLastError ? 'error' : 'dim'))
+        if (selectedMember.bridgeLastDeliveryAt) detailLines.push(renderDetailField(theme, 'Bridge delivery', formatDateTime(selectedMember.bridgeLastDeliveryAt), 'text'))
+        if (selectedMember.bridgeWorkRequestedAt) detailLines.push(renderDetailField(theme, 'Bridge requested', `${formatDateTime(selectedMember.bridgeWorkRequestedAt)} · count ${selectedMember.bridgeWorkRequestCount ?? 1}`, 'text'))
+        if (selectedMember.bridgeLastError) detailLines.push(renderDetailField(theme, 'Bridge error', selectedMember.bridgeLastError, 'error'))
+      }
+      detailLines.push(renderDetailField(theme, 'Runtime status', selectedMember.status, 'dim'))
+      detailLines.push(...renderOutboxDiagnosticsLines(theme, { outbox: data.outboxDiagnostics }))
+    }
+    if (state.isDetailExpanded && selectedMember.lastWakeReason) detailLines.push(renderDetailField(theme, 'Wake', selectedMember.lastWakeReason, 'text'))
+    if (state.isDetailExpanded && selectedMember.lastError) detailLines.push(renderDetailField(theme, 'Error', selectedMember.lastError, 'error'))
+
     detailLines.push('')
     detailLines.push(theme.fg('dim', '👉 ') + theme.fg('accent', 'Enter ') + theme.fg('dim', 'actions'))
     return detailLines
@@ -239,7 +333,8 @@ function renderDetailLines(
       detailLines.push(renderDetailField(theme, 'Blocked by', selectedTask.blockedBy.join(','), 'error'))
     }
     
-    const latest = selectedTask.notes[selectedTask.notes.length - 1]
+    const latest = latestVisibleTaskNote(selectedTask)
+    const refs = taskReferenceSummary(selectedTask)
     if (state.isDetailExpanded) {
       detailLines.push('')
       detailLines.push(renderDetailSeparator(theme, textWidth))
@@ -250,6 +345,9 @@ function renderDetailLines(
         detailLines.push('')
         detailLines.push(...renderDetailBlock(theme, `Latest note · ${latest.author}`, latest.text, textWidth, 'text'))
       }
+      if (refs.total > 0) {
+        detailLines.push(renderDetailField(theme, 'References', `${refs.total} folded (${refs.hidden} hidden, ${refs.folded} legacy)`, 'dim'))
+      }
     } else {
       const desc = (selectedTask.description || '(none)').replace(/\n/g, ' ')
       detailLines.push('')
@@ -258,6 +356,15 @@ function renderDetailLines(
       if (latest) {
         detailLines.push(renderDetailField(theme, 'Latest note', short(latest.text.replace(/\n/g, ' '), Math.max(12, textWidth - 16)), 'text'))
       }
+      if (refs.total > 0) {
+        detailLines.push(renderDetailField(theme, 'Refs', `${refs.total} folded`, 'dim'))
+      }
+    }
+    if (state.isDetailExpanded) {
+      detailLines.push('')
+      detailLines.push(renderDetailSeparator(theme, textWidth))
+      detailLines.push(renderDetailSection(theme, 'Diagnostics'))
+      detailLines.push(...renderOutboxDiagnosticsLines(theme, { outbox: data.outboxDiagnostics }))
     }
     
     detailLines.push('')
@@ -293,6 +400,12 @@ function renderDetailLines(
       detailLines.push(renderDetailField(theme, 'Summary', short(summary, Math.max(12, textWidth - 16)), 'text'))
       const text = (selectedMailbox.text || '(none)').replace(/\n/g, ' ')
       detailLines.push(renderDetailField(theme, 'Text', short(text, Math.max(12, textWidth - 16)), 'text'))
+    }
+    if (state.isDetailExpanded) {
+      detailLines.push('')
+      detailLines.push(renderDetailSeparator(theme, textWidth))
+      detailLines.push(renderDetailSection(theme, 'Diagnostics'))
+      detailLines.push(...renderOutboxDiagnosticsLines(theme, { outbox: data.outboxDiagnostics }))
     }
     
     detailLines.push('')

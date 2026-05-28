@@ -1,9 +1,10 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import type { MailboxMessage } from '../types.js'
+import type { MailboxMessage } from '../internalTypes.js'
 import { unreadMailboxMessages } from '../messageLifecycle.js'
 import { ensureDir, readJsonFile, withFileLock, writeJsonFile } from './fsStore.js'
 import { getMailboxPath } from './paths.js'
+import { validateOrQuarantineTeam } from './validation.js'
 
 // ---------------------------------------------------------------------------
 // File-backed mailbox primitives. Each member gets one append-only JSON array
@@ -26,6 +27,9 @@ function readMailboxFile(mailboxPath: string): MailboxMessage[] {
 }
 
 function withMailboxLock<T>(teamName: string, memberName: string, fn: (mailboxPath: string) => T): T {
+  if (validateOrQuarantineTeam(teamName)) {
+    throw new Error(`Team ${teamName} was quarantined because persisted state is unsupported by vNext`)
+  }
   const mailboxPath = getMailboxPath(teamName, memberName)
   return withFileLock(mailboxPath, () => {
     ensureMailboxFile(mailboxPath)
@@ -38,6 +42,7 @@ export function ensureMailbox(teamName: string, memberName: string): void {
 }
 
 export function readMailbox(teamName: string, memberName: string): MailboxMessage[] {
+  if (validateOrQuarantineTeam(teamName)) return []
   const mailboxPath = getMailboxPath(teamName, memberName)
   ensureMailboxFile(mailboxPath)
   return readMailboxFile(mailboxPath)
@@ -46,14 +51,17 @@ export function readMailbox(teamName: string, memberName: string): MailboxMessag
 export function pushMailboxMessage(
   teamName: string,
   memberName: string,
-  message: Omit<MailboxMessage, 'id' | 'createdAt'>,
+  message: Omit<MailboxMessage, 'id' | 'createdAt'> & Partial<Pick<MailboxMessage, 'id' | 'createdAt'>>,
 ): MailboxMessage {
   return withMailboxLock(teamName, memberName, mailboxPath => {
     const mailbox = readMailboxFile(mailboxPath)
+    const requestedId = typeof message.id === 'string' && message.id.trim() ? message.id.trim() : undefined
+    const existing = requestedId ? mailbox.find(item => item.id === requestedId) : undefined
+    if (existing) return existing
     const next: MailboxMessage = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      createdAt: Date.now(),
       ...message,
+      id: requestedId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: typeof message.createdAt === 'number' && Number.isFinite(message.createdAt) ? message.createdAt : Date.now(),
     }
     mailbox.push(next)
     writeJsonFile(mailboxPath, mailbox)
@@ -76,6 +84,7 @@ function markMailboxMessages(
   field: 'deliveredAt' | 'readAt',
 ): void {
   if (ids.length === 0) return
+  if (validateOrQuarantineTeam(teamName)) return
   withMailboxLock(teamName, memberName, mailboxPath => {
     const mailbox = readMailboxFile(mailboxPath)
     const now = Date.now()

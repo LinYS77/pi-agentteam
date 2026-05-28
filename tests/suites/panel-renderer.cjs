@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 
 module.exports = {
   name: 'panel + renderer',
@@ -6,6 +7,12 @@ module.exports = {
     const { modules, helpers, patches } = env
     patches.livePanes.add('%1')
     patches.livePanes.add('%2')
+
+    assert.ok(!Object.prototype.hasOwnProperty.call(modules.viewModel, 'loadPanelData'), 'viewModel should not expose runtime-loading side effects')
+    const pureImportSource = helpers.readSource('teamPanel/viewModel.ts')
+    assert.ok(!pureImportSource.includes('../state.js'), 'viewModel should not import removed state facade')
+    assert.ok(!pureImportSource.includes('../tmux.js'), 'viewModel should not import removed tmux facade')
+    assert.ok(!pureImportSource.includes('../runtime.js'), 'viewModel should not import removed runtime facade side effects')
 
     const team = modules.state.createInitialTeamState({
       teamName: 'render-suite',
@@ -21,7 +28,7 @@ module.exports = {
       status: 'running',
       paneId: '%1',
       windowTarget: 'test:@1',
-      lastWakeReason: 'mailbox/task update',
+      lastWakeReason: 'mailbox/task block',
     })
     modules.state.upsertMember(team, {
       name: 'planner-very-long-member-name-beta',
@@ -29,16 +36,45 @@ module.exports = {
       cwd: '/tmp',
       sessionFile: '/tmp/p1.jsonl',
       status: 'idle',
+      model: 'planner-model-render',
       paneId: '%2',
       windowTarget: 'test:@1',
+      bridgeAvailable: true,
+      bridgeVersion: 1,
+      bridgeLastSeenAt: Date.now(),
+      bridgeLastDeliveryAt: Date.now(),
+      bridgeWorkRequestedAt: Date.now(),
+      bridgeWorkRequestCount: 2,
     })
     const task = modules.state.createTask(team, {
       title: 'A very long task title that should be truncated safely in narrow layout',
       description: 'Long description for rendering',
     })
     task.owner = 'researcher-very-long-member-name-alpha'
-    task.status = 'in_progress'
+    task.status = 'open'
     task.updatedAt = Date.now()
+    modules.state.appendTaskNote(task, 'researcher-very-long-member-name-alpha', 'substantive render note')
+    const substantiveTaskUpdatedAt = task.updatedAt
+    const hiddenRenderRef = modules.state.appendCommunicationRefNote(task, {
+      author: 'team-lead',
+      linkedMessageId: 'mailbox-hidden-render-ref',
+      messageType: 'assignment',
+      threadId: `task:${task.id}`,
+      metadata: { from: 'team-lead', to: 'researcher-very-long-member-name-alpha', taskId: task.id },
+    })
+    assert.equal(task.updatedAt, substantiveTaskUpdatedAt, 'hidden communication ref should not bump task recency')
+    assert.equal(modules.state.inferTaskNoteSourceKind(hiddenRenderRef), 'communication_ref', 'hidden render ref should use formal communication_ref source kind')
+    assert.equal(modules.state.inferTaskNoteDisplayMode(hiddenRenderRef), 'hidden', 'hidden render ref should use formal hidden display mode')
+    const legacyRenderRef = modules.state.appendTaskNote(task, 'team-lead', 'Linked message: legacy render handoff should be hidden', {
+      linkedMessageId: 'mailbox-legacy-render-ref',
+      messageType: 'inform',
+      threadId: `task:${task.id}`,
+    })
+    assert.equal(task.updatedAt, substantiveTaskUpdatedAt, 'legacy linked communication ref should not bump task recency')
+    assert.equal(modules.state.inferTaskNoteSourceKind(legacyRenderRef), 'legacy_communication_ref', 'legacy linked note should infer folded legacy communication ref source kind without migration')
+    assert.equal(modules.state.inferTaskNoteDisplayMode(legacyRenderRef), 'folded', 'legacy linked note should infer folded display mode without migration')
+    assert.equal(modules.state.latestVisibleTaskNote(task)?.text, 'substantive render note', 'latest visible task note should ignore hidden and legacy communication refs')
+    assert.deepEqual(modules.viewModel.taskReferenceSummary(task), { total: 2, hidden: 1, folded: 1 }, 'panel view model should compactly summarize folded communication refs')
     const blockedTask = modules.state.createTask(team, {
       title: 'Blocked task should be visible in attention summary',
       description: 'Blocked task for attention rendering',
@@ -50,12 +86,26 @@ module.exports = {
       title: 'Unowned active task should be visible in attention summary',
       description: 'Unowned active task for attention rendering',
     })
-    unownedTask.status = 'pending'
+    unownedTask.status = 'open'
     modules.state.writeTeamState(team)
+    modules.state.upsertBridgeLease(team.name, {
+      memberName: 'planner-very-long-member-name-beta',
+      bridgeId: 'render-bridge',
+      protocolVersion: modules.runtimeBridge.BRIDGE_PROTOCOL_VERSION,
+      packageVersion: modules.runtimeBridge.BRIDGE_PACKAGE_VERSION,
+      sessionFile: '/tmp/p1.jsonl',
+      pid: 123,
+      processIdentity: 'render-process',
+      startedAt: Date.now() - 1000,
+      lastSeenAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      generation: 2,
+      capabilities: ['lease.publish'],
+    })
     const blockedMailbox = modules.state.pushMailboxMessage(team.name, 'team-lead', {
       from: 'planner-very-long-member-name-beta',
       to: 'team-lead',
-      type: 'blocked',
+      type: 'report_blocked',
       priority: 'high',
       taskId: blockedTask.id,
       summary: 'Blocked on missing decision',
@@ -64,13 +114,13 @@ module.exports = {
     modules.state.pushMailboxMessage(team.name, 'team-lead', {
       from: 'researcher-very-long-member-name-alpha',
       to: 'team-lead',
-      type: 'completion_report',
+      type: 'report_done',
       taskId: task.id,
       summary: 'Unread research result',
       text: 'Unread research result',
     })
 
-    const data = modules.viewModel.loadPanelData('render-suite')
+    const data = modules.panelDataSource.loadPanelData('render-suite')
     assert.ok(data, 'panel data should load')
     const state = modules.viewModel.createInitialPanelState()
     modules.viewModel.clampPanelStateToData(state, data)
@@ -78,6 +128,13 @@ module.exports = {
     assert.ok(selection.selectedMember, 'member details should be available when members section is focused')
     assert.ok(selection.selectedTask, 'task details should be available even when tasks section is not focused')
     assert.equal(selection.selectedMailbox?.id, blockedMailbox.id, 'mailbox defaults should show urgent blocked messages first')
+
+    const memberLabel = modules.tmuxLabels.formatMemberPaneLabel(data.team.members['researcher-very-long-member-name-alpha'])
+    assert.ok(memberLabel.includes('busy'), 'tmux worker pane label should use public worker health')
+    assert.equal(memberLabel.includes('running'), false, 'tmux worker pane label should hide internal runtime status')
+    const leaderLabel = modules.tmuxLabels.formatLeaderPaneLabel(data.team)
+    assert.ok(leaderLabel.includes('busy'), 'tmux leader pane label should summarize public worker health')
+    assert.equal(leaderLabel.includes('queued'), false, 'tmux leader pane label should hide internal queued status')
 
     const summary = modules.viewModel.buildTeamAttentionSummary(data.team, data.mailbox)
     assert.equal(summary.blockedTasks, 1, 'attention summary should count blocked tasks')
@@ -94,11 +151,15 @@ module.exports = {
     assert.ok(attachedLines.some(line => line.includes('Attention') && line.includes('blocked task')), 'overview should include blocked task attention')
     assert.ok(attachedLines.some(line => line.includes('unread')), 'overview/list should include unread attention')
     assert.ok(attachedLines.some(line => line.includes('unowned')), 'overview/list should include unowned task attention')
-    assert.ok(attachedLines.some(line => line.includes('Name') && line.includes('Status') && line.includes('Context')), 'member list should include a lightweight column header')
+    assert.ok(attachedLines.some(line => line.includes('Name') && line.includes('Health') && line.includes('Context')), 'member list should include a lightweight column header')
     assert.ok(attachedLines.some(line => line.includes('Task') && line.includes('Title') && line.includes('Owner')), 'task list should include a lightweight column header')
     assert.ok(attachedLines.some(line => line.includes('From') && line.includes('Summary') && line.includes('Time')), 'mailbox list should include a lightweight column header')
     assert.ok(attachedLines.some(line => line.includes('Status')), 'overview/detail hierarchy should show a section label')
     assert.ok(attachedLines.some(line => line.includes('Content')), 'task detail hierarchy should show a content section label')
+    assert.ok(attachedLines.some(line => line.includes('Latest note') && line.includes('substantive render note')), 'task details should show latest substantive note')
+    assert.ok(attachedLines.some(line => line.includes('Refs') && line.includes('2 folded')), 'collapsed task details should show compact folded ref count')
+    assert.equal(attachedLines.some(line => line.includes('legacy render handoff')), false, 'task details should hide legacy communication refs from latest note')
+    assert.equal(attachedLines.some(line => line.includes('mailbox-hidden-render-ref')), false, 'task details should not leak hidden communication ref ids by default')
 
     state.focus = 'tasks'
     state.selectedIndex = data.tasks.findIndex(item => item.id === blockedTask.id)
@@ -116,6 +177,23 @@ module.exports = {
     selection = modules.viewModel.buildPanelSelectionView(data, state)
     const mailboxLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data, state, selection })
     assert.ok(mailboxLines.some(line => line.includes('Blocked on missing decision') && line.includes('unread') && line.includes('blocked')), 'blocked unread mailbox row should include attention markers')
+    const readBlockedMailbox = modules.state.readMailbox('render-suite', 'team-lead')
+    const readBlockedMailboxItem = readBlockedMailbox.find(item => item.id === blockedMailbox.id)
+    readBlockedMailboxItem.readAt = Date.now()
+    fs.writeFileSync(modules.state.getMailboxPath('render-suite', 'team-lead'), `${JSON.stringify(readBlockedMailbox, null, 2)}\n`, 'utf8')
+    const readBlockedData = modules.panelDataSource.loadPanelData('render-suite')
+    const storedAfterPanelLoad = modules.state.readMailbox('render-suite', 'team-lead').find(item => item.id === blockedMailbox.id)
+    assert.equal(storedAfterPanelLoad?.readAt, readBlockedMailboxItem.readAt, 'panel data load should not mutate mailbox readAt')
+    assert.equal(storedAfterPanelLoad?.deliveredAt, undefined, 'panel data load should not mutate mailbox deliveredAt')
+    assert.equal(modules.viewModel.buildTeamAttentionSummary(readBlockedData.team, readBlockedData.mailbox).blockedMessages, 0, 'read blocked report should not remain long-lived attention')
+    assert.equal(modules.viewModel.buildTeamAttentionSummary(readBlockedData.team, readBlockedData.mailbox).blockedTasks, 1, 'factual blocked task attention should remain after report is read')
+    const readBlockedState = modules.viewModel.createInitialPanelState()
+    readBlockedState.focus = 'mailbox'
+    readBlockedState.selectedIndex = 0
+    const readBlockedSelection = modules.viewModel.buildPanelSelectionView(readBlockedData, readBlockedState)
+    const readBlockedLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: readBlockedData, state: readBlockedState, selection: readBlockedSelection })
+    assert.equal(readBlockedLines.some(line => line.includes('Blocked on missing decision') && line.includes('blocked report')), false, 'read blocked report mailbox row should not keep blocked-report attention marker')
+    assert.ok(readBlockedLines.some(line => line.includes('Attention') && line.includes('blocked task')), 'overview should keep factual blocked task attention after report is read')
 
     const plannerMemberIndex = data.members.findIndex(item => item.name === 'planner-very-long-member-name-beta')
     assert.ok(plannerMemberIndex >= 0, 'planner member should be present')
@@ -126,25 +204,66 @@ module.exports = {
     const memberLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data, state, selection })
     assert.ok(memberLines.some(line => line.includes('planner-very') && line.includes('blocked')), 'member row should show blocked-owned attention')
     assert.ok(memberLines.some(line => line.includes('pane %2') && line.includes('tasks 1') && line.includes('age')), 'member row should show stable health fields')
-    assert.ok(memberLines.some(line => line.includes('Health') && line.includes('idle')), 'member details should show health label')
+    assert.ok(memberLines.some(line => line.includes('Health') && line.includes('busy')), 'member details should show public worker health label')
+    assert.ok(memberLines.some(line => line.includes('Model') && line.includes('planner-model-render')), 'member details should show configured launch model')
     assert.ok(memberLines.some(line => line.includes('Pane') && line.includes('%2')), 'member details should show pane id')
     assert.ok(memberLines.some(line => line.includes('Session')), 'member detail hierarchy should show a session section label')
     assert.ok(memberLines.some(line => line.includes('Updated') && line.includes('ago')), 'member details should show updated age')
+    assert.equal(memberLines.some(line => line.includes('Bridge') && line.includes('ready')), false, 'collapsed member details should hide runtime bridge diagnostics')
+
+    const bridgeUnavailableTeam = modules.state.readTeamState('render-suite')
+    bridgeUnavailableTeam.members['planner-very-long-member-name-beta'].status = 'pending_delivery'
+    bridgeUnavailableTeam.members['planner-very-long-member-name-beta'].bridgeAvailable = false
+    bridgeUnavailableTeam.members['planner-very-long-member-name-beta'].bridgeLastError = 'bridge handshake timed out; delivery open'
+    bridgeUnavailableTeam.members['planner-very-long-member-name-beta'].bridgeWorkRequestedAt = Date.now()
+    modules.state.writeTeamState(bridgeUnavailableTeam)
+    modules.state.removeBridgeLease('render-suite', 'planner-very-long-member-name-beta')
+    const bridgeUnavailableData = modules.panelDataSource.loadPanelData('render-suite')
+    const bridgeUnavailableState = modules.viewModel.createInitialPanelState()
+    const bridgeUnavailableIndex = bridgeUnavailableData.members.findIndex(item => item.name === 'planner-very-long-member-name-beta')
+    bridgeUnavailableState.focus = 'members'
+    bridgeUnavailableState.selectedMemberIndex = bridgeUnavailableIndex
+    bridgeUnavailableState.selectedIndex = bridgeUnavailableIndex
+    const bridgeUnavailableSelection = modules.viewModel.buildPanelSelectionView(bridgeUnavailableData, bridgeUnavailableState)
+    const bridgeUnavailableLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: bridgeUnavailableData, state: bridgeUnavailableState, selection: bridgeUnavailableSelection })
+    assert.ok(bridgeUnavailableLines.some(line => line.includes('Health') && line.includes('error')), 'member panel should project bridge failure to public error health')
+    assert.equal(bridgeUnavailableLines.some(line => line.includes('pending_delivery')), false, 'collapsed member panel should hide internal worker status')
+    bridgeUnavailableState.isDetailExpanded = true
+    const bridgeDiagnosticsLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: bridgeUnavailableData, state: bridgeUnavailableState, selection: bridgeUnavailableSelection })
+    assert.ok(bridgeDiagnosticsLines.some(line => line.includes('Diagnostics')), 'expanded member details should expose diagnostics section')
+    assert.ok(bridgeDiagnosticsLines.some(line => line.includes('Bridge') && line.includes('unavailable')), 'expanded diagnostics should surface bridge unavailable')
+    assert.ok(bridgeDiagnosticsLines.some(line => line.includes('Runtime status') && line.includes('pending_delivery')), 'expanded diagnostics should show internal worker status')
+    assert.ok(bridgeDiagnosticsLines.some(line => line.includes('Bridge error') && line.includes('bridge handshake timed out')), 'expanded diagnostics should show bridge error')
 
     const noPaneTeam = modules.state.readTeamState('render-suite')
+    noPaneTeam.members['planner-very-long-member-name-beta'].status = 'idle'
+    noPaneTeam.members['planner-very-long-member-name-beta'].bridgeLastError = undefined
     noPaneTeam.members['planner-very-long-member-name-beta'].paneId = undefined
     modules.state.writeTeamState(noPaneTeam)
-    const noPaneData = modules.viewModel.loadPanelData('render-suite')
+    const noPaneData = modules.panelDataSource.loadPanelData('render-suite')
     const noPaneState = modules.viewModel.createInitialPanelState()
     const noPanePlannerIndex = noPaneData.members.findIndex(item => item.name === 'planner-very-long-member-name-beta')
-    assert.ok(noPanePlannerIndex >= 0, 'planner member should be present after no-pane update')
+    assert.ok(noPanePlannerIndex >= 0, 'planner member should be present after no-pane block')
     noPaneState.focus = 'members'
     noPaneState.selectedMemberIndex = noPanePlannerIndex
     noPaneState.selectedIndex = noPanePlannerIndex
     const noPaneSelection = modules.viewModel.buildPanelSelectionView(noPaneData, noPaneState)
     const noPaneLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: noPaneData, state: noPaneState, selection: noPaneSelection })
-    assert.ok(noPaneLines.some(line => line.includes('planner-very') && line.includes('no pane')), 'member row should show no pane marker')
-    assert.ok(noPaneLines.some(line => line.includes('Health') && line.includes('no pane')), 'member details should show no pane health')
+    assert.ok(noPaneLines.some(line => line.includes('planner-very') && line.includes('pane missing')), 'member row should show pane missing marker')
+    assert.ok(noPaneLines.some(line => line.includes('Health') && line.includes('offline')), 'member details should project missing pane to public offline health')
+
+    const defaultModelTeam = modules.state.readTeamState('render-suite')
+    defaultModelTeam.members['planner-very-long-member-name-beta'].model = undefined
+    modules.state.writeTeamState(defaultModelTeam)
+    const defaultModelData = modules.panelDataSource.loadPanelData('render-suite')
+    const defaultModelState = modules.viewModel.createInitialPanelState()
+    const defaultModelPlannerIndex = defaultModelData.members.findIndex(item => item.name === 'planner-very-long-member-name-beta')
+    defaultModelState.focus = 'members'
+    defaultModelState.selectedMemberIndex = defaultModelPlannerIndex
+    defaultModelState.selectedIndex = defaultModelPlannerIndex
+    const defaultModelSelection = modules.viewModel.buildPanelSelectionView(defaultModelData, defaultModelState)
+    const defaultModelLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: defaultModelData, state: defaultModelState, selection: defaultModelSelection })
+    assert.ok(defaultModelLines.some(line => line.includes('Model') && line.includes('(default)')), 'member details should show default launch model')
 
     const actions = helpers.requireDist('teamPanel/actions.js')
     const input = helpers.requireDist('teamPanel/input.js')
@@ -188,25 +307,25 @@ module.exports = {
       status: 'idle',
     })
     const cleanTask = modules.state.createTask(cleanTeam, {
-      title: 'Completed clean render task',
+      title: 'Closed clean render task',
       description: 'No attention expected',
     })
     cleanTask.owner = 'clean-implementer'
-    cleanTask.status = 'completed'
+    cleanTask.status = 'done'
     modules.state.writeTeamState(cleanTeam)
     const cleanMessage = modules.state.pushMailboxMessage(cleanTeam.name, 'team-lead', {
       from: 'clean-implementer',
       to: 'team-lead',
-      type: 'completion_report',
+      type: 'report_blocked',
       taskId: cleanTask.id,
-      summary: 'Already read clean completion',
-      text: 'Already read clean completion',
+      summary: 'Already read clean blocked report',
+      text: 'Already read clean blocked report',
       deliveredAt: Date.now(),
       readAt: Date.now(),
     })
     assert.ok(cleanMessage.readAt, 'clean team mailbox fixture should be read')
 
-    const globalData = modules.viewModel.loadPanelData(null)
+    const globalData = modules.panelDataSource.loadPanelData(null)
     const globalState = modules.viewModel.createInitialPanelState()
     modules.viewModel.clampPanelStateToData(globalState, globalData)
     assert.equal(globalData.mode, 'global', 'missing current team should open global console data')
@@ -225,23 +344,26 @@ module.exports = {
     assert.ok(globalActions.actions.some(action => action.danger && String(action.description).includes('pane is never killed')), 'global danger actions should spell out current pane safety')
     assert.ok(!globalActions.actions.some(action => action.id === 'back'), 'global action menu should not include Back')
     assert.ok(globalData.teamSummaries['render-suite'], 'global data should include per-team attention summaries')
-    assert.equal(globalData.teamMailboxes['render-suite'].unread, 2, 'global data should include unread mailbox projection')
-    assert.equal(globalData.teamMailboxes['render-suite'].blocked, 1, 'global data should include blocked mailbox projection')
+    assert.equal(globalData.teamSummaries['render-suite'].blockedMessages, 0, 'global attention summary should ignore read blocked reports')
+    assert.equal(globalData.teamSummaries['render-suite'].blockedTasks, 1, 'global attention summary should keep factual blocked task attention')
+    assert.equal(globalData.teamMailboxes['render-suite'].unread, 1, 'global data should include unread mailbox projection after read blocked report')
+    assert.equal(globalData.teamMailboxes['render-suite'].blocked, 0, 'global data should count only unread blocked mailbox attention')
+    assert.equal(globalData.teamMailboxes['render-clean-suite'].blocked, 0, 'read blocked reports should not create global mailbox attention')
     const globalLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: globalData, state: globalState, selection: globalSelection })
     assert.ok(globalLines.some(line => line.includes('Attention') && line.includes('blocked task')), 'global overview should summarize team attention')
     assert.ok(globalLines.some(line => line.includes('render-suite') && line.includes('│') && line.includes('✉')), 'global team row should visually separate name from summary')
     assert.equal(globalLines.some(line => line.includes('render-suite') && line.includes('leader missing')), false, 'global team row should keep leader pane diagnostics in details')
     assert.ok(globalLines.some(line => line.includes('render-clean-suite') && line.includes('OK')), 'clean global team row should show OK')
     assert.ok(globalLines.some(line => line.includes('Attention') && line.includes('+')), 'global overview should fold lower-priority attention categories')
-    assert.ok(globalLines.some(line => line.includes('Health') && line.includes('no pane')), 'global team details should include teammate health breakdown')
-    assert.ok(globalLines.some(line => line.includes('Tasks') && line.includes('pending') && line.includes('unowned')), 'global team details should include task breakdown')
-    assert.ok(globalLines.some(line => line.includes('Mailbox') && line.includes('unread 2') && line.includes('blocked 1')), 'global team details should include mailbox breakdown')
+    assert.ok(globalLines.some(line => line.includes('Worker health') && line.includes('offline')), 'global team details should include public worker health breakdown')
+    assert.ok(globalLines.some(line => line.includes('Tasks') && line.includes('open') && line.includes('unowned')), 'global team details should include task breakdown')
+    assert.ok(globalLines.some(line => line.includes('Mailbox') && line.includes('unread 1') && line.includes('unread blocked reports 0')), 'global team details should include unread-only mailbox attention breakdown')
     assert.ok(globalLines.some(line => line.includes('Latest mail attention')), 'global team details should show latest mail attention source')
     assert.ok(globalLines.some(line => line.includes('Roster')), 'global team details should include roster preview')
-    assert.ok(globalLines.some(line => line.includes('planner-very') && line.includes('planner') && line.includes('no pane')), 'global roster preview should align health/name/role/pane fields')
+    assert.ok(globalLines.some(line => line.includes('planner-very') && line.includes('planner') && line.includes('pane missing')), 'global roster preview should align health/name/role/pane fields')
 
     modules.tmux.listAgentTeamPanes = () => [{ paneId: '%orphan', target: 'test:@1', label: 'agentteam orphan label', currentCommand: 'pi' }]
-    const stalePaneData = modules.viewModel.loadPanelData(null)
+    const stalePaneData = modules.panelDataSource.loadPanelData(null)
     const stalePaneState = modules.viewModel.createInitialPanelState()
     stalePaneState.focus = 'panes'
     stalePaneState.selectedPaneIndex = 0
@@ -260,17 +382,17 @@ module.exports = {
       lastError: 'tmux pane disappeared',
     })
     modules.state.writeTeamState(paneLostTeam)
-    const paneLostData = modules.viewModel.loadPanelData('render-suite')
+    const paneLostData = modules.panelDataSource.loadPanelData('render-suite')
     const paneLostState = modules.viewModel.createInitialPanelState()
     const paneLostMemberIndex = paneLostData.members.findIndex(item => item.name === 'researcher-very-long-member-name-alpha')
-    assert.ok(paneLostMemberIndex >= 0, 'researcher member should be present after pane-lost update')
+    assert.ok(paneLostMemberIndex >= 0, 'researcher member should be present after pane-lost block')
     paneLostState.selectedMemberIndex = paneLostMemberIndex
     modules.viewModel.clampPanelStateToData(paneLostState, paneLostData)
     const paneLostSelection = modules.viewModel.buildPanelSelectionView(paneLostData, paneLostState)
     assert.equal(modules.viewModel.buildTeamAttentionSummary(paneLostData.team, paneLostData.mailbox).paneLostMembers, 1, 'attention summary should count pane-lost members')
     const paneLostLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: paneLostData, state: paneLostState, selection: paneLostSelection })
-    assert.ok(paneLostLines.some(line => line.includes('Attention') && line.includes('pane lost')), 'overview should include pane lost attention')
-    assert.ok(paneLostLines.some(line => line.includes('researcher') && line.includes('pane lost')), 'member row should include pane lost marker')
+    assert.ok(paneLostLines.some(line => line.includes('Attention') && line.includes('worker error')), 'overview should project pane-lost attention as public worker error')
+    assert.ok(paneLostLines.some(line => line.includes('researcher') && line.includes('error')), 'member row should include public error health')
 
     const theme = helpers.createFakeTheme()
     const expandedState = modules.viewModel.createInitialPanelState()
@@ -280,6 +402,8 @@ module.exports = {
     const expandedSelection = modules.viewModel.buildPanelSelectionView(data, expandedState)
     const expandedLines = modules.layout.renderTeamPanelLines(theme, { width: 96, data, state: expandedState, selection: expandedSelection })
     assert.ok(expandedLines.some(line => line.includes('Long description for rendering')), 'expanded details should show full task description')
+    assert.ok(expandedLines.some(line => line.includes('References') && line.includes('2 folded')), 'expanded task details should show compact folded reference diagnostics')
+    assert.equal(expandedLines.some(line => line.includes('legacy render handoff')), false, 'expanded task details should hide folded legacy ref body')
     assert.ok(expandedLines.some(line => line.includes('Esc') && line.includes('collapse details')), 'expanded details should hint Esc collapse')
 
     const longTask = modules.state.createTask(team, {
@@ -292,7 +416,7 @@ module.exports = {
       Array.from({ length: 40 }, (_, i) => `note line ${i + 1} with long-token-${'x'.repeat(80)}`).join('\n'),
     )
     modules.state.writeTeamState(team)
-    const longData = modules.viewModel.loadPanelData('render-suite')
+    const longData = modules.panelDataSource.loadPanelData('render-suite')
     const longState = modules.viewModel.createInitialPanelState()
     longState.focus = 'tasks'
     longState.selectedIndex = longData.tasks.findIndex(item => item.id === longTask.id)

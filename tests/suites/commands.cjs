@@ -1,4 +1,7 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 function oneShotPanel(ctx, result) {
   let used = false
@@ -21,6 +24,66 @@ module.exports = {
     assert.ok(!pi.__commands.has('team-cleanup'), 'team-cleanup command should be removed')
     assert.ok(!pi.__commands.has('team-remove-member'), 'team-remove-member command should be removed')
 
+    const originalHome = process.env.PI_AGENTTEAM_HOME
+    const configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-command-config-'))
+    try {
+      process.env.PI_AGENTTEAM_HOME = configHome
+      const configPath = modules.state.getConfigPath()
+      env.notifications.length = 0
+
+      await command('team').handler('config init', leaderCtx)
+      assert.equal(configPath, path.join(configHome, 'config.json'))
+      assert.equal(fs.existsSync(configPath), true, 'config init should create runtime config at PI_AGENTTEAM_HOME')
+      const initialized = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+      assert.deepEqual(initialized, { agentModels: { planner: null, researcher: null, implementer: null } })
+      assert.ok(env.notifications.at(-1).message.includes(`Created ${configPath}`))
+
+      fs.writeFileSync(configPath, JSON.stringify({ agentModels: { planner: 'custom-existing' } }), 'utf8')
+      await command('team').handler('config init', leaderCtx)
+      assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).agentModels.planner, 'custom-existing', 'config init should not overwrite existing file')
+      assert.ok(env.notifications.at(-1).message.includes('Refusing to overwrite'))
+
+      fs.writeFileSync(configPath, JSON.stringify({
+        agentModels: {
+          planner: 'planner-model',
+          researcher: '',
+          implementer: null,
+        },
+      }), 'utf8')
+      await command('team').handler('config show', leaderCtx)
+      const showMessage = env.notifications.at(-1).message
+      assert.ok(showMessage.includes(`Path: ${configPath}`), 'config show should display runtime config path')
+      assert.ok(showMessage.includes('Exists: yes'), 'config show should display existence')
+      assert.ok(showMessage.includes('- planner: planner-model'), 'config show should display effective configured model')
+      assert.ok(showMessage.includes('- researcher: (default)'), 'config show should display empty string as default')
+      assert.ok(showMessage.includes('- implementer: (default)'), 'config show should display null as default')
+
+      fs.writeFileSync(configPath, JSON.stringify({ agentModels: { ghost: 'x', planner: 123 } }), 'utf8')
+      await command('team').handler('config validate', leaderCtx)
+      let validateMessage = env.notifications.at(-1).message
+      assert.ok(validateMessage.includes('agentModels_unknown_role'), 'config validate should report unknown role warnings')
+      assert.ok(validateMessage.includes('agentModels_invalid_value'), 'config validate should report invalid value warnings')
+      assert.ok(validateMessage.includes('future spawns/respawns'), 'config validate should remind spawn-time-only behavior')
+
+      fs.writeFileSync(configPath, '{ invalid json', 'utf8')
+      await command('team').handler('config validate', leaderCtx)
+      validateMessage = env.notifications.at(-1).message
+      assert.ok(validateMessage.includes('config_invalid_json'), 'config validate should report invalid JSON')
+    } finally {
+      process.env.PI_AGENTTEAM_HOME = originalHome
+      fs.rmSync(configHome, { recursive: true, force: true })
+    }
+
+    const originalConfigPath = modules.state.getConfigPath()
+    modules.state.ensureDir(path.dirname(originalConfigPath))
+    fs.writeFileSync(originalConfigPath, JSON.stringify({
+      agentModels: {
+        planner: '077-gpt-5.4',
+        researcher: '077-glm-5.1',
+        implementer: '077-gpt-5.3-codex',
+      },
+    }), 'utf8')
+
     const team = modules.state.readTeamState('full-suite-team')
     modules.state.pushMailboxMessage(team.name, 'team-lead', {
       from: 'research-one',
@@ -34,13 +97,33 @@ module.exports = {
       wakeHint: 'soft',
     })
 
+    const syncOutboxEffect = modules.state.enqueueOutboxEffect({
+      teamName: team.name,
+      kind: 'inbox_item_append_requested',
+      idempotencyKey: 'team-command-sync-outbox',
+      payload: {
+        teamName: team.name,
+        recipient: 'research-one',
+        message: {
+          from: 'team-lead',
+          to: 'research-one',
+          text: 'team sync should run outbox maintenance',
+          type: 'inform',
+          wakeHint: 'none',
+        },
+      },
+    })
+
     const originalCustom = leaderCtx.ui.custom
     oneShotPanel(leaderCtx, { type: 'sync' })
     await command('team').handler('', leaderCtx)
+    await new Promise(resolve => setTimeout(resolve, 25))
     leaderCtx.ui.custom = originalCustom
 
     let teamAfterSync = modules.state.readTeamState('full-suite-team')
     assert.ok(teamAfterSync, 'team should still exist after sync action')
+    assert.equal(modules.state.getOutboxEffect(team.name, syncOutboxEffect.effectId).status, 'done', '/team sync should run outbox maintenance')
+    assert.equal(modules.state.readMailbox(team.name, 'research-one').filter(message => message.text === 'team sync should run outbox maintenance').length, 1, '/team sync outbox maintenance should not duplicate mailbox side effects')
 
     oneShotPanel(leaderCtx, {
       type: 'remove-member',

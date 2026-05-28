@@ -1,4 +1,4 @@
-import type { MailboxMessage } from './types.js'
+import type { MailboxMessage } from './internalTypes.js'
 
 export function isMailboxMessageRead(message: MailboxMessage): boolean {
   return Boolean(message.readAt)

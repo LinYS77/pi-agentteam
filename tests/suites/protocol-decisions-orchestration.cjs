@@ -5,10 +5,23 @@ module.exports = {
   async run(env) {
     const { modules } = env
 
-    assert.equal(modules.protocol.normalizeWakeHint('completion_report', undefined, 'team-lead'), 'hard')
-    assert.equal(modules.protocol.normalizeWakeHint('completion_report', undefined, 'researcher'), 'soft')
-    assert.equal(modules.protocol.normalizeWakeHint('question', undefined, 'planner'), 'soft')
-    assert.equal(modules.protocol.normalizeWakeHint('question', undefined, 'team-lead'), 'soft')
+    const coreMessagePolicy = env.helpers.requireDist('core/messagePolicy.js')
+    assert.equal(
+      modules.protocol.normalizeWakeHint('report_done', undefined, 'team-lead'),
+      coreMessagePolicy.decideMessagePolicy({ kind: 'task_report', reportType: 'report_done' }).wakeHint,
+    )
+    assert.equal(
+      modules.protocol.normalizeWakeHint('report_done', undefined, 'researcher'),
+      coreMessagePolicy.decideMessagePolicy({ kind: 'task_report', reportType: 'report_done' }).wakeHint,
+    )
+    assert.equal(
+      modules.protocol.normalizeWakeHint('question', undefined, 'planner'),
+      coreMessagePolicy.decideMessagePolicy({ kind: 'message', messageType: 'question', recipientKind: 'worker' }).wakeHint,
+    )
+    assert.equal(
+      modules.protocol.normalizeWakeHint('question', undefined, 'team-lead'),
+      coreMessagePolicy.decideMessagePolicy({ kind: 'message', messageType: 'question', recipientKind: 'leader' }).wakeHint,
+    )
 
     const team = modules.state.createInitialTeamState({
       teamName: 'decision-suite',
@@ -37,7 +50,7 @@ module.exports = {
       to: 'team-lead',
       text: `${task.id} blocked due to missing dataset`,
       summary: `${task.id} blocked`,
-      type: 'blocked',
+      type: 'report_blocked',
       taskId: task.id,
       threadId: `task:${task.id}`,
       requestId: 'blocked-1',
@@ -129,7 +142,7 @@ module.exports = {
       description: 'let teammate run without leader polling',
     })
     quietTask.owner = 'researcher'
-    quietTask.status = 'in_progress'
+    quietTask.status = 'open'
     quietTask.updatedAt = Date.now()
     modules.state.writeTeamState(quietTeam)
 
@@ -208,8 +221,8 @@ module.exports = {
     modules.state.pushMailboxMessage('unread-scope-suite', 'team-lead', {
       from: 'planner',
       to: 'team-lead',
-      text: 'completed and acknowledged',
-      type: 'completion_report',
+      text: 'done and acknowledged',
+      type: 'report_done',
       taskId: 'T001',
       threadId: 'task:T001',
       priority: 'normal',
@@ -242,11 +255,21 @@ module.exports = {
     assert.ok(leaderPolicy.includes('delegate at least one meaningful task'), 'leader policy should prevent solo-worker fallback when user asks for team help')
     assert.ok(leaderPolicy.includes('spawn only the minimum necessary teammate'), 'leader policy should discourage over-spawning')
     assert.ok(leaderPolicy.includes('Planner is advisory'), 'leader policy should keep planner from becoming a second leader')
+    assert.ok(leaderPolicy.includes('Sequential research→planning chains'), 'leader policy should require sequential research-to-planning attention')
+    assert.ok(leaderPolicy.includes('first create/assign the research task'), 'leader policy should start chains with a research task')
+    assert.ok(leaderPolicy.includes('then create/assign a separate planner planning task'), 'leader policy should require leader-created planner task after review')
+    assert.ok(leaderPolicy.includes('Do not let researcher inform messages or task reports drive planner work directly'), 'leader policy should prevent peer-driven planner work')
     assert.ok(leaderPolicy.includes('task-first flow'), 'leader policy should keep task-first workflow')
     assert.ok(leaderPolicy.includes('create a task with owner'), 'leader policy should prefer owner-at-create when clear')
     assert.ok(leaderPolicy.includes('omit agentteam_send.to'), 'leader policy should use task-based routing when safe')
     assert.ok(leaderPolicy.includes('do not ask the user to name a teammate'), 'leader policy should keep user-facing routing friction low')
     assert.ok(leaderPolicy.includes('never fall back to broadcast'), 'leader policy should avoid noisy implicit broadcast')
+    assert.ok(leaderPolicy.includes('Bounded leader attention'), 'leader policy should describe bounded attention wake behavior')
+    assert.ok(leaderPolicy.includes('compact metadata only'), 'leader policy should describe compact attention wake metadata')
+    assert.ok(leaderPolicy.includes('agentteam_task note as task-local memory only'), 'leader policy should describe notes as task-local memory')
+    assert.ok(leaderPolicy.includes('then stop'), 'leader attention policy should prevent autopilot loops')
+    assert.ok(leaderPolicy.includes('Public vocabulary: tasks are open/blocked/done; worker health is offline/idle/busy/error'), 'leader policy should expose public vocabulary')
     assert.ok(leaderPolicy.includes('Current teammate roster:'), 'leader policy should include current roster when attached')
+    assert.ok(leaderPolicy.includes('researcher(researcher, offline)'), 'leader policy roster should project runtime member state to public worker health')
   },
 }

@@ -10,7 +10,7 @@ module.exports = {
 
     let res = await tool('agentteam_create').execute('guard-create', {
       team_name: 'guard-suite-team',
-      description: 'Guard and wake regression suite',
+      description: 'Guard and delivery regression suite',
     }, null, () => {}, leaderCtx)
     helpers.assertContains(res.content[0].text, 'Created team guard-suite-team')
 
@@ -39,28 +39,100 @@ module.exports = {
     const researcherCtx = helpers.createCtx('/tmp/guard-suite-project', team.members['researcher-guard'].sessionFile, notifications)
     const implementerCtx = helpers.createCtx('/tmp/guard-suite-project', team.members['implementer-guard'].sessionFile, notifications)
 
+    pi.__messages.length = 0
+    sentPrompts.length = 0
+    res = await tool('agentteam_send').execute('guard-bridge-request-single-path', {
+      to: 'planner-guard',
+      message: 'single bridge delivery smoke',
+      type: 'question',
+    }, null, () => {}, leaderCtx)
+    assert.deepEqual(res.details.recipients, ['planner-guard'])
+    assert.equal(res.details.wakeByRecipient[0].method, 'bridge_requested')
+    assert.equal(res.details.wakeByRecipient[0].attempted, false)
+    assert.equal(res.details.wakeByRecipient[0].ok, true)
+    assert.ok(res.details.wakeByRecipient[0].requestId, 'bridge delivery should expose a durable request id')
+    assert.equal(sentPrompts.length, 0, 'delivery should not inject text into visible panes')
+    assert.equal(pi.__messages.filter(message => message.customType === 'user-message').length, 0, 'send side effect should not native-submit from leader process')
+    let plannerMailbox = modules.state.readMailbox('guard-suite-team', 'planner-guard')
+    let bridgeMessage = plannerMailbox.find(item => item.text.includes('single bridge delivery smoke'))
+    assert.equal(bridgeMessage?.deliveredAt, undefined, 'bridge request should not mark mailbox delivered')
+    assert.equal(bridgeMessage?.readAt, undefined, 'bridge request should not mark mailbox read')
+    const bridgeRequests = Object.values(modules.state.readDeliveryRequestStore('guard-suite-team').requests)
+      .filter(request => request.memberName === 'planner-guard' && request.messageIds.includes(bridgeMessage.id))
+    assert.equal(bridgeRequests.length, 1, 'bridge delivery should persist one request')
+
+    modules.runtimeBridge.markBridgeStopped('guard-suite-team', 'planner-guard', Date.now(), 'test unavailable')
+    sentPrompts.length = 0
+    res = await tool('agentteam_send').execute('guard-bridge-unavailable-pending', {
+      to: 'planner-guard',
+      message: 'bridge unavailable smoke',
+      type: 'question',
+    }, null, () => {}, leaderCtx)
+    assert.equal(res.details.wakeByRecipient[0].method, 'bridge_requested')
+    assert.equal(res.details.wakeByRecipient[0].ok, false)
+    assert.equal(res.details.wakeByRecipient[0].attempted, false)
+    assert.equal(res.details.wakeByRecipient[0].reason, 'bridge unavailable in bridge-only delivery mode')
+    assert.ok(res.details.wakeByRecipient[0].requestId, 'unavailable bridge should still create durable request')
+    assert.equal(sentPrompts.length, 0, 'unavailable bridge should remain pending without pane injection')
+    plannerMailbox = modules.state.readMailbox('guard-suite-team', 'planner-guard')
+    const unavailableMessage = plannerMailbox.find(item => item.text.includes('bridge unavailable smoke'))
+    assert.equal(unavailableMessage?.deliveredAt, undefined, 'unavailable bridge should leave mailbox undelivered')
+    assert.equal(unavailableMessage?.readAt, undefined, 'unavailable bridge should leave mailbox unread')
+    const plannerAfterUnavailable = modules.state.readTeamState('guard-suite-team').members['planner-guard']
+    assert.equal(plannerAfterUnavailable.bridgeLastError, 'bridge unavailable in bridge-only delivery mode')
+    assert.equal(plannerAfterUnavailable.lastWakeReason, 'bridge unavailable in bridge-only delivery mode')
+    assert.ok(plannerAfterUnavailable.bridgeWorkRequestedAt, 'unavailable bridge should keep pending request visible')
+    assert.ok(plannerAfterUnavailable.bridgeWorkRequestMessageIds.includes(unavailableMessage.id))
+
+    modules.runtimeBridge.publishBridgeLease({
+      teamName: 'guard-suite-team',
+      memberName: 'planner-guard',
+      sessionFile: team.members['planner-guard'].sessionFile,
+    })
+
     res = await tool('agentteam_task').execute('guard-task-create', {
       action: 'create',
       title: 'Guard smoke task',
-      description: 'Used to validate leader wake and permissions',
+      description: 'Used to validate leader delivery and permissions',
     }, null, () => {}, leaderCtx)
     helpers.assertContains(res.content[0].text, 'Created T001')
 
-    res = await tool('agentteam_task').execute('guard-claim-leader', {
-      action: 'claim',
+    res = await tool('agentteam_task').execute('guard-assign-leader', {
+      action: 'assign',
       taskId: 'T001',
       owner: 'researcher-guard',
     }, null, () => {}, leaderCtx)
-    helpers.assertContains(res.content[0].text, 'Claimed T001')
+    helpers.assertContains(res.content[0].text, 'Assigned T001')
+
+    const messageService = helpers.requireDist('tools/messageService.js')
+    res = await messageService.executeSendMessage({
+      to: 'researcher-guard',
+      message: 'You were assigned shared task T001: Guard smoke task\n\nUsed to validate leader delivery and permissions',
+      summary: 'Assigned T001',
+      type: 'assignment',
+      taskId: 'T001',
+    }, leaderCtx, {
+      ...env.patches.deps,
+      requestWorkerDelivery: async () => {
+        throw new Error('simulated worker delivery failure')
+      },
+    })
+    assert.deepEqual(res.details.recipients, ['researcher-guard'])
+    helpers.assertContains(res.content[0].text, 'warning side effects failed')
+    assert.equal(res.details.warning, 'side_effect_failed')
+    assert.ok(res.details.sideEffectWarnings.some(item => item.kind === 'requestWorkerDelivery' && item.error.includes('simulated worker delivery failure')))
+    assert.equal(res.details.wakeByRecipient[0].ok, false)
 
     res = await tool('agentteam_send').execute('guard-assign-leader', {
       to: 'researcher-guard',
-      message: 'You were assigned shared task T001: Guard smoke task\n\nUsed to validate leader wake and permissions',
+      message: 'You were assigned shared task T001: Guard smoke task\n\nUsed to validate leader delivery and permissions',
       summary: 'Assigned T001',
       type: 'assignment',
       taskId: 'T001',
     }, null, () => {}, leaderCtx)
     assert.deepEqual(res.details.recipients, ['researcher-guard'])
+    assert.equal(res.details.wakeByRecipient[0].method, 'bridge_requested')
+    assert.ok(res.details.wakeByRecipient[0].requestId)
 
     res = await tool('agentteam_spawn').execute('guard-spawn-denied', {
       name: 'illegal-worker',
@@ -68,160 +140,155 @@ module.exports = {
     }, null, () => {}, plannerCtx)
     helpers.assertContains(res.content[0].text, 'Only team-lead can perform this operation')
 
-    res = await tool('agentteam_task').execute('guard-task-create-planner', {
+    res = await tool('agentteam_task').execute('guard-task-create-planner-denied', {
       action: 'create',
       title: 'planner-created-task',
-      description: 'planner should be able to maintain task decomposition',
+      description: 'planner should be advisory by default',
     }, null, () => {}, plannerCtx)
-    helpers.assertContains(res.content[0].text, 'Created T002')
+    assert.equal(res.details.denied, true)
+    helpers.assertContains(res.content[0].text, "Task action 'create' is leader-only")
 
     res = await tool('agentteam_task').execute('guard-task-create-implementer-denied', {
       action: 'create',
       title: 'illegal',
       description: 'illegal',
     }, null, () => {}, implementerCtx)
-    helpers.assertContains(res.content[0].text, "Task action 'create' is not allowed")
+    helpers.assertContains(res.content[0].text, "Task action 'create' is leader-only")
 
-    res = await tool('agentteam_task').execute('guard-task-claim-planner-owned', {
-      action: 'claim',
+    res = await tool('agentteam_task').execute('guard-task-create-leader-for-planner-report', {
+      action: 'create',
+      title: 'planner-report-task',
+      description: 'leader-created task used to validate planner report-only done report',
+      owner: 'planner-guard',
+    }, null, () => {}, leaderCtx)
+    helpers.assertContains(res.content[0].text, 'Created T002')
+
+    res = await tool('agentteam_task').execute('guard-task-assign-planner-denied', {
+      action: 'assign',
       taskId: 'T002',
       owner: 'planner-guard',
     }, null, () => {}, plannerCtx)
-    helpers.assertContains(res.content[0].text, 'Claimed T002')
+    assert.equal(res.details.denied, true)
+    helpers.assertContains(res.content[0].text, "Task action 'assign' is leader-only")
 
-    res = await tool('agentteam_task').execute('guard-task-complete-planner-allowed', {
-      action: 'complete',
+    res = await tool('agentteam_task').execute('guard-task-close-planner-report-only', {
+      action: 'report_done',
       taskId: 'T002',
-      note: 'planner completed planning breakdown',
+      note: 'planner done planning breakdown',
     }, null, () => {}, plannerCtx)
-    helpers.assertContains(res.content[0].text, 'Completed T002')
+    helpers.assertContains(res.content[0].text, 'Reported done for T002 to team-lead')
+    assert.equal(res.details.reportOnly, true)
 
     const plannerCompleteTask = modules.state.readTeamState('guard-suite-team').tasks['T002']
+    assert.equal(plannerCompleteTask.status, 'open', 'planner close should not mutate task status')
     const plannerCompletionNote = plannerCompleteTask.notes.find(note =>
       note.author === 'planner-guard' &&
-      note.text.includes('planner completed planning breakdown'),
+      note.text.includes('planner done planning breakdown') &&
+      note.metadata?.reportOnly === true,
     )
-    assert.ok(plannerCompletionNote, 'planner completion should preserve planner note content without forced template inflation')
+    assert.ok(plannerCompletionNote, 'planner done report should preserve planner note content as report-only')
+    assert.equal(plannerCompleteTask.notes.filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by planner-guard')).length, 0, 'planner done report should not append linked mailbox task note')
 
     res = await tool('agentteam_send').execute('guard-planner-long-send-allowed', {
       to: 'team-lead',
-      type: 'fyi',
+      type: 'inform',
       message: `LONG-${'x'.repeat(700)}`,
     }, null, () => {}, plannerCtx)
     assert.deepEqual(res.details.recipients, ['team-lead'])
     assert.equal(Boolean(res.details.denied), false)
 
-    res = await tool('agentteam_send').execute('guard-planner-completion-to-peer-allowed', {
-      to: 'researcher-guard',
-      type: 'completion_report',
-      message: 'planning done',
-      summary: 'done',
-      taskId: 'T002',
-    }, null, () => {}, plannerCtx)
-    assert.deepEqual(res.details.recipients, ['researcher-guard'])
-    assert.deepEqual(res.details.mirroredToLeader, ['researcher-guard'])
-    assert.ok(
-      modules.state.readMailbox('guard-suite-team', 'team-lead').some(m =>
-        m.type === 'completion_report' &&
-        m.metadata?.mirrorOf === 'researcher-guard' &&
-        m.text.includes('planning done'),
-      ),
-      'peer completion_report should be mirrored to leader mailbox',
-    )
-    let guardTeamState = modules.state.readTeamState('guard-suite-team')
-    const peerLogEntry = [...(guardTeamState.events ?? [])].reverse().find(event =>
-      event.type === 'peer_message' &&
-      event.by === 'planner-guard' &&
-      String(event.text).includes('completion_report -> researcher-guard'),
-    )
-    assert.ok(peerLogEntry, 'peer message should be tracked in team event log for observability')
-
-    res = await tool('agentteam_send').execute('guard-planner-completion-missing-taskid-denied', {
-      to: 'team-lead',
-      type: 'completion_report',
-      message: 'planning done',
-      summary: 'done',
-    }, null, () => {}, plannerCtx)
-    assert.equal(res.details.denied, true)
-    assert.equal(res.details.reason, 'planner_send_policy')
-
-    res = await tool('agentteam_send').execute('guard-planner-completion-missing-summary-allowed', {
-      to: 'team-lead',
-      type: 'completion_report',
-      message: 'planning done',
-      taskId: 'T002',
-    }, null, () => {}, plannerCtx)
-    assert.deepEqual(res.details.recipients, ['team-lead'])
-
-    res = await tool('agentteam_send').execute('guard-planner-completion-valid', {
-      type: 'completion_report',
-      summary: 'Planning package ready',
-      message: 'T002 planning handoff finalized. See task notes for structured plan decomposition.',
-      taskId: 'T002',
-    }, null, () => {}, plannerCtx)
-    assert.deepEqual(res.details.recipients, ['team-lead'])
-    assert.equal(res.details.routing.mode, 'owner_to_leader')
-
-    res = await tool('agentteam_send').execute('guard-planner-completion-non-owner-denied', {
-      type: 'completion_report',
-      summary: 'Planning package ready',
-      message: 'Planner cannot implicitly route for a researcher-owned task.',
-      taskId: 'T001',
-    }, null, () => {}, plannerCtx)
-    assert.equal(res.details.denied, true)
-    assert.equal(res.details.reason, 'task_sender_not_owner')
+    const unsupportedSendLeaderMailboxBefore = modules.state.readMailbox('guard-suite-team', 'team-lead').length
+    const unsupportedSendResearcherMailboxBefore = modules.state.readMailbox('guard-suite-team', 'researcher-guard').length
+    const unsupportedSendEventsBefore = modules.state.readTeamState('guard-suite-team').events?.length ?? 0
+    const unsupportedSendRequestsBefore = Object.keys(modules.state.readDeliveryRequestStore('guard-suite-team').requests).length
+    for (const unsupportedType of ['fyi', 'blocked', 'report_done']) {
+      res = await tool('agentteam_send').execute(`guard-${unsupportedType}-unsupported`, {
+        to: 'team-lead',
+        type: unsupportedType,
+        message: `${unsupportedType} no longer belongs to agentteam_send`,
+        taskId: 'T002',
+      }, null, () => {}, plannerCtx)
+      assert.equal(res.details.denied, true)
+      assert.equal(res.details.reason, 'unsupported_message_type')
+      assert.equal(res.details.type, unsupportedType)
+      helpers.assertContains(res.content[0].text, 'Allowed types: assignment, question, inform')
+    }
+    assert.equal(modules.state.readMailbox('guard-suite-team', 'team-lead').length, unsupportedSendLeaderMailboxBefore, 'unsupported send types should not write leader mailbox')
+    assert.equal(modules.state.readMailbox('guard-suite-team', 'researcher-guard').length, unsupportedSendResearcherMailboxBefore, 'unsupported send types should not write peer mailbox')
+    assert.equal(modules.state.readTeamState('guard-suite-team').events?.length ?? 0, unsupportedSendEventsBefore, 'unsupported send types should not append event')
+    assert.equal(Object.keys(modules.state.readDeliveryRequestStore('guard-suite-team').requests).length, unsupportedSendRequestsBefore, 'unsupported send types should not request delivery')
 
     res = await tool('agentteam_task').execute('guard-task-create-impl-owned', {
       action: 'create',
-      title: 'implementer-completion-template-task',
-      description: 'validate completion template for implementer',
+      title: 'implementer-done report-template-task',
+      description: 'validate done report template for implementer',
     }, null, () => {}, leaderCtx)
     helpers.assertContains(res.content[0].text, 'Created T003')
 
-    res = await tool('agentteam_task').execute('guard-claim-impl-owned', {
-      action: 'claim',
+    res = await tool('agentteam_task').execute('guard-assign-impl-owned', {
+      action: 'assign',
       taskId: 'T003',
       owner: 'implementer-guard',
     }, null, () => {}, leaderCtx)
-    helpers.assertContains(res.content[0].text, 'Claimed T003')
+    helpers.assertContains(res.content[0].text, 'Assigned T003')
 
     res = await tool('agentteam_send').execute('guard-assign-impl-owned', {
       to: 'implementer-guard',
-      message: 'You were assigned shared task T003: implementer-completion-template-task\n\nvalidate completion template for implementer',
+      message: 'You were assigned shared task T003: implementer-done report-template-task\n\nvalidate done report template for implementer',
       summary: 'Assigned T003',
       type: 'assignment',
       taskId: 'T003',
     }, null, () => {}, leaderCtx)
     assert.deepEqual(res.details.recipients, ['implementer-guard'])
 
-    res = await tool('agentteam_task').execute('guard-task-complete-impl-template', {
-      action: 'complete',
+    res = await tool('agentteam_task').execute('guard-task-close-impl-template', {
+      action: 'report_done',
       taskId: 'T003',
       note: 'Implemented targeted patch',
     }, null, () => {}, implementerCtx)
-    helpers.assertContains(res.content[0].text, 'Completed T003')
+    helpers.assertContains(res.content[0].text, 'Reported done for T003 to team-lead')
+    assert.equal(res.details.reportOnly, true)
 
-    res = await tool('agentteam_task').execute('guard-task-complete-impl-idempotent', {
-      action: 'complete',
+    res = await tool('agentteam_task').execute('guard-task-close-impl-second-report', {
+      action: 'report_done',
       taskId: 'T003',
-      note: 'Duplicate completion should not add another completion note',
+      note: 'Second done report report should not mutate task',
     }, null, () => {}, implementerCtx)
-    helpers.assertContains(res.content[0].text, 'Already completed T003')
-    assert.equal(res.details.alreadyCompleted, true)
+    helpers.assertContains(res.content[0].text, 'Reported done for T003 to team-lead')
+    assert.equal(res.details.reportOnly, true)
 
     const guardTeamAfterComplete = modules.state.readTeamState('guard-suite-team')
     const t003 = guardTeamAfterComplete.tasks['T003']
-    const completionTemplateNotes = t003.notes.filter(note =>
+    assert.equal(t003.status, 'open', 'implementer done report reports should not mutate task status')
+    const doneReportTemplateNotes = t003.notes.filter(note =>
       note.author === 'implementer-guard' &&
       note.text.includes('Files changed:') &&
-      note.text.includes('Checks run:'),
+      note.text.includes('Checks run:') &&
+      note.metadata?.reportOnly === true,
     )
-    assert.equal(completionTemplateNotes.length, 1, 'duplicate complete should not add another implementation completion note')
+    assert.equal(doneReportTemplateNotes.length, 2, 'each implementer report-only done report should append a done report report note')
+    assert.equal(t003.notes.filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by implementer-guard')).length, 0, 'implementer done reports should not append linked mailbox task notes')
 
-    res = await tool('agentteam_send').execute('guard-peer-fyi-allowed', {
+    res = await tool('agentteam_task').execute('guard-task-close-impl-leader-accept', {
+      action: 'close',
+      taskId: 'T003',
+      note: 'Leader accepted implementer done report',
+    }, null, () => {}, leaderCtx)
+    helpers.assertContains(res.content[0].text, 'Closed T003')
+
+    res = await tool('agentteam_task').execute('guard-task-close-impl-idempotent', {
+      action: 'close',
+      taskId: 'T003',
+      note: 'Duplicate close should not add another done report note',
+    }, null, () => {}, leaderCtx)
+    helpers.assertContains(res.content[0].text, 'Cannot close T003: expected open or blocked, got done')
+    assert.equal(res.details.denied, true)
+    assert.equal(res.details.reason, 'invalid_task_status')
+
+    res = await tool('agentteam_send').execute('guard-peer-inform-allowed', {
       to: 'researcher-guard',
-      message: 'peer informational update',
-      type: 'fyi',
+      message: 'peer informational block',
+      type: 'inform',
     }, null, () => {}, plannerCtx)
     assert.deepEqual(res.details.recipients, ['researcher-guard'])
 
@@ -232,16 +299,41 @@ module.exports = {
       taskId: 'T001',
     }, null, () => {}, plannerCtx)
     assert.deepEqual(res.details.recipients, ['researcher-guard'])
+    assert.equal(res.details.wakeByRecipient[0].policyIntent, 'recipient_attention')
+    assert.equal(res.details.wakeByRecipient[0].policyReason, 'question routes to recipient attention')
+    assert.equal(res.details.wakeByRecipient[0].wakeHint, 'soft')
+    assert.equal(res.details.wakeByRecipient[0].method, 'bridge_requested')
 
-    // Workers can send non-assignment core types to team-lead as well.
-    res = await tool('agentteam_send').execute('guard-fyi-to-leader-allowed', {
+    const nativeBeforeInformLeader = pi.__messages.length
+    res = await tool('agentteam_send').execute('guard-inform-to-leader-allowed', {
       to: 'team-lead',
-      message: 'informational update',
-      type: 'fyi',
+      message: 'informational block',
+      type: 'inform',
     }, null, () => {}, plannerCtx)
     assert.deepEqual(res.details.recipients, ['team-lead'])
+    assert.equal(res.details.wakeByRecipient[0].wakeHint, 'none')
+    assert.equal(res.details.wakeByRecipient[0].policyIntent, 'none')
+    assert.equal(res.details.wakeByRecipient[0].policyReason, 'inform is context-only and does not wake')
+    assert.equal(res.details.wakeByRecipient[0].ok, undefined, 'inform-to-leader should not request leader attention directly')
+    assert.equal(pi.__messages.length, nativeBeforeInformLeader, 'inform-to-leader should not trigger native leader turn')
 
-    // Workers cannot send assignment type.
+    res = await tool('agentteam_send').execute('guard-question-to-leader-attention', {
+      to: 'team-lead',
+      message: 'Need leader decision on T002',
+      type: 'question',
+      taskId: 'T002',
+    }, null, () => {}, plannerCtx)
+    assert.deepEqual(res.details.recipients, ['team-lead'])
+    assert.equal(res.details.wakeByRecipient[0].wakeHint, 'soft')
+    assert.equal(res.details.wakeByRecipient[0].policyIntent, 'leader_attention')
+    assert.equal(res.details.wakeByRecipient[0].policyReason, 'question to leader routes to leader attention')
+    assert.equal(res.details.wakeByRecipient[0].method, 'leader_attention_requested')
+    assert.equal(res.details.wakeByRecipient[0].ok, true)
+    assert.equal(Object.keys(modules.state.readDeliveryRequestStore('guard-suite-team').requests).filter(id => modules.state.readDeliveryRequestStore('guard-suite-team').requests[id].memberName === 'team-lead').length, 0, 'leader attention should not create worker delivery requests')
+    const questionToLeader = modules.state.readMailbox('guard-suite-team', 'team-lead').find(item => item.text.includes('Need leader decision on T002'))
+    assert.equal(questionToLeader?.readAt, undefined, 'question-to-leader attention request should not mark mailbox read')
+    assert.equal(questionToLeader?.deliveredAt, undefined, 'question-to-leader attention request should not mark mailbox delivered')
+
     res = await tool('agentteam_send').execute('guard-assignment-send-denied', {
       to: 'team-lead',
       message: 'unauthorized assignment',
@@ -257,110 +349,39 @@ module.exports = {
     assert.equal(res.details.denied, true)
     assert.equal(res.details.type, 'assignment')
 
-    const teamBeforeLeaderWake = modules.state.readTeamState('guard-suite-team')
-    modules.state.updateMemberStatus(teamBeforeLeaderWake, 'team-lead', {
+    const teamBeforeLeaderAttention = modules.state.readTeamState('guard-suite-team')
+    modules.state.updateMemberStatus(teamBeforeLeaderAttention, 'team-lead', {
       status: 'idle',
-      lastWakeReason: 'test reset before wake assertion',
+      lastWakeReason: 'test reset before projection assertion',
     })
-    modules.state.writeTeamState(teamBeforeLeaderWake)
+    modules.state.writeTeamState(teamBeforeLeaderAttention)
 
+    const existingAttentionMessageCount = pi.__messages.filter(message => message.customType === 'agentteam-leader-attention').length
+    modules.leaderAttention.resetLeaderAttentionThrottle()
     sentPrompts.length = 0
-    res = await tool('agentteam_send').execute('guard-leader-wake', {
-      to: 'team-lead',
-      message: 'T001 completed by researcher',
-      type: 'completion_report',
+    const nativeBefore = pi.__messages.length
+    res = await tool('agentteam_task').execute('guard-leader-projection', {
+      action: 'report_done',
       taskId: 'T001',
+      note: 'T001 done by researcher',
     }, null, () => {}, researcherCtx)
-    assert.equal(res.details.wakeByRecipient[0].wakeHint, 'hard')
-    assert.ok(
-      sentPrompts.some(item => item.paneId === '%leader' && item.prompt.includes('completion_report')),
-      'leader pane should receive completion_report wake prompt',
-    )
-
-    modules.state.updateTeamState('guard-suite-team', latest => {
-      modules.state.updateMemberStatus(latest, 'researcher-guard', {
-        status: 'idle',
-        lastWakeReason: 'delivery hygiene reset',
-        lastError: undefined,
-      })
-    })
-    const oldDeliveredUnread = modules.state.pushMailboxMessage('guard-suite-team', 'researcher-guard', {
-      from: 'planner-guard',
-      to: 'researcher-guard',
-      text: 'OLD_DELIVERED_UNREAD_SHOULD_NOT_REPEAT_IN_WAKE_PROMPT',
-      type: 'question',
-      wakeHint: 'soft',
-      deliveredAt: Date.now() - 1000,
-    })
-    const newUndeliveredUnread = modules.state.pushMailboxMessage('guard-suite-team', 'researcher-guard', {
-      from: 'planner-guard',
-      to: 'researcher-guard',
-      text: 'NEW_UNDELIVERED_UNREAD_SHOULD_APPEAR_IN_WAKE_PROMPT',
-      type: 'question',
-      wakeHint: 'soft',
-    })
-
-    sentPrompts.length = 0
-    const wakeHygieneTeam = modules.state.readTeamState('guard-suite-team')
-    const wakeHygiene = await modules.runtime.wakeWorker(
-      wakeHygieneTeam,
-      'researcher-guard',
-      undefined,
-      { enabled: false, delayMs: 0 },
-    )
-    assert.equal(wakeHygiene.ok, true)
-    const workerWakePrompt = sentPrompts.map(item => item.prompt).join('\n')
-    assert.ok(
-      workerWakePrompt.includes('NEW_UNDELIVERED_UNREAD_SHOULD_APPEAR_IN_WAKE_PROMPT'),
-      'worker wake prompt should include newly undelivered unread message',
-    )
-    assert.equal(
-      workerWakePrompt.includes('OLD_DELIVERED_UNREAD_SHOULD_NOT_REPEAT_IN_WAKE_PROMPT'),
-      false,
-      'worker wake prompt should not repeat already delivered unread message',
-    )
-    const wakeMailbox = modules.state.readMailbox('guard-suite-team', 'researcher-guard')
-    const storedOldDelivered = wakeMailbox.find(item => item.id === oldDeliveredUnread.id)
-    const storedNewDelivered = wakeMailbox.find(item => item.id === newUndeliveredUnread.id)
-    assert.ok(storedOldDelivered?.deliveredAt, 'old delivered unread should remain delivered')
-    assert.equal(storedOldDelivered?.readAt, undefined, 'old delivered unread should not be marked read by wake')
-    assert.ok(storedNewDelivered?.deliveredAt, 'new undelivered unread should be marked delivered after wake')
-    assert.equal(storedNewDelivered?.readAt, undefined, 'new delivered unread should not be marked read by wake')
-
-    const originalSendPrompt = modules.tmux.sendPromptToPane
-    modules.tmux.sendPromptToPane = async () => {
-      throw new Error('simulated wake failure')
-    }
-
-    const teamBeforeWakeFailure = modules.state.readTeamState('guard-suite-team')
-    modules.state.updateMemberStatus(teamBeforeWakeFailure, 'researcher-guard', {
-      status: 'idle',
-      lastWakeReason: 'reset before wake failure assertion',
-    })
-    modules.state.writeTeamState(teamBeforeWakeFailure)
-
-    res = await tool('agentteam_send').execute('guard-worker-wake-failure', {
-      to: 'researcher-guard',
-      message: 'trigger wake failure path',
-      type: 'question',
-    }, null, () => {}, leaderCtx)
-    assert.deepEqual(res.details.recipients, ['researcher-guard'])
-
-    const teamAfterWakeFailure = modules.state.readTeamState('guard-suite-team')
-    assert.equal(teamAfterWakeFailure.members['researcher-guard'].status, 'error')
-    assert.equal(teamAfterWakeFailure.members['researcher-guard'].lastWakeReason, 'wake failed')
-    assert.ok(
-      String(teamAfterWakeFailure.members['researcher-guard'].lastError || '').includes('simulated wake failure'),
-      'wake failure should be recorded in member lastError',
-    )
-
-    modules.tmux.sendPromptToPane = originalSendPrompt
+    assert.equal(res.details.reportOnly, true)
+    assert.equal(res.details.leaderMailboxDelivered, true)
+    assert.equal(sentPrompts.length, 0, 'leader attention request should not inject text into pane')
+    assert.equal(pi.__messages.length, nativeBefore, 'task report side effect should only enqueue attention/projection status; visible projection comes from mailbox sync')
+    const leaderMailbox = modules.state.readMailbox('guard-suite-team', 'team-lead')
+    const leaderAttentionMessage = leaderMailbox.find(item => item.text.includes('T001 done by researcher'))
+    assert.ok(leaderAttentionMessage, 'leader attention message should be present in mailbox')
+    assert.equal(leaderAttentionMessage?.deliveredAt, undefined, 'projection request should not mark message delivered')
+    assert.equal(leaderAttentionMessage?.readAt, undefined, 'projection request should not mark message read')
+    assert.equal(modules.state.readTeamState('guard-suite-team').tasks['T001'].notes.filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by researcher-guard')).length, 0, 'task report side effect should not append linked mailbox task note')
+    const teamAfterLeaderAttention = modules.state.readTeamState('guard-suite-team')
+    assert.equal(teamAfterLeaderAttention.members['team-lead'].lastWakeReason, 'leader attention requested report_done')
+    assert.equal(pi.__messages.filter(message => message.customType === 'agentteam-leader-attention').length, existingAttentionMessageCount, 'task report side effect should not send native turn before mailbox sync in worker context')
 
     const inputHooks = pi.__hooks.get('input') || []
     async function runInputHooks(event, ctx) {
-      for (const hook of inputHooks) {
-        await hook(event, ctx)
-      }
+      for (const hook of inputHooks) await hook(event, ctx)
     }
 
     const probeMessage = modules.state.pushMailboxMessage('guard-suite-team', 'team-lead', {
@@ -376,8 +397,8 @@ module.exports = {
 
     await runInputHooks({ type: 'input', source: 'interactive', text: 'hello world' }, leaderCtx)
 
-    let leaderMailbox = modules.state.readMailbox('guard-suite-team', 'team-lead')
-    const unrelatedProbe = leaderMailbox.find(item => item.id === probeMessage.id)
+    let currentLeaderMailbox = modules.state.readMailbox('guard-suite-team', 'team-lead')
+    const unrelatedProbe = currentLeaderMailbox.find(item => item.id === probeMessage.id)
     assert.equal(
       unrelatedProbe?.readAt,
       undefined,
@@ -386,13 +407,23 @@ module.exports = {
 
     await runInputHooks({ type: 'input', source: 'interactive', text: '/team' }, leaderCtx)
 
-    leaderMailbox = modules.state.readMailbox('guard-suite-team', 'team-lead')
-    const syncedProbe = leaderMailbox.find(item => item.id === probeMessage.id)
+    currentLeaderMailbox = modules.state.readMailbox('guard-suite-team', 'team-lead')
+    const syncedProbe = currentLeaderMailbox.find(item => item.id === probeMessage.id)
     assert.equal(
       syncedProbe?.readAt,
       undefined,
       'team command input should not auto-consume leader mailbox (manual receive should own read-at transitions)',
     )
+
+    res = await tool('agentteam_receive').execute('guard-receive-after-projection-request', {
+      markRead: true,
+      limit: 50,
+    }, null, () => {}, leaderCtx)
+    assert.ok(res.details.returnedCount > 0, 'receive should return unread projected/requested messages')
+    const leaderMailboxAfterReceive = modules.state.readMailbox('guard-suite-team', 'team-lead')
+    const receivedLeaderAttentionMessage = leaderMailboxAfterReceive.find(item => item.id === leaderAttentionMessage?.id)
+    assert.ok(receivedLeaderAttentionMessage?.deliveredAt, 'receive markRead should stamp deliveredAt')
+    assert.ok(receivedLeaderAttentionMessage?.readAt, 'receive markRead should stamp readAt')
 
     const toolCallHooks = pi.__hooks.get('tool_call') || []
     async function runToolCallHooks(event, ctx) {
@@ -426,13 +457,5 @@ module.exports = {
       plannerCtx,
     )
     assert.equal(allowed, undefined)
-
-    const implementerAllowed = await runToolCallHooks(
-      { type: 'tool_call', toolCallId: 'guard-hook-5', toolName: 'edit', input: {} },
-      implementerCtx,
-    )
-    assert.equal(implementerAllowed, undefined)
-
-    modules.state.deleteTeamState('guard-suite-team')
   },
 }

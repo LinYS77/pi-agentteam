@@ -20,12 +20,12 @@ each running in a visible tmux pane, collaborating through shared tasks and type
 | | Feature | |
 |---|---|---|
 | 🖥️ | **tmux-native teamwork** | Each teammate is a real `pi` session in its own pane — watch them work in real time |
-| 📋 | **Shared task board** | Create, claim, update, complete — full lifecycle tracking across the team |
-| 💬 | **Typed messaging** | `assignment` · `question` · `blocked` · `completion_report` · `fyi` — each with auto-wake semantics |
+| 📋 | **Leader-gated task board** | Leader-owned task facts with worker `report_done`/`report_blocked` reports and review |
+| 💬 | **Typed messaging** | `assignment` · `question` · `inform`; task reports handle done/blocked outcomes |
 | 🎯 | **Role-based tool guard** | Researcher/Planner (read-only) → Implementer (full tools) — least privilege by default |
-| 📡 | **Event-driven wake** | Teammates auto-wake on actionable messages; no polling, no wasted tokens |
+| 📡 | **Event-driven delivery** | Teammates are notified for actionable messages when tasks are unblocked; mailbox reads stay explicit |
 | 📊 | **Unified `/team` console** | Browse state, recover old teams, remove stale teammates, and cleanup without memorizing extra commands |
-| 🔗 | **Peer handoff** | Workers coordinate directly (researcher → planner) without going through the leader |
+| 🔗 | **Peer context handoff** | Workers communicate through mailboxes with hidden task audit refs/diagnostics; leader reviews attention signals and explicitly starts downstream work |
 | 🧹 | **Zero footprint** | One folder, file-based state, no database — delete and it's gone |
 
 ---
@@ -52,7 +52,7 @@ You (leader):
 
   The leader should create/assign shared tasks, choose the matching teammate
   from the roster, send short task-id based assignments, then receive and
-  synthesize completion reports.
+  synthesize task reports.
 ```
 
 Equivalent low-level tool flow when you need it:
@@ -83,17 +83,17 @@ Use agentteam when work benefits from visible role separation, not for every sma
 
 | Want | Suggested flow |
 |------|----------------|
-| Understand unfamiliar code | Spawn `researcher` → task note with files, facts, risks → leader synthesizes |
-| Plan a risky change | `researcher` for facts → `planner` for options and acceptance criteria |
-| Execute an approved plan | Assign one focused task to `implementer` → run checks → complete with files changed |
-| Keep a handoff from stalling | Ask the leader to route a task-id based `fyi` or `assignment` to the right teammate |
-| Resolve uncertainty | Worker sends `question` or `blocked` → leader `agentteam_receive()` → decide next step |
+| Understand unfamiliar code | Spawn `researcher` → task-local note with files, facts, risks → `report_done` for leader review → leader synthesizes |
+| Plan a risky change | Leader assigns `researcher` fact-finding first → researcher reports to leader → leader reviews task-local notes → leader creates/assigns a separate `planner` planning task |
+| Execute an approved plan | Assign one focused task to `implementer` → run checks → worker `report_done` with files changed → leader `close` when accepted |
+| Keep a handoff from stalling | Ask the leader to route a task-id based `inform` or `assignment` to the right teammate |
+| Resolve uncertainty | Worker sends `question` or an `agentteam_task` blocker report → leader `agentteam_receive()` → decide next step |
 | Check team health | Open `/team` for status, mailbox attention, stale panes, recovery, or cleanup |
 
 Recommended loop:
 
 ```text
-clarify → create task with owner when clear → send task-id assignment → teammate works visibly → receive → inspect task notes → synthesize
+clarify → create task with owner when clear → send task-id assignment → teammate works visibly → receive full mailbox text → inspect task-local notes → synthesize
 ```
 
 Use natural language first:
@@ -142,7 +142,7 @@ The panel intentionally does **not** focus tmux panes or perform task/message CR
 Available action-menu operations include:
 
 - refresh/reconcile tmux pane bindings;
-- sync leader mailbox projection without marking messages read;
+- sync compact leader mailbox projection without marking messages read or delivered;
 - remove selected teammate;
 - delete selected/current team;
 - recover an existing team as the current leader;
@@ -152,21 +152,41 @@ Available action-menu operations include:
 
 ## 💬 Messages & Wake Behavior
 
-Messages carry an implicit **wake hint** that controls how the recipient reacts. Mailbox lifecycle is `created → delivered → read`: wake marks messages as delivered, while only `agentteam_receive` marks them read.
+Public collaboration vocabulary is intentionally small: task status is `open | blocked | done`, worker health is `offline | idle | busy | error`, `agentteam_send` types are `assignment | question | inform`, and task reports are `report_done | report_blocked`.
 
-| Type | Purpose | Wake | Typical Flow |
+Messages carry an implicit **wake hint** that controls whether AgentTeam creates a bridge delivery/projection request. Mailbox read state is simple: messages remain unread until `agentteam_receive({ markRead: true })`, which is the explicit read boundary and the only normal full-text mailbox entry point. Single-message receive output stays clear/full; when multiple unread messages are returned, the human-facing receive text folds them by task/thread with compact ids/types/from/summary previews while `details.messages` remains the full returned mailbox payload with full text unchanged. tmux is the visible pane/container layer only; AgentTeam has a single bridge-only delivery policy and uses durable Outbox effects, durable bridge worker requests, compact durable leader mailbox projection, and bounded leader attention wakes. `deliveryMode` is not a vNext config key; remove it from config or roll back by pinning npm `pi-agentteam@0.5.0` instead of selecting legacy terminal transport. Worker-to-leader signals use compact native/idempotent projection plus compact bounded leader attention for `question` to leader and owner `report_done`/`report_blocked`. Projection and attention are reminders/wake signals with message id, task, type, summary, and a receive instruction; they do not carry the full message body. `inform` never requests leader attention. If bridge/projection is unavailable, work remains visible as public `busy`/`error` worker health plus diagnostics; AgentTeam does not silently fall back to terminal key injection. Native submit/projection/attention never marks mailbox `readAt` or `deliveredAt`; explicit receive owns those transitions.
+
+| `agentteam_send` type | Purpose | Wake | Typical Flow |
 |------|---------|------|--------------|
-| `assignment` | Leader → worker task assignment | hard | Leader delegates work |
+| `assignment` | Leader → worker task assignment | hard | Leader delegates unblocked actionable work |
 | `question` | Clarification request | soft | Anyone asks a question |
-| `blocked` | Escalation needing attention | hard | Worker hits a wall |
-| `completion_report` | Work finished | hard (leader) · soft (teammate) | Worker reports back |
-| `fyi` | Informational update | none* | Context sharing |
+| `inform` | Informational update | none | Context sharing; does not wake a worker by default |
 
-> \* *Peer handoff exception:* when a non-leader sends `fyi` to an idle teammate, wake is auto-upgraded to `soft` so the handoff doesn't stall silently.
+> `report_done` and `report_blocked` are task-report outcomes, not `agentteam_send` types. Non-leaders may use `agentteam_task action=report_done` or `agentteam_task action=report_blocked` only for tasks they own; non-owners should use `inform` or `question` for context.
 >
-> Peer `completion_report` and `blocked` messages are also mirrored to `team-lead` so the leader can always converge completed work and blockers.
+> Bounded leader attention means one compact native leader wake that should `agentteam_receive`, review, decide, and stop. It must not auto-spawn, auto-create downstream tasks, broadcast, or start worker-to-worker chains.
+>
+> Task-bound sends keep the recipient mailbox as the communication source of truth. The task stores only a hidden communication ref for audit/indexing; internally this uses `sourceKind=communication_ref`, `displayMode=hidden`, and `linkedIds.mailboxMessageId`, while retaining legacy P0 markers for compatibility. `/team` folds these refs by default and may show only a compact ref count; it does not copy the message body, does not count refs as ordinary/latest notes, and does not bump task recency.
+>
+> Peer `inform` handoffs are mailbox communication plus hidden task audit refs/diagnostic event refs only; diagnostic refs are compact, do not copy the full body, and do not create ordinary panel/prompt context. They do not create worker delivery requests or authorize downstream work. For researcher→planner chains, the leader should review the researcher report and then create/assign a separate planner task or direct question.
 >
 > Task-based routing: when `taskId` is provided and `to` is omitted, leader messages route to the task owner; messages from the task owner route back to `team-lead`. Unowned, missing, or ambiguous tasks return an error instead of falling back to broadcast.
+
+---
+
+## ✅ Leader-Gated Task Governance
+
+Task facts are leader-gated. By default, only `team-lead` factually changes `task.status`, `task.owner`, `task.blockedBy`, title, or description. Planner is advisory by default, not a second leader: it can report findings and recommendations, while the leader decides what to create, assign, block/unblock, or close.
+
+Non-leader task actions are memory/report-oriented:
+
+- `agentteam_task action=note` appends task-local memory only. It does not notify `team-lead`, create mailbox/projection/attention side effects, or create linked communication notes. If someone needs to know, use `agentteam_send`.
+- `agentteam_task action=report_done` from the task owner appends one primary `report_done` note, creates a leader mailbox item, requests compact leader projection plus bounded leader attention, and leaves the task open until leader review. The leader closes accepted work with `action=close`.
+- `agentteam_task action=report_blocked` from the task owner appends one primary blocked report note, creates a high-priority leader mailbox item, requests compact leader projection plus bounded leader attention, and does not factually mutate `status` or `blockedBy`. Unread blocked reports appear as panel attention; after the report mailbox item is read, long-lived panel attention comes from factual blocked tasks (`status`/`blockedBy`) instead. The leader blocks/unblocks with `action=block blockedBy=[...]` or `action=unblock`.
+- `blockedBy` is a hard actionability gate: blocked tasks cannot receive actionable `assignment` sends or worker delivery. Non-action `agentteam_send` communication such as `inform` and `question` remains allowed so the team can converge; done/blocked reports use `agentteam_task`.
+- In worker delivery prompts, same-task assigned task facts and task-bound mailbox messages are merged into one task-centric block so the instruction/question appears once; unscoped or different-task messages still appear separately in Messages.
+
+Rollback/migration baseline remains npm `pi-agentteam@0.5.0`; do not treat local WIP versions as a stable runtime fallback.
 
 ---
 
@@ -189,21 +209,29 @@ agentteam intentionally keeps a small fixed role set for predictable permissions
 
 ## ⚙️ Model Configuration
 
-Create `~/.pi/agent/agentteam/config.json` to assign models per role:
+npm/pi install does **not** create runtime config files. To assign models per subagent role, run:
+
+```text
+/team config init
+/team config show
+/team config validate
+```
+
+`/team config init` creates `${PI_AGENTTEAM_HOME || ~/.pi/agent/agentteam}/config.json` from the bundled `config.example.json` and refuses to overwrite an existing file. You can also copy `config.example.json` manually:
 
 ```json
 {
   "agentModels": {
-    "planner": "glm-5.1",
-    "researcher": "glm-5.1",
-    "implementer": "gpt-5.3-codex"
+    "planner": null,
+    "researcher": null,
+    "implementer": null
   }
 }
 ```
 
-Values are model selectors from `~/.pi/agent/models.json`. Empty string or missing key = use the default model. The leader always uses your current session model.
+Set a role value to a pi model selector, preferably the fully qualified selector you use in pi (for example `openai/gpt-5.3-codex` or your configured alias). `null`, empty string, or a missing key means use the current default model. Configuration is role-level only (`planner`, `researcher`, `implementer`); per-member overrides and live model switching are intentionally not supported. Spawn output and `/team` member details show the effective launch model (`model: <selector>` or `model: default`). Changes apply only to future teammate spawns/respawns; existing workers keep the model they were launched with. The leader always uses your current session model.
 
-Runtime state is stored under `~/.pi/agent/agentteam/` (`teams/`, `mailboxes/`, `session-bindings`, and `worker-sessions`). `config.json` lives in the same directory. Set `PI_AGENTTEAM_HOME` only for testing or temporary sandboxes.
+Runtime state is stored under `~/.pi/agent/agentteam/` (`teams/<team>/team.json`, `teams/<team>/inboxes/`, `teams/<team>/outbox.json`, `teams/<team>/runtime.json`, `sessions/`, and `worker-sessions/`). `config.json` lives in the same directory. Set `PI_AGENTTEAM_HOME` for testing or temporary sandboxes; `/team config show` displays the effective path and role models.
 
 ---
 
@@ -215,9 +243,9 @@ Runtime state is stored under `~/.pi/agent/agentteam/` (`teams/`, `mailboxes/`, 
 |------|-------------|
 | `agentteam_create` | Create a new team |
 | `agentteam_spawn` | Spawn a teammate (omit `task` for idle) |
-| `agentteam_send` | Send a typed message to a specific teammate, an owned task, or explicit broadcast |
-| `agentteam_receive` | Pull unread mailbox messages |
-| `agentteam_task` | Manage shared tasks (`create` can include `owner`; `claim` · `update` · `complete` · `list` · `note`) |
+| `agentteam_send` | Send typed communication to a specific teammate, an owned task, or explicit broadcast |
+| `agentteam_receive` | Pull unread mailbox messages; this is the full-text read boundary; multi-message human output is compactly grouped while details keep full text |
+| `agentteam_task` | Leader-gated shared tasks plus task-local `note` memory and owner-only `report_done`/`report_blocked` action requests |
 
 ### Command
 
@@ -229,28 +257,30 @@ Runtime state is stored under `~/.pi/agent/agentteam/` (`teams/`, `mailboxes/`, 
 
 ## 🏗 Architecture
 
+Current boundary layout: api/app/adapters/core/runtime/state are explicit; removed root facades are not part of the package surface.
+
 ```
 index.ts              ← Extension entry point
+├── api/              ← Pi-facing registration entrypoints for tools/commands composition
 ├── tools/            ← Thin tool registrations plus team/message/task/worker services, routing, and policy helpers
 ├── commands/         ← /team console command and runtime action handlers
 ├── hooks/            ← Thin hook registrations plus lifecycle/context services and tool guard
 ├── teamPanel/        ← Interactive console (layout, view model, input, actions)
-├── state.ts          ← State facade
-├── state/            ← File-based stores (team, mailbox, bindings, merge policy)
-├── runtime.ts        ← Runtime facade (session helpers, team lookup, leader mailbox projection)
-├── runtimeRules.ts   ← Pure naming, owner, and spawn-task classification rules
-├── runtimeWake.ts    ← Worker/leader wake prompts and wake status updates
-├── runtimePanes.ts   ← Pane reconciliation and team pane cleanup
-├── runtimeStorage.ts ← Team storage/mailbox readiness cache
-├── runtimeService.ts ← Leader mailbox sync, digest injection
+├── types.ts          ← Public vocabulary/types (Task, Message, Worker)
+├── internalTypes.ts  ← Internal persisted/runtime store shapes (not public API)
+├── config.ts / agents.ts / session.ts / protocol.ts / policy.ts / renderers.ts
+├── state/            ← Focused file-based stores (team, inbox, sessions, runtime, outbox, quarantine)
+├── adapters/         ← Explicit runtime/tmux/bridge adapters used by hooks, tools, commands, and panel
+│   ├── runtime/      ← Session attachment, team lookup, storage readiness, naming/spawn rules, runtime service
+│   ├── bridge/       ← Bridge delivery/projection/lifecycle adapter surface
+│   └── tmux/         ← Patchable tmux visibility adapter and team pane reconcile/cleanup
+├── runtime/          ← Focused bridge/projection/outbox runtime internals; no top-level runtime facade
 ├── protocol.ts       ← Message type defaults & wake hints
 ├── orchestration.ts  ← Leader digest (coordination counters)
 ├── policy.ts         ← Leader delegation policy
 ├── agents.ts         ← Role discovery & agent loading
-├── tmux.ts           ← tmux facade
-├── tmux/             ← tmux client, pane/window/wake/label helpers
-├── messageLifecycle.ts ← Mailbox created/delivered/read helpers
-├── types.ts          ← Shared type definitions
+├── tmux/             ← Low-level tmux client, pane/window/process/label helpers
+├── messageLifecycle.ts ← Mailbox delivered/read helpers
 └── agents/           ← Bundled role prompts (markdown)
     ├── researcher.md
     ├── planner.md
@@ -267,12 +297,22 @@ index.ts              ← Extension entry point
 
 ---
 
-## ✅ Tests
+## ✅ Checks & Release Readiness
 
 ```bash
-npm test
-npm run test:e2e   # optional local tmux smoke; requires tmux
+npm test                 # unit/package smoke suites
+npm run typecheck        # tsc --noEmit
+npm run check:boundaries # import/public-surface boundary guard
+npm run check            # test + typecheck + git diff --check + boundaries
+npm run release:check    # npm run check + npm pack --dry-run --ignore-scripts
+npm run test:e2e         # optional manual tmux smoke; requires real tmux/pi runtime
 ```
+
+`release:check` is safe for local CI: it does not publish, install, tag, bump versions, or edit user settings. It intentionally does **not** run `test:e2e` because the e2e smoke requires a real tmux/pi environment and is best run manually in a clean `PI_AGENTTEAM_HOME` sandbox.
+
+The package surface is intentionally explicit: `package.json#files` lists required top-level files plus `api/`, `app/`, `adapters/`, `commands/`, `hooks/`, `core/`, `runtime/`, `state/`, `teamPanel/`, `tmux/`, `tools/`, and bundled `agents/`. It does not use broad `*.ts`, and removed root facades/wrappers are explicitly excluded/guarded.
+
+Current automated/source-level status: FULL PASS only after `npm test`, `npm run typecheck`, `git diff --check`, `npm run check:boundaries`, `npm run check`, and `npm run release:check` pass in the working tree. This is local validation, not publishing.
 
 | Suite | Covers |
 |-------|--------|
@@ -280,15 +320,38 @@ npm run test:e2e   # optional local tmux smoke; requires tmux
 | Command | /team unified console |
 | Protocol + orchestration | Wake defaults, leader digest injection |
 | Panel rendering | Visual output across terminal widths |
-| Wake + permission guards | Role-based access control |
+| Delivery + permission guards | Role-based access control |
 | Service unit helpers | Pure worker/message/task/context helper behavior |
+
+## 🧪 Manual smoke checklist
+
+These checks are release-readiness notes for the current working tree; they do not imply a package has been published.
+
+- [ ] Current vNext layout sanity
+  - Fresh state should use `teams/<team>/team.json`, `teams/<team>/inboxes/<member>.json`, `teams/<team>/outbox.json`, `teams/<team>/runtime.json`, `sessions/session-<sha>.json`, and `worker-sessions/`.
+  - Active old layout files such as `state.json`, `mailboxes/`, `outbox-state.json`, `bridge-state.json`, `delivery-state.json`, and `leader-projection-state.json` should quarantine rather than load.
+- [ ] Package surface sanity
+  - `npm run release:check` should finish with `npm pack --dry-run --ignore-scripts` only; do not run `npm publish`, do not bump `version`, do not tag/commit, and do not edit `~/.pi/agent/settings.json`.
+  - `docs/` remains local design notes and `scripts/` remains local development helpers; neither directory is included in the npm package `files` list by default.
+- [ ] Stable fallback remains documented
+  - Compare or roll back with npm `pi-agentteam@0.5.0` when needed; do not treat unpublished local vNext work as a stable fallback.
+- [ ] Internal delivery diagnostics sanity
+  - Evidence: unit coverage in `tests/suites/service-units.cjs` for expired/stale request handling, recovery, and no-resend behavior. These are runtime diagnostics, not public task/worker states.
+- [ ] PushMailbox failure evidence
+  - Evidence: unit coverage in `tests/suites/tools-state.cjs` for leader mailbox push failure warnings/details on non-leader `report_done` and `report_blocked`.
+- [ ] Bridge-only delivery remains in effect
+  - Confirm no tmux terminal-key fallback is used; mailbox read still happens only through `agentteam_receive`.
 
 ---
 
 ## ⚠️ Limitations
 
-- Workers are separate `pi` sessions in tmux panes, not in-process subagents
+- Workers are separate visible `pi` sessions in tmux panes, but tmux is only the visible container/labels/reconcile/cleanup/debug layer. AgentTeam uses one bridge-only delivery policy: bridge requests/projection only, with no automatic fallback to terminal key injection.
+- Durable Outbox plus runtime adapter diagnostics are production delivery diagnostics (`outbox.json`, `outbox-diagnostics.json`, and `runtime.json` sections for bridge lease, delivery request, leader projection, and leader attention state). Internal request/projection/attention lifecycles such as pending, claimed, submitted, started, completed, projected, or failed may appear only in diagnostics/details; inbox read state remains owned by `agentteam_receive`.
+- In diagnostics, the durable bounded-leader-attention Outbox effect kind is `leader_attention_requested`. Legacy active persisted outbox effects using `leader_triage_requested` have no compatibility path; they quarantine as unsupported legacy state instead of being normalized or executed.
+- Rollback/migration: pin or reinstall a rollback package version (for example npm `pi-agentteam@0.5.0`) and respawn workers. There is no automatic in-process switch from bridge-only delivery to terminal transport; bridge unavailable appears as public `busy`/`error` worker health with diagnostics. For manual smoke, use a clean `PI_AGENTTEAM_HOME` and respawn old workers so bridge leases exist.
 - `agentteam_task action=create` can include `owner` when the responsible teammate is already clear; this assigns shared state only and does not send/wake by itself
+- `agentteam_task action=note` is task-local memory only; it is not a leader notification channel
 - `agentteam_send` can omit `to` only when `taskId` safely routes through an owned task; it never falls back to implicit broadcast
 - Passing `task` to `agentteam_spawn` starts work immediately; omitting it creates an idle teammate for later `send`/`task` follow-up
 - State is local to one machine (no remote/distributed support)

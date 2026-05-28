@@ -3,8 +3,8 @@ import type {
   TeamState,
   TeamTask,
   TeamTaskNote,
-} from '../types.js'
-import { TEAM_LEAD } from '../types.js'
+} from '../internalTypes.js'
+import { TEAM_LEAD } from '../internalTypes.js'
 
 // ---------------------------------------------------------------------------
 // Merge policy for concurrent/stale team-state writers.
@@ -93,8 +93,8 @@ export function mergeTeamStates(current: TeamState, incoming: TeamState): TeamSt
   const currentState = normalizeTeamState(current)
   const incomingState = normalizeTeamState(incoming)
 
-  const tombstones: Record<string, number> = { ...currentState.memberTombstones }
-  for (const [name, at] of Object.entries(incomingState.memberTombstones)) {
+  const tombstones: Record<string, number> = { ...(currentState.memberTombstones ?? {}) }
+  for (const [name, at] of Object.entries(incomingState.memberTombstones ?? {})) {
     const existing = tombstones[name]
     if (existing === undefined || at > existing) {
       tombstones[name] = at

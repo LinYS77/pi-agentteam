@@ -1,5 +1,5 @@
-import type { ExtensionContext } from '@mariozechner/pi-coding-agent'
-import { ensureAttachedSessionContext } from './state.js'
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
+import { ensureAttachedSessionContext } from './state/sessionBinding.js'
 
 export function getSessionFile(ctx: Pick<ExtensionContext, 'sessionManager'>): string {
   return ctx.sessionManager.getSessionFile() ?? `ephemeral:${process.pid}`

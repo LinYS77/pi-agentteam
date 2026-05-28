@@ -1,81 +1,79 @@
+import { projectWorkerHealth, type WorkerHealthProjectionInput } from '../core/workerHealth.js'
 import type {
   TeamMember,
   TeamTask,
-} from '../types.js'
+} from '../internalTypes.js'
 import type { TeamAttentionSummary } from './viewModel.js'
 import { hasPaneLostAttention, mailboxType } from './viewModel.js'
 import type { PanelColor, PanelTheme } from './layoutPrimitives.js'
 
 export function memberPaneLabel(member: TeamMember): string {
-  return member.paneId ? `pane ${member.paneId}` : 'no pane'
+  return member.paneId ? `pane ${member.paneId}` : 'pane missing'
 }
 
-export function memberHealthLabel(member: TeamMember): string {
-  if (hasPaneLostAttention(member)) return 'pane lost'
-  if (member.status === 'error') return 'error'
-  if (!member.paneId) return 'no pane'
-  return member.status
+export function projectMemberHealth(member: TeamMember): ReturnType<typeof projectWorkerHealth> {
+  const projection: WorkerHealthProjectionInput = {
+    isOperational: Boolean(member.paneId) && member.status !== 'offline',
+    hasError: member.status === 'error' || Boolean(member.bridgeLastError),
+    hasActiveTurn: member.status === 'running' || member.status === 'draining',
+    hasPendingWork: member.status === 'queued' || member.status === 'pending_delivery' || Boolean(member.bridgeWorkRequestedAt),
+  }
+  return projectWorkerHealth(projection)
+}
+
+export function memberHealthLabel(member: TeamMember): ReturnType<typeof projectMemberHealth> {
+  return projectMemberHealth(member)
 }
 
 export function memberHealthColor(member: TeamMember): PanelColor {
-  if (hasPaneLostAttention(member) || member.status === 'error') return 'error'
-  if (!member.paneId) return 'warning'
-  if (member.status === 'running') return 'warning'
-  if (member.status === 'queued') return 'accent'
+  const health = projectMemberHealth(member)
+  if (health === 'error') return 'error'
+  if (health === 'busy') return 'accent'
+  if (health === 'offline') return 'warning'
   return 'dim'
 }
 
 export function mailboxTypeIcon(type: ReturnType<typeof mailboxType>): string {
-  if (type === 'blocked') return '⧗'
-  if (type === 'completion_report') return '✓'
+  if (type === 'report_blocked') return '⧗'
+  if (type === 'report_done') return '✓'
   if (type === 'assignment') return '↦'
   if (type === 'question') return '?'
   return '•'
 }
 
 export function mailboxTypeColor(type: ReturnType<typeof mailboxType>): PanelColor {
-  if (type === 'blocked') return 'error'
-  if (type === 'completion_report') return 'success'
+  if (type === 'report_blocked') return 'error'
+  if (type === 'report_done') return 'success'
   if (type === 'assignment') return 'accent'
   if (type === 'question') return 'warning'
   return 'text'
 }
 
 function taskStatusIcon(status: TeamTask['status']): string {
-  if (status === 'completed') return '✔'
-  if (status === 'in_progress') return '⟳'
+  if (status === 'done') return '✔'
   if (status === 'blocked') return '⚠'
   return '○'
 }
 
-function memberStatusIcon(status: TeamMember['status']): string {
-  if (status === 'running') return '⟳'
-  if (status === 'queued') return '⋯'
-  if (status === 'error') return '⚠'
+function workerHealthIcon(health: ReturnType<typeof projectMemberHealth>): string {
+  if (health === 'busy') return '⋯'
+  if (health === 'offline') return '◇'
+  if (health === 'error') return '⚠'
   return '○'
 }
 
-export function memberStatusBadge(theme: PanelTheme, status: TeamMember['status']): string {
-  const color =
-    status === 'running'
-      ? 'warning'
-      : status === 'error'
-        ? 'error'
-        : status === 'queued'
-          ? 'accent'
-          : 'dim'
-  return theme.fg(color, `[${memberStatusIcon(status)} ${status}]`)
+export function memberHealthBadge(theme: PanelTheme, member: TeamMember): string {
+  const health = projectMemberHealth(member)
+  return theme.fg(memberHealthColor(member), `[${workerHealthIcon(health)} ${health}]`)
 }
 
 export function taskStatusBadge(theme: PanelTheme, status: TeamTask['status']): string {
   const color =
-    status === 'completed'
+    status === 'done'
       ? 'success'
-      : status === 'in_progress'
-        ? 'warning'
-        : status === 'blocked'
-          ? 'error'
-          : 'dim'
+      : status === 'blocked'
+        ? 'error'
+        : 'dim'
   return theme.fg(color, `[${taskStatusIcon(status)} ${status}]`)
 }
 
@@ -84,10 +82,10 @@ export function attentionSummaryParts(
   summary: TeamAttentionSummary,
 ): string[] {
   const parts: string[] = []
-  if (summary.paneLostMembers > 0) parts.push(theme.fg('error', `pane lost ${summary.paneLostMembers}`))
+  if (summary.paneLostMembers > 0) parts.push(theme.fg('error', `worker error ${summary.paneLostMembers}`))
   else if (summary.errorMembers > 0) parts.push(theme.fg('error', `⚠ ${summary.errorMembers} member error${summary.errorMembers === 1 ? '' : 's'}`))
   if (summary.blockedTasks > 0) parts.push(theme.fg('error', `⚠ ${summary.blockedTasks} blocked task${summary.blockedTasks === 1 ? '' : 's'}`))
-  if (summary.blockedMessages > 0) parts.push(theme.fg('error', `⧗ ${summary.blockedMessages} blocked msg${summary.blockedMessages === 1 ? '' : 's'}`))
+  if (summary.blockedMessages > 0) parts.push(theme.fg('error', `⧗ ${summary.blockedMessages} unread blocked report${summary.blockedMessages === 1 ? '' : 's'}`))
   if (summary.unreadMessages > 0) parts.push(theme.fg('warning', `✉ ${summary.unreadMessages} unread`))
   if (summary.unownedActiveTasks > 0) parts.push(theme.fg('warning', `◇ ${summary.unownedActiveTasks} unowned`))
   return parts
@@ -98,7 +96,7 @@ export function compactAttentionSummaryParts(
   summary: TeamAttentionSummary,
 ): string[] {
   const parts: string[] = []
-  if (summary.paneLostMembers > 0) parts.push(theme.fg('error', `lost${summary.paneLostMembers}`))
+  if (summary.paneLostMembers > 0) parts.push(theme.fg('error', `err${summary.paneLostMembers}`))
   else if (summary.errorMembers > 0) parts.push(theme.fg('error', `err${summary.errorMembers}`))
   if (summary.blockedTasks > 0) parts.push(theme.fg('error', `⚠${summary.blockedTasks}`))
   if (summary.blockedMessages > 0) parts.push(theme.fg('error', `⧗${summary.blockedMessages}`))

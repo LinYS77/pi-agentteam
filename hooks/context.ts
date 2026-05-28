@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from '@mariozechner/pi-coding-agent'
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
 import type { HookDigestPatch, HookDigestState } from './lifecycleService.js'
 import {
   injectLeaderContextAndUpdateDigest,
@@ -10,23 +10,30 @@ export type ContextHookDeps = {
   updateDigestState?: (patch: HookDigestPatch) => void
   refreshStatus: (ctx: ExtensionContext) => void
   runMailboxSync: (ctx: ExtensionContext) => void
+  runOutboxMaintenance?: (ctx: ExtensionContext) => void
 }
 
 export function registerContextHooks(pi: ExtensionAPI, deps: ContextHookDeps): void {
-  pi.on('context', async (event, ctx) => {
+  const onContext = pi.on as unknown as (
+    event: 'context',
+    handler: (event: { messages: { role: string; content: unknown }[] }, ctx: ExtensionContext) => unknown | Promise<unknown>,
+  ) => void
+  onContext('context', async (event, ctx) => {
     return injectLeaderContextAndUpdateDigest(
-      event as { messages: { role: string; content: unknown }[] },
+      event,
       deps,
       ctx,
     )
   })
 
   pi.on('tool_result', async (_event, ctx) => {
+    deps.runOutboxMaintenance?.(ctx)
     deps.runMailboxSync(ctx)
     deps.refreshStatus(ctx)
   })
 
   pi.on('message_end', async (_event, ctx) => {
+    deps.runOutboxMaintenance?.(ctx)
     deps.runMailboxSync(ctx)
     deps.refreshStatus(ctx)
   })

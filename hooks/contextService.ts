@@ -1,8 +1,9 @@
-import type { ExtensionContext } from '@mariozechner/pi-coding-agent'
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { maybeInjectLeaderOrchestrationContext } from '../orchestration.js'
-import { readTeamState } from '../state.js'
+import type { ContextMessage } from '../orchestration.js'
+import { readTeamState } from '../state/teamStore.js'
 import { getCurrentMemberName, getCurrentTeamName } from '../session.js'
-import { TEAM_LEAD } from '../types.js'
+import { TEAM_LEAD } from '../internalTypes.js'
 import type { HookDigestState, HookDigestPatch } from './lifecycleService.js'
 import { updateHookDigestState } from './lifecycleService.js'
 
@@ -20,13 +21,13 @@ export function shouldSyncMailboxOnInput(event: { source?: string; text?: unknow
 }
 
 export function injectLeaderContextAndUpdateDigest(
-  event: { messages: { role: string; content: unknown }[] },
+  event: { messages: ContextMessage[] },
   deps: {
     state: HookDigestState
     updateDigestState?: (patch: HookDigestPatch) => void
   },
   ctx: ExtensionContext,
-): boolean {
+): { messages: ContextMessage[] } | undefined {
   const teamName = getCurrentTeamName(ctx)
   const memberName = getCurrentMemberName(ctx)
   const team = teamName ? readTeamState(teamName) : null
@@ -58,12 +59,14 @@ export function syncLeaderMailboxForInputIfNeeded(
   deps: {
     runMailboxSync: (ctx: ExtensionContext) => void
     refreshStatus: (ctx: ExtensionContext) => void
+    runOutboxMaintenance?: (ctx: ExtensionContext) => void
   },
 ): void {
   if (!shouldSyncMailboxOnInput(event)) return
   const teamName = getCurrentTeamName(ctx)
   const memberName = getCurrentMemberName(ctx)
   if (!teamName || memberName !== TEAM_LEAD) return
+  deps.runOutboxMaintenance?.(ctx)
   deps.runMailboxSync(ctx)
   deps.refreshStatus(ctx)
 }

@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
+const { createStateBundle } = require('../stateBundle.cjs')
 
 const EXT_ROOT = path.resolve(__dirname, '..', '..')
 function requireTypeScript() {
@@ -192,9 +193,9 @@ module.exports = { Type, StringEnum }
 }
 
 function mapImport(specifier) {
-  if (specifier === '@mariozechner/pi-coding-agent') return path.join(stubRoot, 'pi-coding-agent.js')
-  if (specifier === '@mariozechner/pi-ai') return path.join(stubRoot, 'pi-ai.js')
-  if (specifier === '@mariozechner/pi-tui') return path.join(stubRoot, 'pi-tui.js')
+  if (specifier === '@earendil-works/pi-coding-agent') return path.join(stubRoot, 'pi-coding-agent.js')
+  if (specifier === '@earendil-works/pi-ai') return path.join(stubRoot, 'pi-ai.js')
+  if (specifier === '@earendil-works/pi-tui') return path.join(stubRoot, 'pi-tui.js')
   if (specifier === 'typebox') return path.join(stubRoot, 'typebox.js')
   return specifier
 }
@@ -202,7 +203,8 @@ function mapImport(specifier) {
 function transpileSources() {
   ensureDir(distRoot)
   for (const sourceFile of walkFiles(EXT_ROOT)) {
-    const sourceText = fs.readFileSync(sourceFile, 'utf8')
+    let sourceText = fs.readFileSync(sourceFile, 'utf8')
+    sourceText = sourceText.replace(/import\.meta\.url/g, `require('node:url').pathToFileURL(__filename).href`)
     let out = ts.transpileModule(sourceText, {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -283,10 +285,10 @@ function createTeamWithLeader(modules, teamName, sessionFile = leaderSessionFile
 function addTaskForMember(modules, team, memberName) {
   const task = modules.state.createTask(team, {
     title: 'E2E active task',
-    description: 'Validate stale member removal returns task to pending',
+    description: 'Validate stale member removal returns task to open',
   })
   task.owner = memberName
-  task.status = 'in_progress'
+  task.status = 'open'
   task.updatedAt = Date.now()
   return task
 }
@@ -343,7 +345,7 @@ function debugSnapshot() {
   lines.push(`leader target: ${leaderTarget}`)
   lines.push(`panes:\n${listPanesDebug() || '(none)'}`)
   lines.push(`state files:\n${stateFiles.join('\n') || '(none)'}`)
-  for (const file of stateFiles.filter(file => file.endsWith('state.json'))) {
+  for (const file of stateFiles.filter(file => file.endsWith('team.json') || file.endsWith('runtime.json'))) {
     try {
       lines.push(`\n${file}:\n${fs.readFileSync(file, 'utf8')}`)
     } catch {
@@ -385,10 +387,11 @@ async function runInnerE2E() {
   transpileSources()
   captureLeaderPane()
 
+  requireDist('state/init.js').initializeStateStores()
   const modules = {
-    state: requireDist('state.js'),
-    runtime: requireDist('runtime.js'),
-    tmux: requireDist('tmux.js'),
+    state: createStateBundle(requireDist),
+    runtime: requireDist('adapters/runtime/session.js'),
+    tmux: requireDist('adapters/tmux/index.js'),
     teamActions: requireDist('commands/teamActions.js'),
   }
   const deps = commandDeps(modules)
@@ -430,8 +433,8 @@ async function runInnerE2E() {
   modules.state.pushMailboxMessage(team.name, 'worker-one', {
     from: 'team-lead',
     to: 'worker-one',
-    text: 'stale mailbox message',
-    type: 'fyi',
+    text: 'stale mailbox inform',
+    type: 'inform',
   })
   modules.state.updateTeamState(team.name, latest => {
     addTaskForMember(modules, latest, 'worker-one')
@@ -442,7 +445,7 @@ async function runInnerE2E() {
   assert.ok(!afterRemove.members['worker-one'], 'stale member should be removed')
   assert.equal(modules.state.readSessionContext(staleSessionFile).teamName, null, 'stale member session binding should be cleared')
   assert.equal(fs.existsSync(modules.state.getMailboxPath(team.name, 'worker-one')), false, 'stale member mailbox should be removed')
-  assert.ok(Object.values(afterRemove.tasks).some(task => task.status === 'pending' && !task.owner), 'owned active task should return to pending')
+  assert.ok(Object.values(afterRemove.tasks).some(task => task.status === 'open' && !task.owner), 'owned active task should return to open')
   assert.ok(tmuxPaneExists(leaderPaneId), 'leader pane should remain alive after remove member')
 
   lastStep = 'recover selected team as current leader'

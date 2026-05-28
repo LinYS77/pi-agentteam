@@ -1,38 +1,16 @@
-import type { TeamMessagePriority, TeamMessageType, TeamState } from '../types.js'
-import type { MessageRoutingDetails } from './messageRouting.js'
-import type { ToolHandlerDeps } from './shared.js'
+import type { MessageType } from '../core/publicModel.js'
 
 export type TeamSendInput = {
   to?: string
   message: string
   summary?: string
-  type?: 'assignment' | 'question' | 'blocked' | 'completion_report' | 'fyi'
+  type?: MessageType
   taskId?: string
-  priority?: TeamMessagePriority
+  priority?: 'low' | 'normal' | 'high'
   metadata?: Record<string, unknown>
 }
 
 export type TeamReceiveInput = {
   markRead?: boolean
   limit?: number
-}
-
-export type MessageDeliveryState = {
-  team: TeamState
-  deps: ToolHandlerDeps
-  sender: string
-  params: TeamSendInput
-  messageType: TeamMessageType
-  resolvedThreadId: string | undefined
-  priority: TeamMessagePriority
-  metadata?: Record<string, unknown>
-  routing: MessageRoutingDetails
-  sent: string[]
-  leaderMirrors: string[]
-  wakeByRecipient: Array<{ recipient: string; wakeHint: string }>
-  skippedRecipients: Array<{ recipient: string; reason: string }>
-}
-
-export type MessageDeliveryOptions = {
-  mirrorOf?: string
 }

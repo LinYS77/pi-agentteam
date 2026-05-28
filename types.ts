@@ -1,103 +1,75 @@
+// Public API/model vocabulary surface.
+//
+// Runtime, persisted store, delivery, projection, and Outbox shapes live in
+// internalTypes.ts or focused app/runtime/state modules. Public consumers should
+// depend on the small vNext vocabulary exported here and from core/publicModel.
+
+export {
+  MESSAGE_READ_STATES,
+  MESSAGE_TYPES,
+  TASK_REPORT_TYPES,
+  TASK_STATUSES,
+  WORKER_HEALTHS,
+  isMessageReadState,
+  isMessageType,
+  isTaskReportType,
+  isTaskStatus,
+  isWorkerHealth,
+  normalizeMessageReadState,
+  normalizeMessageType,
+  normalizeTaskReportType,
+  normalizeTaskStatus,
+  normalizeWorkerHealth,
+  type MessageReadState,
+  type MessageType,
+  type TaskReportType,
+  type TaskStatus,
+  type WorkerHealth,
+} from './core/publicModel.js'
+
 export const TEAM_LEAD = 'team-lead'
 
-export type MemberStatus = 'idle' | 'queued' | 'running' | 'error'
-export type TaskStatus = 'pending' | 'in_progress' | 'blocked' | 'completed'
+export type PublicTaskStatus = import('./core/publicModel.js').TaskStatus
+export type PublicWorkerHealth = import('./core/publicModel.js').WorkerHealth
+export type PublicMessageType = import('./core/publicModel.js').MessageType
+export type PublicTaskReportType = import('./core/publicModel.js').TaskReportType
+export type PublicMessageReadState = import('./core/publicModel.js').MessageReadState
 
-export type SessionTeamContext = {
-  teamName: string | null
-  memberName: string | null
-}
-
-export type TeamMember = {
-  name: string
-  role: string
-  model?: string
-  tools?: string[]
-  systemPrompt?: string
-  cwd: string
-  sessionFile: string
-  paneId?: string
-  windowTarget?: string
-  bootPrompt?: string
-  status: MemberStatus
-  createdAt: number
-  updatedAt: number
-  lastWakeReason?: string
-  lastError?: string
-}
-
-export type TeamMessageType =
-  | 'assignment'
-  | 'question'
-  | 'blocked'
-  | 'completion_report'
-  | 'fyi'
-
-export type TeamMessagePriority = 'low' | 'normal' | 'high'
-export type TeamMessageWakeHint = 'none' | 'soft' | 'hard'
-
-export type TeamTaskNote = {
-  at: number
-  author: string
-  text: string
-  threadId?: string
-  messageType?: TeamMessageType
-  requestId?: string
-  linkedMessageId?: string
-  metadata?: Record<string, unknown>
-}
-
-export type TeamTask = {
+export type PublicTask = {
   id: string
   title: string
   description: string
-  status: TaskStatus
+  status: PublicTaskStatus
   owner?: string
   blockedBy: string[]
-  notes: TeamTaskNote[]
   createdAt: number
   updatedAt: number
 }
 
-export type TeamEvent = {
-  id: string
-  at: number
-  type: string
-  by: string
-  text: string
-  metadata?: Record<string, unknown>
-}
-
-export type TeamState = {
-  version: 1
+export type PublicWorker = {
   name: string
-  description?: string
-  createdAt: number
-  leaderSessionFile?: string
-  leaderCwd: string
-  members: Record<string, TeamMember>
-  tasks: Record<string, TeamTask>
-  events?: TeamEvent[]
-  nextTaskSeq: number
-  revision?: number
-  memberTombstones?: Record<string, number>
+  role: string
+  health: PublicWorkerHealth
+  model?: string
 }
 
-export type MailboxMessage = {
+export type PublicMessage = {
   id: string
   from: string
   to: string
   text: string
   summary?: string
-  type?: TeamMessageType
+  type?: PublicMessageType | PublicTaskReportType
   taskId?: string
   threadId?: string
-  requestId?: string
-  replyTo?: string
-  priority?: TeamMessagePriority
-  wakeHint?: TeamMessageWakeHint
-  metadata?: Record<string, unknown>
+  priority?: 'low' | 'normal' | 'high'
+  readState: PublicMessageReadState
   createdAt: number
-  deliveredAt?: number
-  readAt?: number
+}
+
+export type PublicTaskReport = {
+  type: PublicTaskReportType
+  taskId: string
+  text: string
+  from: string
 }

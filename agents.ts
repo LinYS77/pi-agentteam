@@ -1,7 +1,9 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { parseFrontmatter } from '@mariozechner/pi-coding-agent'
-import { getConfigPath } from './state.js'
+import { fileURLToPath } from 'node:url'
+import { parseFrontmatter } from '@earendil-works/pi-coding-agent'
+import { loadAgentConfig } from './config.js'
+import type { AgentTeamConfig, AgentTeamConfigDiagnostic } from './config.js'
 
 export type AgentDefinition = {
   name: string
@@ -11,8 +13,16 @@ export type AgentDefinition = {
   systemPrompt: string
 }
 
-type AgentTeamConfig = {
-  agentModels?: Record<string, string | null>
+export type { AgentTeamConfig, AgentTeamConfigDiagnostic }
+
+const moduleDir = path.dirname(fileURLToPath(import.meta.url))
+
+export type AgentsDiscoveryResult = {
+  agents: AgentDefinition[]
+  configPath: string
+  configExists: boolean
+  config: AgentTeamConfig
+  diagnostics: AgentTeamConfigDiagnostic[]
 }
 
 function isDirectory(p: string): boolean {
@@ -23,14 +33,6 @@ function isDirectory(p: string): boolean {
   }
 }
 
-function readAgentTeamConfig(): AgentTeamConfig {
-  try {
-    return JSON.parse(fs.readFileSync(getConfigPath(), 'utf8')) as AgentTeamConfig
-  } catch {
-    return {}
-  }
-}
-
 function applyModelOverrides(
   agents: AgentDefinition[],
   config: AgentTeamConfig,
@@ -38,15 +40,9 @@ function applyModelOverrides(
   const modelMap = config.agentModels ?? {}
   return agents.map(agent => {
     const override = modelMap[agent.name]
-    if (typeof override !== 'string' || override.trim().length === 0) {
-      return {
-        ...agent,
-        model: undefined,
-      }
-    }
     return {
       ...agent,
-      model: override.trim(),
+      model: typeof override === 'string' && override.length > 0 ? override : undefined,
     }
   })
 }
@@ -81,9 +77,19 @@ function loadAgentsFromDir(dir: string): AgentDefinition[] {
   return out
 }
 
+export function discoverAgentsWithDiagnostics(): AgentsDiscoveryResult {
+  const builtinDir = path.join(moduleDir, 'agents')
+  const baseAgents = loadAgentsFromDir(builtinDir).sort((a, b) => a.name.localeCompare(b.name))
+  const loadedConfig = loadAgentConfig({ knownRoles: baseAgents.map(agent => agent.name) })
+  return {
+    agents: applyModelOverrides(baseAgents, loadedConfig.config),
+    configPath: loadedConfig.path,
+    configExists: loadedConfig.exists,
+    config: loadedConfig.config,
+    diagnostics: loadedConfig.diagnostics,
+  }
+}
+
 export function discoverAgents(): AgentDefinition[] {
-  const builtinDir = path.join(path.dirname(__filename), 'agents')
-  const config = readAgentTeamConfig()
-  return applyModelOverrides(loadAgentsFromDir(builtinDir), config)
-    .sort((a, b) => a.name.localeCompare(b.name))
+  return discoverAgentsWithDiagnostics().agents
 }

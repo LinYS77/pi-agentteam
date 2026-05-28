@@ -1,32 +1,37 @@
-import type { ExtensionAPI } from '@mariozechner/pi-coding-agent'
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
+import { initializeStateStores } from './state/init.js'
 import { registerSessionHooks } from './hooks/session.js'
 import { registerContextHooks } from './hooks/context.js'
 import { registerAgentHooks } from './hooks/agent.js'
 import { registerToolGuardHooks } from './hooks/toolGuard.js'
-import { registerAgentTeamCommands } from './commands.js'
-import { registerAgentTeamTools } from './tools.js'
+import { registerAgentTeamCommands } from './api/commands.js'
+import { registerAgentTeamTools } from './api/tools.js'
 import {
   appendStructuredTaskNote,
   assertValidOwner,
-  cancelPendingNudge,
   classifySpawnTask,
   currentActor,
   deleteTeamRuntime,
   ensureTeamForSession,
   healMemberPaneBinding,
   isLeaderInsideTmux,
-  maybeLinkTaskNoteToMessage,
   normalizeOwnerName,
   sanitizeTeamName,
+  requestLeaderAttentionIfNeeded,
+  requestWorkerDelivery,
   sanitizeWorkerName,
-  wakeLeaderIfNeeded,
-  wakeWorker,
-} from './runtime.js'
-import { createRuntimeService } from './runtimeService.js'
+} from './adapters/runtime/session.js'
+import { createRuntimeService } from './adapters/runtime/service.js'
+import {
+  pumpWorkerBridgeForContext,
+  startWorkerBridgeForContext,
+  stopWorkerBridge,
+} from './adapters/bridge/index.js'
 import { registerBeforeAgentStartPolicy } from './policy.js'
 import { registerAgentTeamRenderers } from './renderers.js'
 
 export default function agentTeamExtension(pi: ExtensionAPI): void {
+  initializeStateStores()
   registerBeforeAgentStartPolicy(pi)
   registerAgentTeamRenderers(pi)
   registerToolGuardHooks(pi)
@@ -39,6 +44,11 @@ export default function agentTeamExtension(pi: ExtensionAPI): void {
     attachCurrentSessionIfNeeded: runtime.attachCurrentSessionIfNeeded,
     invalidateStatus: runtime.invalidateStatus,
     runMailboxSync: runtime.runMailboxSync,
+    runOutboxMaintenance: runtime.runOutboxMaintenance,
+    startLeaderMailboxProjectionWatcher: runtime.startLeaderMailboxProjectionWatcher,
+    stopLeaderMailboxProjectionWatcher: runtime.stopLeaderMailboxProjectionWatcher,
+    startWorkerBridge: (ctx, attached) => startWorkerBridgeForContext(pi, ctx, attached),
+    stopWorkerBridge,
   })
 
   registerContextHooks(pi, {
@@ -46,12 +56,14 @@ export default function agentTeamExtension(pi: ExtensionAPI): void {
     updateDigestState: runtime.updateDigestState,
     refreshStatus: runtime.refreshStatus,
     runMailboxSync: runtime.runMailboxSync,
+    runOutboxMaintenance: runtime.runOutboxMaintenance,
   })
 
   registerAgentHooks(pi, {
-    cancelPendingNudge,
     runMailboxSync: runtime.runMailboxSync,
     refreshStatus: runtime.refreshStatus,
+    runOutboxMaintenance: runtime.runOutboxMaintenance,
+    pumpWorkerBridge: pumpWorkerBridgeForContext,
   })
 
   registerAgentTeamCommands(pi, {
@@ -59,6 +71,7 @@ export default function agentTeamExtension(pi: ExtensionAPI): void {
     invalidateStatus: runtime.invalidateStatus,
     resetMailboxSyncKey: runtime.resetMailboxSyncKey,
     runMailboxSync: runtime.runMailboxSync,
+    runOutboxMaintenance: runtime.runOutboxMaintenance,
   })
 
   registerAgentTeamTools(pi, {
@@ -71,10 +84,9 @@ export default function agentTeamExtension(pi: ExtensionAPI): void {
     currentActor,
     healMemberPaneBinding,
     isLeaderInsideTmux,
-    wakeWorker,
-    wakeLeaderIfNeeded,
+    requestWorkerDelivery,
+    requestLeaderAttentionIfNeeded,
     appendStructuredTaskNote,
-    maybeLinkTaskNoteToMessage,
     invalidateStatus: runtime.invalidateStatus,
   })
 }

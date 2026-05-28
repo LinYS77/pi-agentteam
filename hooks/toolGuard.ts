@@ -1,7 +1,7 @@
-import type { ExtensionAPI } from '@mariozechner/pi-coding-agent'
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { getCurrentMemberName, getCurrentTeamName } from '../session.js'
-import { readTeamState } from '../state.js'
-import { TEAM_LEAD } from '../types.js'
+import { readTeamState } from '../state/teamStore.js'
+import { TEAM_LEAD } from '../internalTypes.js'
 
 const READ_ONLY_TOOLS = new Set([
   'read',

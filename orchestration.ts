@@ -1,11 +1,11 @@
-import { TEAM_LEAD } from './types.js'
+import { TEAM_LEAD } from './internalTypes.js'
 import { unreadMailboxMessages } from './messageLifecycle.js'
-import { readMailbox } from './state.js'
+import { readMailbox } from './state/mailboxStore.js'
 import type {
   MailboxMessage,
   TeamState,
   TeamTask,
-} from './types.js'
+} from './internalTypes.js'
 
 export type ContextMessage = { role: string; content: unknown }
 

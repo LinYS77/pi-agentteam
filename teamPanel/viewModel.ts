@@ -1,19 +1,24 @@
-import { ensureTeamStorageReady, reconcileTeamPanes } from '../runtime.js'
 import { isMailboxMessageUnread } from '../messageLifecycle.js'
-import { mailboxUrgencyRank, normalizeMessageType } from '../protocol.js'
-import { listAgentTeamPanes } from '../tmux.js'
-import { listTeams, readMailbox, readTeamState, updateTeamState } from '../state.js'
-import { TEAM_LEAD } from '../types.js'
+import { displayMessageType, mailboxUrgencyRank } from '../protocol.js'
+import { inferTaskNoteDisplayMode, isCommunicationReferenceNote, latestVisibleTaskNote, visibleTaskNotes } from '../state/taskNotes.js'
+import { TEAM_LEAD } from '../internalTypes.js'
+import type { OutboxDiagnosticsSummary } from '../app/outboxDiagnostics.js'
+import type { QuarantinedTeamSummary } from '../state/validation.js'
 import type {
   MailboxMessage,
   TeamMember,
   TeamMessageType,
   TeamState,
   TeamTask,
-} from '../types.js'
+} from '../internalTypes.js'
 
 export type LeaderMailboxItem = MailboxMessage
-export type GlobalPaneItem = ReturnType<typeof listAgentTeamPanes>[number]
+export type GlobalPaneItem = {
+  paneId: string
+  target: string
+  label: string
+  currentCommand: string
+}
 
 export type FocusSection = 'members' | 'tasks' | 'mailbox' | 'teams' | 'panes'
 export type PanelInteractionMode = 'browse' | 'action-menu'
@@ -55,6 +60,7 @@ export type AttachedPanelData = {
   members: TeamMember[]
   tasks: TeamTask[]
   mailbox: LeaderMailboxItem[]
+  outboxDiagnostics?: OutboxDiagnosticsSummary
 }
 
 export type TeamAttentionSummary = {
@@ -64,6 +70,16 @@ export type TeamAttentionSummary = {
   unownedActiveTasks: number
   errorMembers: number
   paneLostMembers: number
+}
+
+export type TaskReferenceSummary = {
+  total: number
+  hidden: number
+  folded: number
+}
+
+export type TeamRuntimeDiagnostics = {
+  outbox?: OutboxDiagnosticsSummary
 }
 
 export type GlobalTeamMailboxProjection = {
@@ -78,6 +94,8 @@ export type GlobalPanelData = {
   teams: TeamState[]
   teamSummaries: Record<string, TeamAttentionSummary>
   teamMailboxes: Record<string, GlobalTeamMailboxProjection>
+  teamDiagnostics: Record<string, TeamRuntimeDiagnostics>
+  quarantinedTeams: QuarantinedTeamSummary[]
   orphanPanes: GlobalPaneItem[]
 }
 
@@ -137,73 +155,32 @@ export function buildTeamAttentionSummary(
   return {
     blockedTasks: tasks.filter(task => task.status === 'blocked').length,
     unreadMessages: mailbox.filter(isMailboxMessageUnread).length,
-    blockedMessages: mailbox.filter(item => mailboxType(item) === 'blocked').length,
-    unownedActiveTasks: tasks.filter(task => task.status !== 'completed' && !task.owner).length,
+    blockedMessages: mailbox.filter(item => isMailboxMessageUnread(item) && mailboxType(item) === 'report_blocked').length,
+    unownedActiveTasks: tasks.filter(task => task.status !== 'done' && !task.owner).length,
     errorMembers: teammates.filter(member => member.status === 'error').length,
     paneLostMembers: teammates.filter(hasPaneLostAttention).length,
   }
 }
 
-function loadAttachedPanelData(teamName: string): AttachedPanelData | null {
-  const team = readTeamState(teamName)
-  if (!team) return null
-  ensureTeamStorageReady(team)
-  if (reconcileTeamPanes(team, { force: true })) {
-    updateTeamState(team.name, () => team)
-  }
-  const members = Object.values(team.members)
-    .filter(member => member.name !== TEAM_LEAD)
-    .sort((a, b) => a.name.localeCompare(b.name))
-  const tasks = Object.values(team.tasks).sort((a, b) => a.id.localeCompare(b.id))
-  const mailbox = (readMailbox(teamName, TEAM_LEAD) as LeaderMailboxItem[])
-    .slice()
-    .sort((a, b) => b.createdAt - a.createdAt)
-  return { mode: 'attached', team, members, tasks, mailbox }
-}
-
-function loadGlobalPanelData(): GlobalPanelData {
-  const teams = listTeams()
-  const teamSummaries: Record<string, TeamAttentionSummary> = {}
-  const teamMailboxes: Record<string, GlobalTeamMailboxProjection> = {}
-  const knownPaneIds = new Set<string>()
-  for (const team of teams) {
-    ensureTeamStorageReady(team)
-    if (reconcileTeamPanes(team, { force: true })) {
-      updateTeamState(team.name, () => team)
-    }
-    for (const member of Object.values(team.members)) {
-      if (member.paneId) knownPaneIds.add(member.paneId)
-    }
-    const leaderMailbox = readMailbox(team.name, TEAM_LEAD)
-    const latestAttention = leaderMailbox
-      .filter(item => isMailboxMessageUnread(item) || mailboxType(item) === 'blocked')
-      .sort((a, b) => b.createdAt - a.createdAt)[0]
-    teamSummaries[team.name] = buildTeamAttentionSummary(team, leaderMailbox)
-    teamMailboxes[team.name] = {
-      total: leaderMailbox.length,
-      unread: leaderMailbox.filter(isMailboxMessageUnread).length,
-      blocked: leaderMailbox.filter(item => mailboxType(item) === 'blocked').length,
-      latestAttention,
-    }
-  }
-
-  const orphanPanes = listAgentTeamPanes()
-    .filter(pane => !knownPaneIds.has(pane.paneId))
-    .sort((a, b) => a.paneId.localeCompare(b.paneId))
-
-  return { mode: 'global', teams, teamSummaries, teamMailboxes, orphanPanes }
-}
-
-export function loadPanelData(teamName?: string | null): PanelData {
-  if (teamName) {
-    const attached = loadAttachedPanelData(teamName)
-    if (attached) return attached
-  }
-  return loadGlobalPanelData()
-}
-
 export function mailboxType(item: LeaderMailboxItem): TeamMessageType {
-  return normalizeMessageType(item.type as string)
+  return displayMessageType(item.type as string)
+}
+
+export { isCommunicationReferenceNote, latestVisibleTaskNote, visibleTaskNotes }
+
+export function taskReferenceSummary(task: Pick<TeamTask, 'notes'>): TaskReferenceSummary {
+  return task.notes.reduce<TaskReferenceSummary>((summary, note) => {
+    if (!isCommunicationReferenceNote(note)) return summary
+    const displayMode = inferTaskNoteDisplayMode(note)
+    summary.total += 1
+    if (displayMode === 'hidden') summary.hidden += 1
+    else summary.folded += 1
+    return summary
+  }, { total: 0, hidden: 0, folded: 0 })
+}
+
+export function hasUnreadBlockedReportAttention(item: LeaderMailboxItem): boolean {
+  return isMailboxMessageUnread(item) && mailboxType(item) === 'report_blocked'
 }
 
 function sortMailboxByUrgency(items: LeaderMailboxItem[]): LeaderMailboxItem[] {
