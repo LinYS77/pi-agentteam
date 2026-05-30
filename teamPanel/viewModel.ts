@@ -20,8 +20,9 @@ export type GlobalPaneItem = {
   currentCommand: string
 }
 
-export type FocusSection = 'members' | 'tasks' | 'mailbox' | 'teams' | 'panes'
+export type FocusSection = 'cockpit' | 'members' | 'tasks' | 'mailbox' | 'teams' | 'panes'
 export type PanelInteractionMode = 'browse' | 'action-menu'
+export type PanelScrollFocus = 'list' | 'detail'
 
 export type TeamPanelResult =
   | { type: 'close' }
@@ -40,18 +41,23 @@ export type PanelActionId =
   | 'cleanup-all'
   | 'recover-team'
 
+export type PanelActionSection = 'selected' | 'maintenance' | 'danger'
+
 export type PanelAction = {
   id: PanelActionId
   label: string
   description?: string
   danger?: boolean
   result?: TeamPanelResult
+  section?: PanelActionSection
 }
 
 export type PanelActionMenu = {
   title: string
   actions: PanelAction[]
   selectedIndex: number
+  confirmingAction?: PanelAction
+  confirmSelectedIndex?: number
 }
 
 export type AttachedPanelData = {
@@ -103,19 +109,34 @@ export type PanelData = AttachedPanelData | GlobalPanelData
 
 export type TeamPanelState = {
   focus: FocusSection
+  /** Legacy active-row alias retained while input/render slices move to per-tab state. */
   selectedIndex: number
+  cockpitSelectedIndex: number
+  tasksSelectedIndex: number
+  mailboxSelectedIndex: number
+  membersSelectedIndex: number
+  teamsSelectedIndex: number
+  panesSelectedIndex: number
+  /** Legacy aliases retained for current rendering/tests until the layout slice finishes. */
   selectedMemberIndex: number
   selectedTeamIndex: number
   selectedPaneIndex: number
+  scrollFocus: PanelScrollFocus
   isDetailExpanded: boolean
   detailScrollOffset: number
   interactionMode: PanelInteractionMode
   actionMenu?: PanelActionMenu
 }
 
+export type CockpitQueueItem =
+  | { kind: 'task'; task: TeamTask; attention: string[] }
+  | { kind: 'mailbox'; message: LeaderMailboxItem; attention: string[] }
+
 export type PanelSelectionView = {
   visibleTasks: TeamTask[]
   visibleMailbox: LeaderMailboxItem[]
+  cockpitQueue: CockpitQueueItem[]
+  selectedCockpitItem?: CockpitQueueItem
   selectedTask?: TeamTask
   selectedMailbox?: LeaderMailboxItem
   selectedMember?: TeamMember
@@ -125,11 +146,18 @@ export type PanelSelectionView = {
 
 export function createInitialPanelState(): TeamPanelState {
   return {
-    focus: 'members',
+    focus: 'cockpit',
     selectedIndex: 0,
+    cockpitSelectedIndex: 0,
+    tasksSelectedIndex: 0,
+    mailboxSelectedIndex: 0,
+    membersSelectedIndex: 0,
+    teamsSelectedIndex: 0,
+    panesSelectedIndex: 0,
     selectedMemberIndex: 0,
     selectedTeamIndex: 0,
     selectedPaneIndex: 0,
+    scrollFocus: 'list',
     isDetailExpanded: false,
     detailScrollOffset: 0,
     interactionMode: 'browse',
@@ -199,72 +227,166 @@ function filterMailboxItems(
   return sortMailboxByUrgency(mailbox)
 }
 
+function taskAttentionLabels(task: TeamTask): string[] {
+  return [
+    task.status === 'blocked' ? 'blocked' : '',
+    task.status !== 'done' && !task.owner ? 'unowned' : '',
+  ].filter(Boolean)
+}
+
+function mailboxAttentionLabels(item: LeaderMailboxItem): string[] {
+  return [
+    isMailboxMessageUnread(item) ? 'unread' : '',
+    hasUnreadBlockedReportAttention(item) ? 'blocked report' : '',
+  ].filter(Boolean)
+}
+
 function getVisibleTasks(
   data: AttachedPanelData,
 ): TeamTask[] {
   return data.tasks
 }
 
+export function buildCockpitQueue(
+  tasks: TeamTask[],
+  mailbox: LeaderMailboxItem[],
+): CockpitQueueItem[] {
+  const taskItems = tasks
+    .filter(task => task.status !== 'done')
+    .map(task => ({ kind: 'task' as const, task, attention: taskAttentionLabels(task) }))
+  const mailboxItems = sortMailboxByUrgency(mailbox)
+    .filter(item => isMailboxMessageUnread(item))
+    .map(message => ({ kind: 'mailbox' as const, message, attention: mailboxAttentionLabels(message) }))
+
+  return [...taskItems, ...mailboxItems].sort((a, b) => {
+    const rank = (item: CockpitQueueItem) => {
+      if (item.kind === 'task' && item.task.status === 'blocked') return 0
+      if (item.kind === 'mailbox' && hasUnreadBlockedReportAttention(item.message)) return 1
+      if (item.kind === 'task' && !item.task.owner) return 2
+      if (item.kind === 'mailbox') return 3
+      return 4
+    }
+    const time = (item: CockpitQueueItem) => item.kind === 'task' ? item.task.updatedAt : item.message.createdAt
+    return rank(a) - rank(b) || time(b) - time(a)
+  })
+}
+
 function isAttachedFocus(focus: FocusSection): boolean {
-  return focus === 'members' || focus === 'tasks' || focus === 'mailbox'
+  return focus === 'cockpit' || focus === 'members' || focus === 'tasks' || focus === 'mailbox'
 }
 
 function isGlobalFocus(focus: FocusSection): boolean {
   return focus === 'teams' || focus === 'panes'
 }
 
+function clampIndex(value: number | undefined, count: number): number {
+  if (count <= 0) return 0
+  return Math.max(0, Math.min(value ?? 0, count - 1))
+}
+
+function normalizeLegacySelectedIndices(state: TeamPanelState): void {
+  if (state.focus === 'members') state.membersSelectedIndex = state.selectedIndex
+  else state.membersSelectedIndex = state.selectedMemberIndex ?? state.membersSelectedIndex
+
+  if (state.focus === 'teams') state.teamsSelectedIndex = state.selectedIndex
+  else state.teamsSelectedIndex = state.selectedTeamIndex ?? state.teamsSelectedIndex
+
+  if (state.focus === 'panes') state.panesSelectedIndex = state.selectedIndex
+  else state.panesSelectedIndex = state.selectedPaneIndex ?? state.panesSelectedIndex
+
+  if (state.focus === 'cockpit') state.cockpitSelectedIndex = state.selectedIndex
+  if (state.focus === 'tasks') state.tasksSelectedIndex = state.selectedIndex
+  if (state.focus === 'mailbox') state.mailboxSelectedIndex = state.selectedIndex
+}
+
+function getStoredIndex(state: TeamPanelState, focus: FocusSection): number {
+  if (focus === 'cockpit') return state.cockpitSelectedIndex
+  if (focus === 'members') return state.membersSelectedIndex
+  if (focus === 'tasks') return state.tasksSelectedIndex
+  if (focus === 'mailbox') return state.mailboxSelectedIndex
+  if (focus === 'teams') return state.teamsSelectedIndex
+  return state.panesSelectedIndex
+}
+
+function setStoredIndex(state: TeamPanelState, focus: FocusSection, value: number): void {
+  if (focus === 'cockpit') state.cockpitSelectedIndex = value
+  else if (focus === 'members') state.membersSelectedIndex = value
+  else if (focus === 'tasks') state.tasksSelectedIndex = value
+  else if (focus === 'mailbox') state.mailboxSelectedIndex = value
+  else if (focus === 'teams') state.teamsSelectedIndex = value
+  else state.panesSelectedIndex = value
+
+  if (focus === 'members') state.selectedMemberIndex = value
+  if (focus === 'teams') state.selectedTeamIndex = value
+  if (focus === 'panes') state.selectedPaneIndex = value
+}
+
+export function syncPanelActiveIndex(state: TeamPanelState): void {
+  const activeIndex = getStoredIndex(state, state.focus)
+  state.selectedIndex = activeIndex
+  state.selectedMemberIndex = state.membersSelectedIndex
+  state.selectedTeamIndex = state.teamsSelectedIndex
+  state.selectedPaneIndex = state.panesSelectedIndex
+}
+
+export function syncPanelSelectedIndex(state: TeamPanelState): void {
+  setStoredIndex(state, state.focus, state.selectedIndex)
+}
+
 function getSectionCount(
   data: PanelData,
   state: TeamPanelState,
+  cockpitQueue?: CockpitQueueItem[],
 ): number {
   if (data.mode === 'global') {
     if (state.focus === 'panes') return data.orphanPanes.length
     return data.teams.length
   }
+  if (state.focus === 'cockpit') return cockpitQueue?.length ?? buildCockpitQueue(getVisibleTasks(data), filterMailboxItems(data.mailbox)).length
   if (state.focus === 'members') return data.members.length
   if (state.focus === 'tasks') return getVisibleTasks(data).length
   return filterMailboxItems(data.mailbox).length
+}
+
+export function getPanelActiveSelectedIndex(state: TeamPanelState): number {
+  return state.selectedIndex
 }
 
 export function clampPanelStateToData(
   state: TeamPanelState,
   data: PanelData,
 ): void {
+  normalizeLegacySelectedIndices(state)
+
   if (data.mode === 'attached' && !isAttachedFocus(state.focus)) {
-    state.focus = 'members'
-    state.selectedIndex = state.selectedMemberIndex
+    state.focus = 'cockpit'
   }
   if (data.mode === 'global' && !isGlobalFocus(state.focus)) {
     state.focus = 'teams'
-    state.selectedIndex = state.selectedTeamIndex
   }
+
+  if (state.scrollFocus !== 'detail') state.scrollFocus = 'list'
 
   if (data.mode === 'attached') {
-    state.selectedMemberIndex = data.members.length === 0
-      ? 0
-      : Math.max(0, Math.min(state.selectedMemberIndex, data.members.length - 1))
+    const visibleTasks = getVisibleTasks(data)
+    const visibleMailbox = filterMailboxItems(data.mailbox)
+    const cockpitQueue = buildCockpitQueue(visibleTasks, visibleMailbox)
+    state.cockpitSelectedIndex = clampIndex(state.cockpitSelectedIndex, cockpitQueue.length)
+    state.membersSelectedIndex = clampIndex(state.membersSelectedIndex, data.members.length)
+    state.tasksSelectedIndex = clampIndex(state.tasksSelectedIndex, visibleTasks.length)
+    state.mailboxSelectedIndex = clampIndex(state.mailboxSelectedIndex, visibleMailbox.length)
+    state.selectedMemberIndex = state.membersSelectedIndex
+    state.selectedTeamIndex = state.teamsSelectedIndex
+    state.selectedPaneIndex = state.panesSelectedIndex
+    state.selectedIndex = clampIndex(getStoredIndex(state, state.focus), getSectionCount(data, state, cockpitQueue))
+    setStoredIndex(state, state.focus, state.selectedIndex)
   } else {
-    state.selectedTeamIndex = data.teams.length === 0
-      ? 0
-      : Math.max(0, Math.min(state.selectedTeamIndex, data.teams.length - 1))
-    state.selectedPaneIndex = data.orphanPanes.length === 0
-      ? 0
-      : Math.max(0, Math.min(state.selectedPaneIndex, data.orphanPanes.length - 1))
-  }
-
-  const count = getSectionCount(data, state)
-  state.selectedIndex = count === 0
-    ? 0
-    : Math.max(0, Math.min(state.selectedIndex, count - 1))
-
-  if (data.mode === 'attached' && state.focus === 'members') {
-    state.selectedIndex = state.selectedMemberIndex
-  }
-  if (data.mode === 'global' && state.focus === 'teams') {
-    state.selectedIndex = state.selectedTeamIndex
-  }
-  if (data.mode === 'global' && state.focus === 'panes') {
-    state.selectedIndex = state.selectedPaneIndex
+    state.teamsSelectedIndex = clampIndex(state.teamsSelectedIndex, data.teams.length)
+    state.panesSelectedIndex = clampIndex(state.panesSelectedIndex, data.orphanPanes.length)
+    state.selectedTeamIndex = state.teamsSelectedIndex
+    state.selectedPaneIndex = state.panesSelectedIndex
+    state.selectedIndex = clampIndex(getStoredIndex(state, state.focus), getSectionCount(data, state))
+    setStoredIndex(state, state.focus, state.selectedIndex)
   }
 
   if (state.actionMenu) {
@@ -278,23 +400,35 @@ export function buildPanelSelectionView(
   data: PanelData,
   state: TeamPanelState,
 ): PanelSelectionView {
+  normalizeLegacySelectedIndices(state)
+
   if (data.mode === 'global') {
+    const teamIndex = state.focus === 'teams' ? state.selectedIndex : state.teamsSelectedIndex
+    const paneIndex = state.focus === 'panes' ? state.selectedIndex : state.panesSelectedIndex
     return {
       visibleTasks: [],
       visibleMailbox: [],
-      selectedTeam: data.teams[state.focus === 'teams' ? state.selectedIndex : state.selectedTeamIndex],
-      selectedPane: data.orphanPanes[state.focus === 'panes' ? state.selectedIndex : state.selectedPaneIndex],
+      cockpitQueue: [],
+      selectedTeam: data.teams[teamIndex],
+      selectedPane: data.orphanPanes[paneIndex],
     }
   }
 
   const visibleTasks = getVisibleTasks(data)
   const visibleMailbox = filterMailboxItems(data.mailbox)
+  const cockpitQueue = buildCockpitQueue(visibleTasks, visibleMailbox)
+  const cockpitIndex = state.focus === 'cockpit' ? state.selectedIndex : state.cockpitSelectedIndex
+  const taskIndex = state.focus === 'tasks' ? state.selectedIndex : state.tasksSelectedIndex
+  const mailboxIndex = state.focus === 'mailbox' ? state.selectedIndex : state.mailboxSelectedIndex
+  const memberIndex = state.focus === 'members' ? state.selectedIndex : state.membersSelectedIndex
 
   return {
     visibleTasks,
     visibleMailbox,
-    selectedTask: visibleTasks[state.focus === 'tasks' ? state.selectedIndex : 0],
-    selectedMailbox: visibleMailbox[state.focus === 'mailbox' ? state.selectedIndex : 0],
-    selectedMember: data.members[state.selectedMemberIndex],
+    cockpitQueue,
+    selectedCockpitItem: cockpitQueue[cockpitIndex],
+    selectedTask: visibleTasks[taskIndex],
+    selectedMailbox: visibleMailbox[mailboxIndex],
+    selectedMember: data.members[memberIndex],
   }
 }

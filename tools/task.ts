@@ -1,11 +1,13 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { StringEnum } from '@earendil-works/pi-ai'
 import { Type } from 'typebox'
+import { TASK_STATUSES } from '../core/publicModel.js'
+import { TEAM_TASK_ACTIONS } from '../core/taskActions.js'
 import type { ToolHandlerDeps } from './shared.js'
 import { executeTaskAction } from './taskService.js'
 
 const TeamTaskParams = Type.Object({
-  action: StringEnum(['create', 'assign', 'block', 'unblock', 'close', 'note', 'report_done', 'report_blocked', 'list'] as const),
+  action: StringEnum(TEAM_TASK_ACTIONS),
   taskId: Type.Optional(Type.String()),
   title: Type.Optional(Type.String()),
   description: Type.Optional(Type.String()),
@@ -13,7 +15,7 @@ const TeamTaskParams = Type.Object({
   note: Type.Optional(Type.String()),
   blockedBy: Type.Optional(Type.Array(Type.String())),
   status: Type.Optional(
-    StringEnum(['open', 'blocked', 'done'] as const, { description: 'For action=list, filter by task status.' }),
+    StringEnum(TASK_STATUSES, { description: 'For action=list, filter by task status.' }),
   ),
   limit: Type.Optional(Type.Number({ description: 'For action=list, maximum number of matching tasks to show.' })),
   all: Type.Optional(Type.Boolean({ description: 'For action=list, show all matching tasks instead of the concise default.' })),

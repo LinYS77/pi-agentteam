@@ -30,7 +30,8 @@ module.exports = {
     assert.equal(env.modules.deliveryPolicy.resolveDeliveryPolicy({ policy: undefined }).policy, 'bridge-only')
     assert.equal(env.modules.deliveryPolicy.resolveDeliveryPolicy({ policy: 'legacy' }).workerBridgeAutoStart, true)
     assert.equal(env.modules.deliveryPolicy.resolveDeliveryPolicy({ policy: 'bridge-only' }).workerBridgeAutoPump, true)
-    assert.equal(env.modules.deliveryPolicy.parseDeliveryPolicyName('bridge'), 'bridge-only')
+    assert.equal(env.modules.deliveryPolicy.parseDeliveryPolicyName('bridge-only'), 'bridge-only')
+    assert.equal(env.modules.deliveryPolicy.parseDeliveryPolicyName('bridge'), null, 'legacy bridge policy alias should not parse')
     assert.equal(env.modules.deliveryPolicy.parseDeliveryMode, undefined, 'deliveryMode compatibility parser should not be exported')
     assert.equal(env.modules.deliveryPolicy.normalizeDeliveryMode, undefined, 'deliveryMode compatibility normalizer should not be exported')
     assert.equal(env.modules.deliveryPolicy.DELIVERY_MODE_ENV_VAR, undefined, 'deliveryMode env alias should not be exported')
@@ -345,19 +346,8 @@ module.exports = {
     assert.equal(messageApplication.isLeaderAttentionPolicySource('question'), true)
     assert.equal(messageApplication.isLeaderAttentionPolicySource('report_done'), true)
     assert.equal(messageApplication.isLeaderAttentionPolicySource('inform'), false)
-    assert.equal(
-      messageApplication.enforcePlannerSendPolicy({ senderRole: 'planner', messageType: 'report_done' }),
-      null,
-    )
-    assert.equal(
-      messageApplication.shouldMirrorMessageToLeader({
-        sender: 'worker-a',
-        sentRecipients: ['worker-b'],
-        messageType: 'blocked',
-        leaderExists: true,
-      }),
-      false,
-    )
+    assert.equal(messageApplication.enforcePlannerSendPolicy, undefined, 'planner send no-op compatibility helper should be removed')
+    assert.equal(messageApplication.shouldMirrorMessageToLeader, undefined, 'peer-to-leader mirror no-op compatibility helper should be removed')
 
     const routingTeam = {
       members: {

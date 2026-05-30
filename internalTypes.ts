@@ -5,8 +5,10 @@
 // core/publicModel.ts and should not be presented as public API/tool schema.
 
 import type { MessageType, TaskReportType, TaskStatus } from './core/publicModel.js'
+import type { TaskNoteDisplayMode, TaskNoteSourceKind } from './core/taskNoteModel.js'
 
-export const TEAM_LEAD = 'team-lead'
+export { TEAM_LEAD } from './core/teamIdentity.js'
+export type { TaskNoteDisplayMode, TaskNoteSourceKind } from './core/taskNoteModel.js'
 
 export const WORKER_FSM_STATUSES = ['offline', 'idle', 'pending_delivery', 'queued', 'running', 'draining', 'error'] as const
 export type WorkerFsmStatus = typeof WORKER_FSM_STATUSES[number]
@@ -48,9 +50,6 @@ export type TeamMessageType = MessageType | TaskReportType
 
 export type TeamMessagePriority = 'low' | 'normal' | 'high'
 export type TeamMessageWakeHint = 'none' | 'soft' | 'hard'
-
-export type TaskNoteSourceKind = 'task_note' | 'task_report' | 'communication_ref' | 'legacy_communication_ref'
-export type TaskNoteDisplayMode = 'visible' | 'hidden' | 'folded'
 
 export type TaskNoteMetadata = Record<string, unknown> & {
   metadataVersion?: number

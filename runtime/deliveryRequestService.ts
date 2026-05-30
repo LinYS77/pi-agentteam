@@ -14,6 +14,10 @@ import {
   requestHasExpired,
   transitionDeliveryRequest,
 } from '../state/deliveryStore.js'
+// Guarded production boundary for delivery request lifecycle transitions.
+// The state/deliveryStore.ts module intentionally remains a low-level
+// persistence/normalization surface; bridge/runtime callers should use this
+// service for state transitions that require lifecycle, expiry, and claim guards.
 export type DeliveryRequestServiceInput = {
   teamName: string
   memberName: string

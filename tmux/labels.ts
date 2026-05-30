@@ -1,5 +1,6 @@
-import { projectWorkerHealth, type WorkerHealthProjectionInput } from '../core/workerHealth.js'
+import type { WorkerHealth } from '../core/publicModel.js'
 import type { TeamMember, TeamState } from '../internalTypes.js'
+import { projectTeamMemberHealth } from '../runtime/memberHealth.js'
 import { runTmuxNoThrowAsync } from './client.js'
 import { targetForPaneId, windowExists } from './core.js'
 
@@ -10,14 +11,8 @@ function roleIcon(member: TeamMember): string {
   return '👤'
 }
 
-function workerHealth(member: TeamMember): ReturnType<typeof projectWorkerHealth> {
-  const projection: WorkerHealthProjectionInput = {
-    isOperational: Boolean(member.paneId) && member.status !== 'offline',
-    hasError: member.status === 'error' || Boolean(member.bridgeLastError),
-    hasActiveTurn: member.status === 'running' || member.status === 'draining',
-    hasPendingWork: member.status === 'queued' || member.status === 'pending_delivery' || Boolean(member.bridgeWorkRequestedAt),
-  }
-  return projectWorkerHealth(projection)
+function workerHealth(member: TeamMember): WorkerHealth {
+  return projectTeamMemberHealth(member)
 }
 
 function statusWord(member: TeamMember): string {

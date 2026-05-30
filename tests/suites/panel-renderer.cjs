@@ -87,6 +87,16 @@ module.exports = {
       description: 'Unowned active task for attention rendering',
     })
     unownedTask.status = 'open'
+    const overflowTasks = []
+    for (let i = 0; i < 14; i += 1) {
+      const extraTask = modules.state.createTask(team, {
+        title: `Overflow full-height task ${i + 1}`,
+        description: `Overflow task fixture ${i + 1}`,
+      })
+      extraTask.status = 'open'
+      extraTask.owner = 'researcher-very-long-member-name-alpha'
+      overflowTasks.push(extraTask)
+    }
     modules.state.writeTeamState(team)
     modules.state.upsertBridgeLease(team.name, {
       memberName: 'planner-very-long-member-name-beta',
@@ -125,9 +135,93 @@ module.exports = {
     const state = modules.viewModel.createInitialPanelState()
     modules.viewModel.clampPanelStateToData(state, data)
     let selection = modules.viewModel.buildPanelSelectionView(data, state)
-    assert.ok(selection.selectedMember, 'member details should be available when members section is focused')
+    assert.equal(state.focus, 'cockpit', 'attached panel should start on interactive cockpit tab focus')
+    assert.equal(state.scrollFocus, 'list', 'panel scroll focus should default to list')
+    assert.ok(selection.selectedMember, 'member details should be available when members section is not focused')
     assert.ok(selection.selectedTask, 'task details should be available even when tasks section is not focused')
     assert.equal(selection.selectedMailbox?.id, blockedMailbox.id, 'mailbox defaults should show urgent blocked messages first')
+    assert.ok(selection.cockpitQueue.some(item => item.kind === 'task' && item.task.id === blockedTask.id), 'cockpit queue should include blocked tasks')
+    assert.ok(selection.cockpitQueue.some(item => item.kind === 'mailbox' && item.message.id === blockedMailbox.id), 'cockpit queue should include unread mailbox attention')
+    assert.ok(selection.selectedCockpitItem, 'cockpit focus should expose the selected queue item')
+    assert.equal(selection.selectedCockpitItem.kind, 'task', 'cockpit defaults should select the highest-priority queue item')
+    assert.equal(selection.selectedCockpitItem.task.id, blockedTask.id, 'cockpit default selection should prioritize blocked tasks')
+
+    state.focus = 'tasks'
+    state.selectedIndex = data.tasks.findIndex(item => item.id === blockedTask.id)
+    selection = modules.viewModel.buildPanelSelectionView(data, state)
+    assert.equal(selection.selectedTask?.id, blockedTask.id, 'legacy selectedIndex should bridge into task selection')
+    state.focus = 'mailbox'
+    state.selectedIndex = 1
+    selection = modules.viewModel.buildPanelSelectionView(data, state)
+    const sortedMailbox = data.mailbox.slice().sort((a, b) => modules.protocol.mailboxUrgencyRank(modules.viewModel.mailboxType(a), a.priority) - modules.protocol.mailboxUrgencyRank(modules.viewModel.mailboxType(b), b.priority) || b.createdAt - a.createdAt)
+    assert.equal(state.mailboxSelectedIndex, 1, 'legacy selectedIndex should sync to mailbox per-tab index')
+    assert.equal(selection.selectedMailbox?.id, sortedMailbox[1]?.id, 'mailbox selection should follow mailbox per-tab index')
+    state.focus = 'tasks'
+    modules.viewModel.syncPanelActiveIndex(state)
+    assert.equal(state.selectedIndex, state.tasksSelectedIndex, 'active focus should restore its per-tab selectedIndex')
+    selection = modules.viewModel.buildPanelSelectionView(data, state)
+    assert.equal(selection.selectedMailbox?.id, sortedMailbox[1]?.id, 'mailbox per-tab selection should survive leaving mailbox focus')
+
+    const hotkeyInput = helpers.requireDist('teamPanel/input.js')
+    const hotkeyKeys = helpers.tuiKeys
+    const hotkeyState = modules.viewModel.createInitialPanelState()
+    modules.viewModel.clampPanelStateToData(hotkeyState, data)
+    let hotkeySelection = modules.viewModel.buildPanelSelectionView(data, hotkeyState)
+    let hotkeyRenderCount = 0
+    let hotkeyClosed = false
+    const hotkeyDeps = {
+      done: result => { hotkeyClosed = result.type === 'close' },
+      refresh: () => {},
+      requestRender: () => { hotkeyRenderCount += 1 },
+    }
+    const sendPanelKey = key => {
+      hotkeySelection = modules.viewModel.buildPanelSelectionView(data, hotkeyState)
+      hotkeyInput.handleTeamPanelInput(key, data, hotkeyState, hotkeySelection, hotkeyDeps)
+    }
+
+    sendPanelKey(hotkeyKeys.tab)
+    assert.equal(hotkeyState.focus, 'tasks', 'Tab should move cockpit -> tasks')
+    sendPanelKey(hotkeyKeys.tab)
+    assert.equal(hotkeyState.focus, 'mailbox', 'Tab should move tasks -> mailbox')
+    sendPanelKey(hotkeyKeys.shift(hotkeyKeys.tab))
+    assert.equal(hotkeyState.focus, 'tasks', 'Shift+Tab should reverse tab order')
+    sendPanelKey('4')
+    assert.equal(hotkeyState.focus, 'members', 'numeric hotkey 4 should focus members')
+    sendPanelKey('1')
+    assert.equal(hotkeyState.focus, 'cockpit', 'numeric hotkey 1 should focus cockpit')
+    assert.equal(hotkeyState.scrollFocus, 'list', 'tab/hotkey focus changes should keep list scroll focus')
+
+    sendPanelKey('2')
+    assert.equal(hotkeyState.focus, 'tasks', 'numeric hotkey 2 should focus tasks')
+    sendPanelKey(hotkeyKeys.down)
+    assert.equal(hotkeyState.tasksSelectedIndex, 1, 'Down in list scroll focus should move active list selection')
+    assert.equal(hotkeyState.detailScrollOffset, 0, 'list navigation should reset detail scroll')
+    sendPanelKey(hotkeyKeys.right)
+    assert.equal(hotkeyState.scrollFocus, 'detail', 'Right should move scroll focus to detail')
+    sendPanelKey(hotkeyKeys.down)
+    assert.equal(hotkeyState.tasksSelectedIndex, 1, 'Down in detail scroll focus should preserve list selection')
+    assert.equal(hotkeyState.detailScrollOffset, 1, 'Down in detail scroll focus should scroll details')
+    sendPanelKey(hotkeyKeys.left)
+    assert.equal(hotkeyState.scrollFocus, 'list', 'Left should return scroll focus to list')
+    sendPanelKey('e')
+    assert.equal(hotkeyState.scrollFocus, 'detail', 'e should move scroll focus to detail')
+    sendPanelKey(hotkeyKeys.escape)
+    assert.equal(hotkeyState.scrollFocus, 'list', 'Esc from detail focus should return to list without closing')
+    assert.equal(hotkeyClosed, false, 'Esc from detail focus should not close panel')
+    sendPanelKey('a')
+    assert.equal(hotkeyState.interactionMode, 'action-menu', 'a should open team/global actions')
+    assert.ok(hotkeyState.actionMenu, 'a should populate action menu')
+    assert.equal(hotkeyState.actionMenu.title, 'Team actions for render-suite', 'a should use team action scope')
+    assert.ok(!hotkeyState.actionMenu.actions.some(action => (action.section ?? 'selected') === 'selected'), 'team actions should not include selected-item actions')
+    hotkeyState.interactionMode = 'browse'
+    hotkeyState.actionMenu = undefined
+    sendPanelKey(hotkeyKeys.enter)
+    assert.equal(hotkeyState.interactionMode, 'action-menu', 'Enter should open contextual actions from list focus')
+    assert.ok(hotkeyState.actionMenu.title.includes('task'), 'Enter should use selected item context action scope')
+    assert.ok(hotkeyState.actionMenu.actions.some(action => (action.section ?? 'selected') === 'selected'), 'context actions should include selected-item actions')
+    assert.equal(hotkeyState.actionMenu.actions.some(action => action.id === 'sync'), false, 'context task actions should not include team maintenance')
+    assert.equal(hotkeyState.actionMenu.actions.some(action => action.id === 'delete-team'), false, 'context task actions should not include team danger maintenance')
+    assert.ok(hotkeyRenderCount > 0, 'hotkey input should request rerender')
 
     const memberLabel = modules.tmuxLabels.formatMemberPaneLabel(data.team.members['researcher-very-long-member-name-alpha'])
     assert.ok(memberLabel.includes('busy'), 'tmux worker pane label should use public worker health')
@@ -142,24 +236,72 @@ module.exports = {
     assert.equal(summary.unreadMessages, 2, 'attention summary should count unread leader mailbox messages')
     assert.equal(summary.unownedActiveTasks, 1, 'attention summary should count unowned active tasks')
 
+    state.focus = 'cockpit'
+    state.selectedIndex = 0
+    state.cockpitSelectedIndex = 0
+    selection = modules.viewModel.buildPanelSelectionView(data, state)
+    const cockpitLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data, state, selection })
+    assert.ok(cockpitLines.some(line => line.includes('☰ Cockpit')), 'active cockpit/tab title should identify the interactive cockpit tab')
+    const staleCockpitPhrase = ['Work', 'queue'].join(' ')
+    assert.equal(cockpitLines.some(line => line.includes(staleCockpitPhrase)), false, 'cockpit tab should not use stale passive queue wording')
+
     state.focus = 'tasks'
     state.selectedIndex = 0
     selection = modules.viewModel.buildPanelSelectionView(data, state)
     assert.equal(selection.selectedTask?.id, task.id, 'task details should follow task selection')
 
     const attachedLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data, state, selection })
-    assert.ok(attachedLines.some(line => line.includes('Attention') && line.includes('blocked task')), 'overview should include blocked task attention')
-    assert.ok(attachedLines.some(line => line.includes('unread')), 'overview/list should include unread attention')
-    assert.ok(attachedLines.some(line => line.includes('unowned')), 'overview/list should include unowned task attention')
-    assert.ok(attachedLines.some(line => line.includes('Name') && line.includes('Health') && line.includes('Context')), 'member list should include a lightweight column header')
-    assert.ok(attachedLines.some(line => line.includes('Task') && line.includes('Title') && line.includes('Owner')), 'task list should include a lightweight column header')
-    assert.ok(attachedLines.some(line => line.includes('From') && line.includes('Summary') && line.includes('Time')), 'mailbox list should include a lightweight column header')
+    assert.ok(attachedLines.some(line => line.includes('Cockpit')), 'attached master-detail layout should expose cockpit tab')
+    assert.ok(attachedLines.some(line => line.includes('● Tasks')), 'attached master-detail layout should expose active tasks tab with simple bullet')
+    assert.ok(attachedLines.some(line => line.includes('Mail')), 'attached master-detail layout should expose mailbox tab')
+    assert.ok(attachedLines.some(line => line.includes('Members')), 'attached master-detail layout should expose members tab')
+    assert.equal(attachedLines.some(line => line.includes('[1]') || line.includes('[2]') || line.includes('[3]') || line.includes('[4]')), false, 'attached tabs should not render numeric-box labels')
+    const attachedTabLine = attachedLines.find(line => line.includes('● Tasks')) ?? ''
+    assert.equal(attachedTabLine.includes('[') || attachedTabLine.includes(']'), false, 'attached tabs should not render square bracket chrome')
+    assert.equal(attachedLines.some(line => line.includes('◆') || line.includes('◇')), false, 'attached tabs should not render extra glyph markers')
+    assert.equal(attachedLines.some(line => line.includes('Cockpit 0')), false, 'attached tabs should hide zero counts')
+    assert.ok(attachedLines.some(line => line.includes('Tasks (') && line.includes('Mail (') && line.includes('Members (')), 'attached tabs should render non-zero counts as parenthesized badges')
+    const attachedHeaderIndex = attachedLines.findIndex(line => line.includes('✦') && line.includes('● Tasks'))
+    assert.ok(attachedHeaderIndex >= 0, 'wide attached header should combine team identity/attention and tabs on one line')
+    const attachedHeaderLine = attachedLines[attachedHeaderIndex]
+    const attachedFirstBoxIndex = attachedLines.findIndex(line => line.includes('╭'))
+    const attachedGridLine = attachedLines[attachedFirstBoxIndex]
+    assert.ok(helpers.visibleWidth(attachedHeaderLine) <= helpers.visibleWidth(attachedGridLine) - 1, 'wide attached header tabs should end within the visual box grid edge')
+    assert.ok(helpers.visibleWidth(attachedHeaderLine) >= helpers.visibleWidth(attachedGridLine) - 3, 'wide attached header tabs should keep a small, stable right-edge inset')
+    assert.equal(attachedLines.some(line => line === '─'.repeat(180)), false, 'attached header should not render a full-width separator')
+    assert.equal(attachedLines[attachedHeaderIndex + 1], '', 'wide attached boxes should follow header after one blank spacer')
+    assert.equal(attachedLines.slice(0, attachedFirstBoxIndex).some(line => line.includes('↑↓ move') || line.includes('Enter item') || line.includes('Tab/1-4')), false, 'attached header should not render persistent keyboard help')
+    assert.ok(attachedLines.some(line => line.includes('↑↓ move') && line.includes('Enter item') && line.includes('a team')), 'attached master footer should distinguish item and team action scopes')
+    assert.equal(attachedLines.some(line => line.includes('⌨') || line.includes('→/e') || line.includes('Esc close')), false, 'attached keyboard hints should stay short and subtle')
+    assert.equal(attachedLines.some(line => line.includes('👥 Members ◇') || line.includes('📋 Tasks ○') || line.includes('📬 Mail')), false, 'attached overview should not render the verbose status rollup')
+    assert.ok(attachedLines.some(line => line.includes('Enter') && line.includes('item') && line.includes('a') && line.includes('team')), 'attached footer hint should distinguish item and team action scopes')
+    assert.ok(attachedLines.some(line => line.includes('Task') && line.includes('Title') && line.includes('Owner')), 'active task master list should include task columns')
+    assert.equal(attachedLines.some(line => line.includes('Name') && line.includes('Health') && line.includes('Context')), false, 'wide attached layout should not render inactive members list simultaneously')
+    assert.equal(attachedLines.some(line => line.includes('From') && line.includes('Summary') && line.includes('Time')), false, 'wide attached layout should not render inactive mailbox list simultaneously')
+    const attachedTopBorderCount = attachedLines.join('\n').split('╭').length - 1
+    assert.equal(attachedTopBorderCount, 2, 'wide attached layout should render exactly master and detail boxes')
     assert.ok(attachedLines.some(line => line.includes('Status')), 'overview/detail hierarchy should show a section label')
     assert.ok(attachedLines.some(line => line.includes('Content')), 'task detail hierarchy should show a content section label')
     assert.ok(attachedLines.some(line => line.includes('Latest note') && line.includes('substantive render note')), 'task details should show latest substantive note')
     assert.ok(attachedLines.some(line => line.includes('Refs') && line.includes('2 folded')), 'collapsed task details should show compact folded ref count')
     assert.equal(attachedLines.some(line => line.includes('legacy render handoff')), false, 'task details should hide legacy communication refs from latest note')
     assert.equal(attachedLines.some(line => line.includes('mailbox-hidden-render-ref')), false, 'task details should not leak hidden communication ref ids by default')
+
+    const narrowAttachedLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 96, height: 40, data, state, selection })
+    const narrowTitleIndex = narrowAttachedLines.findIndex(line => line.includes('✦'))
+    const narrowTabIndex = narrowAttachedLines.findIndex(line => line.includes('● Tasks'))
+    const narrowFirstBoxIndex = narrowAttachedLines.findIndex(line => line.includes('╭'))
+    assert.ok(narrowTitleIndex >= 0 && narrowTabIndex > narrowTitleIndex, 'narrow attached header should stack identity above tabs')
+    assert.equal(narrowAttachedLines.some(line => line === '─'.repeat(96)), false, 'narrow attached header should not render a full-width separator')
+    assert.equal(narrowAttachedLines[narrowTabIndex + 1], '', 'narrow attached boxes should follow stacked header after one blank spacer')
+    assert.equal(narrowAttachedLines.slice(0, narrowFirstBoxIndex).some(line => line.includes('↑↓ move') || line.includes('Enter item') || line.includes('Tab/1-4')), false, 'narrow attached header should not render persistent keyboard help')
+    const narrowTopBorderCount = narrowAttachedLines.join('\n').split('╭').length - 1
+    assert.equal(narrowTopBorderCount, 2, 'narrow attached layout should stack exactly master and detail boxes')
+    const narrowMasterIndex = narrowAttachedLines.findIndex(line => line.includes('📋 Tasks'))
+    const narrowDetailIndex = narrowAttachedLines.findIndex(line => line.includes('🔎 Details'))
+    assert.ok(narrowMasterIndex >= 0 && narrowDetailIndex > narrowMasterIndex, 'narrow attached layout should stack master above detail')
+    assert.equal(narrowAttachedLines.some(line => line.includes('👥 Members (')), false, 'narrow attached layout should not render inactive members box')
+    assert.equal(narrowAttachedLines.some(line => line.includes('📬 Mailbox (')), false, 'narrow attached layout should not render inactive mailbox box')
 
     state.focus = 'tasks'
     state.selectedIndex = data.tasks.findIndex(item => item.id === blockedTask.id)
@@ -172,11 +314,21 @@ module.exports = {
     const unownedTaskLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data, state, selection })
     assert.ok(unownedTaskLines.some(line => line.includes(unownedTask.id) && line.includes('unowned')), 'unowned task row should include attention marker')
 
+    state.selectedIndex = data.tasks.findIndex(item => item.id === overflowTasks[12].id)
+    state.tasksSelectedIndex = state.selectedIndex
+    selection = modules.viewModel.buildPanelSelectionView(data, state)
+    const fullHeightTaskLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data, state, selection })
+    const visibleOverflowRows = fullHeightTaskLines.filter(line => line.includes('Overflow full-height task')).length
+    assert.ok(visibleOverflowRows > 6, `full-height task master should render more than old fixed 6-row window, got ${visibleOverflowRows}`)
+    assert.ok(fullHeightTaskLines.some(line => line.includes(overflowTasks[12].id)), 'full-height task master should keep far selected task visible')
+
     state.focus = 'mailbox'
     state.selectedIndex = 0
+    state.mailboxSelectedIndex = 0
     selection = modules.viewModel.buildPanelSelectionView(data, state)
     const mailboxLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data, state, selection })
-    assert.ok(mailboxLines.some(line => line.includes('Blocked on missing decision') && line.includes('unread') && line.includes('blocked')), 'blocked unread mailbox row should include attention markers')
+    assert.ok(mailboxLines.some(line => line.includes('Blocked on missing decision')), 'blocked unread mailbox row should render in active mailbox master list')
+    assert.ok(mailboxLines.some(line => line.includes('unread blocked')), 'mailbox rendering should keep unread blocked report attention markers')
     const readBlockedMailbox = modules.state.readMailbox('render-suite', 'team-lead')
     const readBlockedMailboxItem = readBlockedMailbox.find(item => item.id === blockedMailbox.id)
     readBlockedMailboxItem.readAt = Date.now()
@@ -193,16 +345,17 @@ module.exports = {
     const readBlockedSelection = modules.viewModel.buildPanelSelectionView(readBlockedData, readBlockedState)
     const readBlockedLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: readBlockedData, state: readBlockedState, selection: readBlockedSelection })
     assert.equal(readBlockedLines.some(line => line.includes('Blocked on missing decision') && line.includes('blocked report')), false, 'read blocked report mailbox row should not keep blocked-report attention marker')
-    assert.ok(readBlockedLines.some(line => line.includes('Attention') && line.includes('blocked task')), 'overview should keep factual blocked task attention after report is read')
+    assert.ok(readBlockedLines.some(line => line.includes('blocked task')), 'compact overview should keep factual blocked task attention after report is read')
 
     const plannerMemberIndex = data.members.findIndex(item => item.name === 'planner-very-long-member-name-beta')
     assert.ok(plannerMemberIndex >= 0, 'planner member should be present')
     state.focus = 'members'
     state.selectedMemberIndex = plannerMemberIndex
+    state.membersSelectedIndex = plannerMemberIndex
     state.selectedIndex = plannerMemberIndex
     selection = modules.viewModel.buildPanelSelectionView(data, state)
     const memberLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data, state, selection })
-    assert.ok(memberLines.some(line => line.includes('planner-very') && line.includes('blocked')), 'member row should show blocked-owned attention')
+    assert.ok(memberLines.some(line => line.includes('planner-very') && line.includes('tasks 1')), 'member row should show active owned task count')
     assert.ok(memberLines.some(line => line.includes('pane %2') && line.includes('tasks 1') && line.includes('age')), 'member row should show stable health fields')
     assert.ok(memberLines.some(line => line.includes('Health') && line.includes('busy')), 'member details should show public worker health label')
     assert.ok(memberLines.some(line => line.includes('Model') && line.includes('planner-model-render')), 'member details should show configured launch model')
@@ -223,6 +376,7 @@ module.exports = {
     const bridgeUnavailableIndex = bridgeUnavailableData.members.findIndex(item => item.name === 'planner-very-long-member-name-beta')
     bridgeUnavailableState.focus = 'members'
     bridgeUnavailableState.selectedMemberIndex = bridgeUnavailableIndex
+    bridgeUnavailableState.membersSelectedIndex = bridgeUnavailableIndex
     bridgeUnavailableState.selectedIndex = bridgeUnavailableIndex
     const bridgeUnavailableSelection = modules.viewModel.buildPanelSelectionView(bridgeUnavailableData, bridgeUnavailableState)
     const bridgeUnavailableLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: bridgeUnavailableData, state: bridgeUnavailableState, selection: bridgeUnavailableSelection })
@@ -246,6 +400,7 @@ module.exports = {
     assert.ok(noPanePlannerIndex >= 0, 'planner member should be present after no-pane block')
     noPaneState.focus = 'members'
     noPaneState.selectedMemberIndex = noPanePlannerIndex
+    noPaneState.membersSelectedIndex = noPanePlannerIndex
     noPaneState.selectedIndex = noPanePlannerIndex
     const noPaneSelection = modules.viewModel.buildPanelSelectionView(noPaneData, noPaneState)
     const noPaneLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: noPaneData, state: noPaneState, selection: noPaneSelection })
@@ -260,6 +415,7 @@ module.exports = {
     const defaultModelPlannerIndex = defaultModelData.members.findIndex(item => item.name === 'planner-very-long-member-name-beta')
     defaultModelState.focus = 'members'
     defaultModelState.selectedMemberIndex = defaultModelPlannerIndex
+    defaultModelState.membersSelectedIndex = defaultModelPlannerIndex
     defaultModelState.selectedIndex = defaultModelPlannerIndex
     const defaultModelSelection = modules.viewModel.buildPanelSelectionView(defaultModelData, defaultModelState)
     const defaultModelLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: defaultModelData, state: defaultModelState, selection: defaultModelSelection })
@@ -269,13 +425,91 @@ module.exports = {
     const input = helpers.requireDist('teamPanel/input.js')
     const keys = helpers.tuiKeys
     const actionMenu = actions.buildPanelActions(data, state, selection)
-    assert.ok(actionMenu.actions.some(action => action.id === 'sync'), 'attached panel should expose sync as an Enter action')
-    assert.ok(actionMenu.actions.some(action => action.id === 'delete-team'), 'attached panel should expose delete as an Enter action')
-    assert.ok(actionMenu.actions.some(action => action.id === 'delete-team' && action.label.includes('render-suite')), 'attached delete action should name the current team')
+    const teamActionMenu = actions.buildPanelActions(data, state, selection, 'maintenance')
+    assert.equal(actionMenu.actions.some(action => action.id === 'sync'), false, 'attached context panel should not expose sync maintenance')
+    assert.equal(actionMenu.actions.some(action => action.id === 'delete-team'), false, 'attached context panel should not expose delete team maintenance')
     assert.ok(actionMenu.actions.some(action => action.id === 'remove-member' && action.label.includes('planner-very-long-member-name-beta')), 'remove action should name the selected teammate')
+    assert.equal(teamActionMenu.title, 'Team actions for render-suite', 'team action menu should use team scope title')
+    assert.ok(teamActionMenu.actions.some(action => action.id === 'sync'), 'team action menu should expose sync maintenance')
+    assert.ok(teamActionMenu.actions.some(action => action.id === 'delete-team' && action.label.includes('render-suite')), 'team action delete should name current team')
+    assert.ok(!teamActionMenu.actions.some(action => (action.section ?? 'selected') === 'selected'), 'team action menu should not show selected item actions')
     assert.ok(actionMenu.actions.some(action => action.danger && String(action.description).includes('pane is never killed')), 'danger actions should spell out current pane safety')
     assert.ok(!actionMenu.actions.some(action => action.id === 'back'), 'action menu should rely on Esc, not a Back item')
     assert.ok(!actionMenu.actions.some(action => String(action.id).includes('focus')), 'panel action menu should not expose pane focus')
+
+    // Verify T012 Actions Redesign
+    const layoutLists = helpers.requireDist('teamPanel/layoutLists.js')
+    const fakeTheme = helpers.createFakeTheme()
+
+    // Verify categorized rendering
+    const actionMenuFmt = layoutLists.renderActionMenuLines(fakeTheme, actionMenu, 80)
+    const teamActionMenuFmt = layoutLists.renderActionMenuLines(fakeTheme, teamActionMenu, 80)
+    assert.ok(actionMenuFmt.some(line => line.includes('▼ SELECTED ITEM')), 'Context action menu should render SELECTED ITEM section')
+    assert.equal(actionMenuFmt.some(line => line.includes('▼ MAINTENANCE')), false, 'Context action menu should omit team maintenance section')
+    assert.ok(actionMenuFmt.some(line => line.includes('▼ DANGER ZONE')), 'Context action menu should render selected-item DANGER ZONE section')
+    assert.equal(teamActionMenuFmt.some(line => line.includes('▼ SELECTED ITEM')), false, 'Team action menu should omit empty SELECTED ITEM section')
+    assert.ok(teamActionMenuFmt.some(line => line.includes('▼ MAINTENANCE')), 'Team action menu should render MAINTENANCE section')
+    assert.ok(teamActionMenuFmt.some(line => line.includes('▼ DANGER ZONE')), 'Team action menu should render DANGER ZONE section')
+
+    // Danger actions should be grouped under DANGER ZONE
+    const selectedDangerZoneIndex = actionMenuFmt.findIndex(line => line.includes('▼ DANGER ZONE'))
+    const removeMemberIndex = actionMenuFmt.findIndex(line => line.includes('Remove teammate'))
+    assert.ok(removeMemberIndex > selectedDangerZoneIndex, 'Selected-item danger action should appear under DANGER ZONE section')
+    const teamDangerZoneIndex = teamActionMenuFmt.findIndex(line => line.includes('▼ DANGER ZONE'))
+    const deleteTeamIndex = teamActionMenuFmt.findIndex(line => line.includes('Delete current team'))
+    assert.ok(deleteTeamIndex > teamDangerZoneIndex, 'Delete current team action should appear under team DANGER ZONE section')
+
+    // Descriptions should not appear inside normal rows (no per-action multi-line description text below each label)
+    assert.ok(!actionMenuFmt.some(line => line.includes('   Reload state and reconcile')), 'Individual description lines should not be rendered immediately below the item in the list')
+
+    // Verify confirmation state machine trigger
+    const menuState = {
+      title: teamActionMenu.title,
+      actions: teamActionMenu.actions,
+      selectedIndex: teamActionMenu.actions.findIndex(a => a.id === 'delete-team'), // Target delete-team
+    }
+    const testState = {
+      ...state,
+      interactionMode: 'action-menu',
+      actionMenu: menuState,
+    }
+
+    let rendered = false
+    input.handleTeamPanelInput(keys.enter, data, testState, selection, {
+      done: () => {},
+      refresh: () => {},
+      requestRender: () => { rendered = true },
+    })
+
+    assert.ok(testState.actionMenu.confirmingAction, 'Selecting a danger action should set confirmingAction')
+    assert.equal(testState.actionMenu.confirmSelectedIndex, 0, 'Confirmation default selection should be Cancel (0)')
+
+    // Verify in-place confirmation rendering
+    const confirmFmt = layoutLists.renderActionMenuLines(fakeTheme, testState.actionMenu, 80)
+    assert.ok(confirmFmt.some(line => line.includes('CONFIRM DESTRUCTIVE ACTION')), 'Confirmation layout should show confirmation header')
+    assert.ok(confirmFmt.some(line => line.includes('No, Cancel operation')), 'Confirmation layout should show Cancel choice')
+    const confirmPanelLines = modules.layout.renderTeamPanelLines(fakeTheme, { width: 180, height: 40, data, state: testState, selection })
+    assert.ok(confirmPanelLines.some(line => line.includes('Enter choose') && line.includes('default Cancel') && line.includes('Esc cancel')), 'Confirmation footer should keep destructive-action default safety visible')
+
+    // Verify double-enter/Cancel flow (Enter on cancel returns without executing)
+    let executedAction = null
+    input.handleTeamPanelInput(keys.enter, data, testState, selection, {
+      done: (res) => { executedAction = res },
+      refresh: () => {},
+      requestRender: () => {},
+    })
+    assert.equal(executedAction, null, 'Enter on Cancel choice must not execute the action')
+    assert.equal(testState.actionMenu.confirmingAction, undefined, 'Enter on Cancel choice should clear confirmingAction')
+
+    // Verify confirm flow execution on "Yes" option
+    testState.actionMenu.confirmingAction = teamActionMenu.actions.find(a => a.id === 'delete-team')
+    testState.actionMenu.confirmSelectedIndex = 1 // Cursor on "Yes, execute"
+    input.handleTeamPanelInput(keys.enter, data, testState, selection, {
+      done: (res) => { executedAction = res },
+      refresh: () => {},
+      requestRender: () => {},
+    })
+    assert.ok(executedAction && executedAction.type === 'delete-team', 'Enter on Confirm choice must execute action')
 
     state.isDetailExpanded = true
     let closed = false
@@ -336,20 +570,52 @@ module.exports = {
     globalState.selectedIndex = renderSuiteTeamIndex
     const globalSelection = modules.viewModel.buildPanelSelectionView(globalData, globalState)
     const globalActions = actions.buildPanelActions(globalData, globalState, globalSelection)
+    const globalTeamActions = actions.buildPanelActions(globalData, globalState, globalSelection, 'maintenance')
     assert.ok(globalActions.actions.some(action => action.id === 'recover-team'), 'global console should expose recover action for selected team')
     assert.ok(globalActions.actions.some(action => action.id === 'recover-team' && action.label.includes('render-suite')), 'recover action should name the selected team')
     assert.ok(globalActions.actions.some(action => action.id === 'delete-team' && action.label.includes('render-suite')), 'global delete action should name the selected team')
-    assert.ok(globalActions.actions.some(action => action.id === 'cleanup-all'), 'global console should expose cleanup action')
-    assert.ok(globalActions.actions.some(action => action.id === 'cleanup-all' && action.label.includes('ALL')), 'cleanup action should make global scope obvious')
+    assert.equal(globalActions.actions.some(action => action.id === 'cleanup-all'), false, 'global context actions should not expose global cleanup maintenance')
+    assert.ok(globalTeamActions.actions.some(action => action.id === 'cleanup-all' && action.label.includes('ALL')), 'cleanup action should make global scope obvious')
     assert.ok(globalActions.actions.some(action => action.danger && String(action.description).includes('pane is never killed')), 'global danger actions should spell out current pane safety')
     assert.ok(!globalActions.actions.some(action => action.id === 'back'), 'global action menu should not include Back')
+    assert.equal(globalTeamActions.title, 'Global console actions', 'global maintenance scope should use global maintenance title')
+    assert.ok(globalTeamActions.actions.some(action => action.id === 'refresh'), 'global maintenance scope should expose refresh')
+    assert.ok(globalTeamActions.actions.some(action => action.id === 'cleanup-all'), 'global maintenance scope should expose cleanup')
+    assert.equal(globalTeamActions.actions.some(action => (action.section ?? 'selected') === 'selected'), false, 'global maintenance scope should omit selected item actions')
     assert.ok(globalData.teamSummaries['render-suite'], 'global data should include per-team attention summaries')
     assert.equal(globalData.teamSummaries['render-suite'].blockedMessages, 0, 'global attention summary should ignore read blocked reports')
     assert.equal(globalData.teamSummaries['render-suite'].blockedTasks, 1, 'global attention summary should keep factual blocked task attention')
     assert.equal(globalData.teamMailboxes['render-suite'].unread, 1, 'global data should include unread mailbox projection after read blocked report')
     assert.equal(globalData.teamMailboxes['render-suite'].blocked, 0, 'global data should count only unread blocked mailbox attention')
     assert.equal(globalData.teamMailboxes['render-clean-suite'].blocked, 0, 'read blocked reports should not create global mailbox attention')
+    const globalHotkeyState = modules.viewModel.createInitialPanelState()
+    modules.viewModel.clampPanelStateToData(globalHotkeyState, globalData)
+    let globalHotkeySelection = modules.viewModel.buildPanelSelectionView(globalData, globalHotkeyState)
+    const globalHotkeyDeps = {
+      done: () => {},
+      refresh: () => {},
+      requestRender: () => {},
+    }
+    const sendGlobalPanelKey = key => {
+      globalHotkeySelection = modules.viewModel.buildPanelSelectionView(globalData, globalHotkeyState)
+      hotkeyInput.handleTeamPanelInput(key, globalData, globalHotkeyState, globalHotkeySelection, globalHotkeyDeps)
+    }
+    assert.equal(globalHotkeyState.focus, 'teams', 'global panel should clamp initial cockpit focus to teams')
+    sendGlobalPanelKey('2')
+    assert.equal(globalHotkeyState.focus, 'panes', 'global hotkey 2 should focus panes')
+    sendGlobalPanelKey(hotkeyKeys.tab)
+    assert.equal(globalHotkeyState.focus, 'teams', 'global Tab should toggle back to teams')
+    sendGlobalPanelKey(hotkeyKeys.shift(hotkeyKeys.tab))
+    assert.equal(globalHotkeyState.focus, 'panes', 'global Shift+Tab should toggle back to panes')
+    sendGlobalPanelKey('a')
+    assert.equal(globalHotkeyState.interactionMode, 'action-menu', 'global a should open global maintenance actions')
+    assert.equal(globalHotkeyState.actionMenu.title, 'Global console actions', 'global a should use global action scope')
+    assert.equal(globalHotkeyState.actionMenu.actions.some(action => (action.section ?? 'selected') === 'selected'), false, 'global a action scope should omit selected item actions')
+
     const globalLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: globalData, state: globalState, selection: globalSelection })
+    const globalFirstBoxIndex = globalLines.findIndex(line => line.includes('╭'))
+    assert.equal(globalLines.slice(0, globalFirstBoxIndex).some(line => line.includes('↑↓ move') || line.includes('Enter item') || line.includes('Tab/1-4')), false, 'global header should not render persistent keyboard help')
+    assert.ok(globalLines.some(line => line.includes('Enter') && line.includes('item') && line.includes('a') && line.includes('global')), 'global footer should distinguish item and global action scopes')
     assert.ok(globalLines.some(line => line.includes('Attention') && line.includes('blocked task')), 'global overview should summarize team attention')
     assert.ok(globalLines.some(line => line.includes('render-suite') && line.includes('│') && line.includes('✉')), 'global team row should visually separate name from summary')
     assert.equal(globalLines.some(line => line.includes('render-suite') && line.includes('leader missing')), false, 'global team row should keep leader pane diagnostics in details')
@@ -386,12 +652,15 @@ module.exports = {
     const paneLostState = modules.viewModel.createInitialPanelState()
     const paneLostMemberIndex = paneLostData.members.findIndex(item => item.name === 'researcher-very-long-member-name-alpha')
     assert.ok(paneLostMemberIndex >= 0, 'researcher member should be present after pane-lost block')
+    paneLostState.focus = 'members'
     paneLostState.selectedMemberIndex = paneLostMemberIndex
+    paneLostState.membersSelectedIndex = paneLostMemberIndex
+    paneLostState.selectedIndex = paneLostMemberIndex
     modules.viewModel.clampPanelStateToData(paneLostState, paneLostData)
     const paneLostSelection = modules.viewModel.buildPanelSelectionView(paneLostData, paneLostState)
     assert.equal(modules.viewModel.buildTeamAttentionSummary(paneLostData.team, paneLostData.mailbox).paneLostMembers, 1, 'attention summary should count pane-lost members')
     const paneLostLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: paneLostData, state: paneLostState, selection: paneLostSelection })
-    assert.ok(paneLostLines.some(line => line.includes('Attention') && line.includes('worker error')), 'overview should project pane-lost attention as public worker error')
+    assert.ok(paneLostLines.some(line => line.includes('worker error')), 'overview should project pane-lost attention as public worker error')
     assert.ok(paneLostLines.some(line => line.includes('researcher') && line.includes('error')), 'member row should include public error health')
 
     const theme = helpers.createFakeTheme()
@@ -404,7 +673,7 @@ module.exports = {
     assert.ok(expandedLines.some(line => line.includes('Long description for rendering')), 'expanded details should show full task description')
     assert.ok(expandedLines.some(line => line.includes('References') && line.includes('2 folded')), 'expanded task details should show compact folded reference diagnostics')
     assert.equal(expandedLines.some(line => line.includes('legacy render handoff')), false, 'expanded task details should hide folded legacy ref body')
-    assert.ok(expandedLines.some(line => line.includes('Esc') && line.includes('collapse details')), 'expanded details should hint Esc collapse')
+    assert.equal(expandedLines.slice(0, expandedLines.findIndex(line => line.includes('╭'))).some(line => line.includes('q close')), false, 'expanded details should not show close help in header')
 
     const longTask = modules.state.createTask(team, {
       title: 'Long detail overflow regression',
@@ -421,11 +690,13 @@ module.exports = {
     longState.focus = 'tasks'
     longState.selectedIndex = longData.tasks.findIndex(item => item.id === longTask.id)
     longState.isDetailExpanded = true
+    longState.scrollFocus = 'detail'
     const longSelection = modules.viewModel.buildPanelSelectionView(longData, longState)
     const longLines = modules.layout.renderTeamPanelLines(theme, { width: 96, height: 32, data: longData, state: longState, selection: longSelection })
     assert.ok(longLines.length <= 32, `expanded reader should stay within terminal height, got ${longLines.length}`)
-    assert.ok(longLines.some(line => line.includes('Details · task')), 'expanded reader should use a focused detail reader title')
+    assert.ok(longLines.some(line => line.includes('Details') && line.includes('/')), 'expanded details should show a scrollable detail title')
     assert.ok(longLines.some(line => line.includes('/')), 'expanded reader should show scroll range')
+    assert.ok(longLines.some(line => line.includes('↑↓ scroll') && line.includes('e list') && line.includes('q close')), 'detail-focused footer should show detail scrolling context')
     assert.ok(longLines.some(line => line.includes('description line 1')), 'expanded reader should show the first page of full details')
     assert.equal(longLines.some(line => line.includes('note line 40')), false, 'first page should not render the end of long notes')
 

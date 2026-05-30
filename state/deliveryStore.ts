@@ -7,8 +7,14 @@ import type {
   WorkerFsmStatus,
 } from '../internalTypes.js'
 import { staleBridge } from './bridgeStore.js'
+import { finiteNumberOrUndefined, isObjectRecord, numberValue, stringArray, stringOrUndefined, stringValue } from './normalizers.js'
 import { readRuntimeSection, updateRuntimeSection } from './runtimeStore.js'
 
+// Low-level persisted delivery request store helpers.
+// Production bridge delivery state transitions should prefer
+// runtime/deliveryRequestService.ts, which wraps this store with transition
+// guards, expiry checks, and claim validation. These store exports remain for
+// focused tests, normalization, and runtime maintenance internals.
 export const DELIVERY_REQUEST_STATE_VERSION = 1
 
 export const DELIVERY_REQUEST_STATUSES = [
@@ -81,19 +87,6 @@ function emptyDeliveryRequestStore(): DeliveryRequestStoreState {
   return { version: DELIVERY_REQUEST_STATE_VERSION, requests: {} }
 }
 
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function stringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value.map(item => String(item ?? '').trim()).filter(Boolean)
-}
-
-function numberValue(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
-}
-
 function statusValue(value: unknown): DeliveryRequestStatus {
   return DELIVERY_REQUEST_STATUSES.includes(value as DeliveryRequestStatus)
     ? value as DeliveryRequestStatus
@@ -102,17 +95,13 @@ function statusValue(value: unknown): DeliveryRequestStatus {
 
 function normalizeClaim(value: unknown): DeliveryRequestClaim | undefined {
   if (!isObjectRecord(value)) return undefined
-  const bridgeId = typeof value.bridgeId === 'string' ? value.bridgeId.trim() : ''
+  const bridgeId = stringValue(value.bridgeId) ?? ''
   if (!bridgeId) return undefined
   const claimedAt = numberValue(value.claimedAt, Date.now())
   const generation = numberValue(value.generation, 1)
   const messageIds = stringArray(value.messageIds)
-  const promptHash = typeof value.promptHash === 'string' && value.promptHash.trim()
-    ? value.promptHash.trim()
-    : promptHashForParts(messageIds, '')
-  const claimId = typeof value.claimId === 'string' && value.claimId.trim()
-    ? value.claimId.trim()
-    : claimIdFor({ bridgeId, generation, claimedAt, promptHash })
+  const promptHash = stringValue(value.promptHash) ?? promptHashForParts(messageIds, '')
+  const claimId = stringValue(value.claimId) ?? claimIdFor({ bridgeId, generation, claimedAt, promptHash })
   return {
     claimId,
     bridgeId,
@@ -126,9 +115,9 @@ function normalizeClaim(value: unknown): DeliveryRequestClaim | undefined {
 
 function normalizeRequest(raw: unknown): DeliveryRequestState | null {
   if (!isObjectRecord(raw)) return null
-  const requestId = typeof raw.requestId === 'string' ? raw.requestId.trim() : ''
-  const teamName = typeof raw.teamName === 'string' ? raw.teamName.trim() : ''
-  const memberName = typeof raw.memberName === 'string' ? raw.memberName.trim() : ''
+  const requestId = stringValue(raw.requestId) ?? ''
+  const teamName = stringValue(raw.teamName) ?? ''
+  const memberName = stringValue(raw.memberName) ?? ''
   if (!requestId || !teamName || !memberName) return null
   const now = Date.now()
   const status = statusValue(raw.status)
@@ -138,21 +127,21 @@ function normalizeRequest(raw: unknown): DeliveryRequestState | null {
     memberName,
     status,
     messageIds: stringArray(raw.messageIds),
-    bootPrompt: typeof raw.bootPrompt === 'string' ? raw.bootPrompt : undefined,
-    requestedBy: typeof raw.requestedBy === 'string' ? raw.requestedBy : undefined,
-    reason: typeof raw.reason === 'string' ? raw.reason : undefined,
-    promptHash: typeof raw.promptHash === 'string' ? raw.promptHash : undefined,
+    bootPrompt: stringOrUndefined(raw.bootPrompt),
+    requestedBy: stringOrUndefined(raw.requestedBy),
+    reason: stringOrUndefined(raw.reason),
+    promptHash: stringOrUndefined(raw.promptHash),
     createdAt: numberValue(raw.createdAt, now),
     updatedAt: numberValue(raw.updatedAt, now),
     expiresAt: numberValue(raw.expiresAt, 0),
     claim: normalizeClaim(raw.claim),
-    submittedAt: typeof raw.submittedAt === 'number' && Number.isFinite(raw.submittedAt) ? raw.submittedAt : undefined,
-    startedAt: typeof raw.startedAt === 'number' && Number.isFinite(raw.startedAt) ? raw.startedAt : undefined,
-    completedAt: typeof raw.completedAt === 'number' && Number.isFinite(raw.completedAt) ? raw.completedAt : undefined,
-    failedAt: typeof raw.failedAt === 'number' && Number.isFinite(raw.failedAt) ? raw.failedAt : undefined,
-    expiredAt: typeof raw.expiredAt === 'number' && Number.isFinite(raw.expiredAt) ? raw.expiredAt : undefined,
-    cancelledAt: typeof raw.cancelledAt === 'number' && Number.isFinite(raw.cancelledAt) ? raw.cancelledAt : undefined,
-    lastError: typeof raw.lastError === 'string' ? raw.lastError : undefined,
+    submittedAt: finiteNumberOrUndefined(raw.submittedAt),
+    startedAt: finiteNumberOrUndefined(raw.startedAt),
+    completedAt: finiteNumberOrUndefined(raw.completedAt),
+    failedAt: finiteNumberOrUndefined(raw.failedAt),
+    expiredAt: finiteNumberOrUndefined(raw.expiredAt),
+    cancelledAt: finiteNumberOrUndefined(raw.cancelledAt),
+    lastError: stringOrUndefined(raw.lastError),
   }
   return request
 }

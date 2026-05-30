@@ -114,39 +114,46 @@ Keep the leader as coordinator: teammates produce facts, plans, edits, and repor
 
 Attached to a team:
 
-```
+```text
 /team
-→ Members · Tasks · Mailbox · Details
-→ select an item
-→ Enter opens contextual actions
+→ two-box master-detail console
+→ tabs: Cockpit · Tasks · Mailbox · Members
+→ Enter opens selected-item context actions
+→ a opens team maintenance actions
 ```
+
+The Cockpit tab is an interactive attention queue for active tasks and unread mailbox items, not a passive status box.
 
 Not attached to a team:
 
-```
+```text
 /team
-→ AgentTeam Console
-→ list saved teams and stale panes
-→ recover an old team as current leader, delete a team, or cleanup all agentteam state
+→ global two-box master-detail console
+→ tabs: Teams · Panes
+→ Enter opens selected-team/pane context actions
+→ a opens global maintenance actions
 ```
 
 | Key | Action |
 |:---:|--------|
-| `Tab` | Cycle sections |
-| `↑` `↓` | Move selection |
-| `Enter` | Open action menu / choose action |
-| `Esc` | Step back / close |
+| `Tab` / `Shift+Tab` | Cycle tabs |
+| `1`..`4` | Attached tabs: Cockpit, Tasks, Mailbox, Members |
+| `1`..`2` | Global tabs: Teams, Panes |
+| `↑` `↓` | Move list selection, or scroll details when detail focus is active |
+| `→` / `e` | Move scroll focus from list to detail |
+| `←` / `Esc` | Return detail scroll focus to list; then collapse details or close |
+| `Enter` | Open selected-item context actions / choose action |
+| `a` | Open team/global maintenance actions |
+| `q` | Close |
 
 The panel intentionally does **not** focus tmux panes or perform task/message CRUD. Use tmux for pane navigation, and use tools for collaboration work. `/team` is for local runtime visibility, recovery, and cleanup. Expanded Details use an internal reader so long notes/messages remain readable without flooding terminal scrollback.
 
+Action menus keep selected-item actions separate from maintenance and destructive operations. Sections render as `SELECTED ITEM`, `MAINTENANCE`, and `DANGER ZONE`; the footer shows the selected action description, and destructive confirmation defaults to **No, Cancel operation**.
+
 Available action-menu operations include:
 
-- refresh/reconcile tmux pane bindings;
-- sync compact leader mailbox projection without marking messages read or delivered;
-- remove selected teammate;
-- delete selected/current team;
-- recover an existing team as the current leader;
-- cleanup all agentteam state and stale panes while keeping the current pane alive and clearing its agentteam label.
+- selected-item context actions such as inspecting details, recovering a selected team, deleting a selected team, or removing a selected teammate;
+- team/global maintenance actions such as refresh/reconcile, compact leader mailbox projection sync without marking messages read or delivered, deleting the current team, and cleanup of all agentteam state/stale panes while keeping the current pane alive and clearing its agentteam label.
 
 ---
 

@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { StringEnum } from '@earendil-works/pi-ai'
 import { Type } from 'typebox'
+import { MESSAGE_TYPES } from '../core/publicModel.js'
 import type { ToolHandlerDeps } from './shared.js'
 import { executeReceiveMessages, executeSendMessage } from './messageService.js'
 
@@ -9,7 +10,7 @@ const TeamSendParams = Type.Object({
   message: Type.String({ description: 'Message content' }),
   summary: Type.Optional(Type.String({ description: 'Short summary preview' })),
   type: Type.Optional(
-    StringEnum(['assignment', 'question', 'inform'] as const),
+    StringEnum(MESSAGE_TYPES),
   ),
   taskId: Type.Optional(Type.String()),
   priority: Type.Optional(

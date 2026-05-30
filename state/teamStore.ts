@@ -8,6 +8,7 @@ import {
   getTeamsDir,
   getTeamStatePath,
   getWorkerSessionsDir,
+  isWorkerSessionFileForTeam,
   sanitizeName,
 } from './paths.js'
 import { mergeTeamStates, normalizeTeamState } from './merge.js'
@@ -257,7 +258,7 @@ export function deleteTeamState(teamName: string): void {
   for (const dir of [getWorkerSessionsDir()]) {
     try {
       for (const entry of fs.readdirSync(dir)) {
-        if (!entry.startsWith(`${sanitizeName(teamName)}-`)) continue
+        if (!isWorkerSessionFileForTeam(entry, teamName)) continue
         fs.rmSync(path.join(dir, entry), { recursive: true, force: true })
       }
     } catch {

@@ -1,8 +1,9 @@
-import { projectWorkerHealth, type WorkerHealthProjectionInput } from '../core/workerHealth.js'
+import type { WorkerHealth } from '../core/publicModel.js'
 import type {
   TeamMember,
   TeamTask,
 } from '../internalTypes.js'
+import { projectTeamMemberHealth } from '../runtime/memberHealth.js'
 import type { TeamAttentionSummary } from './viewModel.js'
 import { hasPaneLostAttention, mailboxType } from './viewModel.js'
 import type { PanelColor, PanelTheme } from './layoutPrimitives.js'
@@ -11,14 +12,8 @@ export function memberPaneLabel(member: TeamMember): string {
   return member.paneId ? `pane ${member.paneId}` : 'pane missing'
 }
 
-export function projectMemberHealth(member: TeamMember): ReturnType<typeof projectWorkerHealth> {
-  const projection: WorkerHealthProjectionInput = {
-    isOperational: Boolean(member.paneId) && member.status !== 'offline',
-    hasError: member.status === 'error' || Boolean(member.bridgeLastError),
-    hasActiveTurn: member.status === 'running' || member.status === 'draining',
-    hasPendingWork: member.status === 'queued' || member.status === 'pending_delivery' || Boolean(member.bridgeWorkRequestedAt),
-  }
-  return projectWorkerHealth(projection)
+export function projectMemberHealth(member: TeamMember): WorkerHealth {
+  return projectTeamMemberHealth(member)
 }
 
 export function memberHealthLabel(member: TeamMember): ReturnType<typeof projectMemberHealth> {

@@ -4,6 +4,8 @@
 // internalTypes.ts or focused app/runtime/state modules. Public consumers should
 // depend on the small vNext vocabulary exported here and from core/publicModel.
 
+import { TEAM_LEAD as CORE_TEAM_LEAD } from './core/teamIdentity.js'
+
 export {
   MESSAGE_READ_STATES,
   MESSAGE_TYPES,
@@ -27,7 +29,7 @@ export {
   type WorkerHealth,
 } from './core/publicModel.js'
 
-export const TEAM_LEAD = 'team-lead'
+export const TEAM_LEAD = CORE_TEAM_LEAD
 
 export type PublicTaskStatus = import('./core/publicModel.js').TaskStatus
 export type PublicWorkerHealth = import('./core/publicModel.js').WorkerHealth

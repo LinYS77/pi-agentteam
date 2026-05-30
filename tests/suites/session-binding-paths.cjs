@@ -90,5 +90,30 @@ module.exports = {
       assert.equal(fs.existsSync(hashedPath), true, 'ensure-derived binding should be written to hash path')
       assert.deepEqual(JSON.parse(fs.readFileSync(hashedPath, 'utf8')), { teamName: 'derive-team', memberName: 'team-lead' })
     })
+
+    withHome('delete-team-worker-session-sweep', () => {
+      const deletedTeam = modules.state.createInitialTeamState({
+        teamName: 'delete-worker-session-team',
+        description: 'delete worker session sweep suite',
+        leaderSessionFile: '/tmp/delete-worker-session-leader.jsonl',
+        leaderCwd: '/tmp/project',
+      })
+      modules.state.writeTeamState(deletedTeam)
+
+      const orphanWorkerSession = modules.state.getWorkerSessionPath(deletedTeam.name, 'orphan-worker')
+      const otherWorkerSession = modules.state.getWorkerSessionPath('delete-worker-session-other', 'orphan-worker')
+      fs.mkdirSync(path.dirname(orphanWorkerSession), { recursive: true })
+      fs.writeFileSync(orphanWorkerSession, 'orphan current-format session\n', 'utf8')
+      fs.writeFileSync(otherWorkerSession, 'other team current-format session\n', 'utf8')
+
+      assert.match(path.basename(orphanWorkerSession), /^worker-delete-worker-session-team-orphan-worker-[0-9a-f]{24}\.jsonl$/)
+      assert.equal(fs.existsSync(orphanWorkerSession), true)
+      assert.equal(fs.existsSync(otherWorkerSession), true)
+
+      modules.state.deleteTeamState(deletedTeam.name)
+
+      assert.equal(fs.existsSync(orphanWorkerSession), false, 'deleteTeamState should sweep orphan current-format worker sessions for deleted team')
+      assert.equal(fs.existsSync(otherWorkerSession), true, 'deleteTeamState must not remove another team worker session')
+    })
   },
 }

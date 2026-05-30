@@ -1,4 +1,5 @@
 import type { BridgeLeaseState } from '../internalTypes.js'
+import { finiteNumberOrUndefined, isObjectRecord, numberValue, stringArray, stringOrUndefined, stringValue } from './normalizers.js'
 import { readRuntimeSection, updateRuntimeSection } from './runtimeStore.js'
 
 export const BRIDGE_LEASE_STATE_VERSION = 1
@@ -22,40 +23,27 @@ function emptyBridgeLeaseStore(): BridgeLeaseStoreState {
   return { version: BRIDGE_LEASE_STATE_VERSION, leases: {} }
 }
 
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function stringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value.map(item => String(item ?? '').trim()).filter(Boolean)
-}
-
-function numberValue(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
-}
-
 function normalizeLease(raw: unknown): BridgeLeaseState | null {
   if (!isObjectRecord(raw)) return null
-  const memberName = typeof raw.memberName === 'string' ? raw.memberName.trim() : ''
-  const bridgeId = typeof raw.bridgeId === 'string' ? raw.bridgeId.trim() : ''
-  const sessionFile = typeof raw.sessionFile === 'string' ? raw.sessionFile : ''
+  const memberName = stringValue(raw.memberName) ?? ''
+  const bridgeId = stringValue(raw.bridgeId) ?? ''
+  const sessionFile = stringOrUndefined(raw.sessionFile) ?? ''
   if (!memberName || !bridgeId || !sessionFile) return null
   const now = Date.now()
   return {
     memberName,
     bridgeId,
     protocolVersion: numberValue(raw.protocolVersion, 1),
-    packageVersion: typeof raw.packageVersion === 'string' ? raw.packageVersion : undefined,
+    packageVersion: stringOrUndefined(raw.packageVersion),
     sessionFile,
-    pid: typeof raw.pid === 'number' && Number.isFinite(raw.pid) ? raw.pid : undefined,
-    processIdentity: typeof raw.processIdentity === 'string' ? raw.processIdentity : undefined,
+    pid: finiteNumberOrUndefined(raw.pid),
+    processIdentity: stringOrUndefined(raw.processIdentity),
     startedAt: numberValue(raw.startedAt, now),
     lastSeenAt: numberValue(raw.lastSeenAt, now),
     expiresAt: numberValue(raw.expiresAt, 0),
     generation: numberValue(raw.generation, 1),
     capabilities: stringArray(raw.capabilities),
-    lastError: typeof raw.lastError === 'string' ? raw.lastError : undefined,
+    lastError: stringOrUndefined(raw.lastError),
   }
 }
 

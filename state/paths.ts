@@ -93,10 +93,19 @@ function readablePathPrefix(value: string, maxLength: number): string {
   return sanitized.slice(0, maxLength).replace(/[-._]+$/g, '') || 'item'
 }
 
+export function getWorkerSessionFilePrefix(teamName: string): string {
+  return `worker-${readablePathPrefix(teamName, 32)}-`
+}
+
 export function getWorkerSessionPath(teamName: string, workerName: string): string {
   const key = `${teamName}\n${workerName}`
   const hash = crypto.createHash('sha256').update(key).digest('hex').slice(0, 24)
-  const teamPrefix = readablePathPrefix(teamName, 32)
   const workerPrefix = readablePathPrefix(workerName, 32)
-  return path.join(getWorkerSessionsDir(), `worker-${teamPrefix}-${workerPrefix}-${hash}.jsonl`)
+  return path.join(getWorkerSessionsDir(), `${getWorkerSessionFilePrefix(teamName)}${workerPrefix}-${hash}.jsonl`)
+}
+
+export function isWorkerSessionFileForTeam(fileName: string, teamName: string): boolean {
+  const basename = path.basename(fileName)
+  if (!basename.startsWith(getWorkerSessionFilePrefix(teamName))) return false
+  return /^worker-.+-[0-9a-f]{24}\.jsonl$/.test(basename)
 }

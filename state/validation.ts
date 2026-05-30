@@ -1,6 +1,8 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { isOutboxEffectKind } from '../core/outboxModel.js'
 import { isMessageType, isTaskReportType, isTaskStatus } from '../core/publicModel.js'
+import { isTaskNoteDisplayMode, isTaskNoteSourceKind } from '../core/taskNoteModel.js'
 import { readJsonFile, writeJsonFile } from './fsStore.js'
 import {
   getAgentTeamRoot,
@@ -12,10 +14,7 @@ export const QUARANTINE_KIND = 'vnext-unsupported'
 
 const LEGACY_TASK_STATUSES = Object.freeze(['pending', 'in_progress', 'completed'] as const)
 const LEGACY_MESSAGE_TYPES = Object.freeze(['fyi', 'completion_report', 'blocked'] as const)
-const OUTBOX_EFFECT_KINDS = Object.freeze(['inbox_item_append_requested', 'worker_delivery_requested', 'leader_attention_requested', 'task_note_append_requested', 'append_event_requested'] as const)
 const LEGACY_OUTBOX_EFFECT_KINDS = Object.freeze(['leader_triage_requested'] as const)
-const TASK_NOTE_SOURCE_KINDS = Object.freeze(['task_note', 'task_report', 'communication_ref', 'legacy_communication_ref'] as const)
-const TASK_NOTE_DISPLAY_MODES = Object.freeze(['visible', 'hidden', 'folded'] as const)
 
 const OLD_LAYOUT_MARKER_KEYS = Object.freeze([
   'layout',
@@ -140,7 +139,7 @@ function pushInvalidTaskNoteMetadata(
     return
   }
   const sourceKind = input.metadata.sourceKind
-  if (sourceKind !== undefined && (typeof sourceKind !== 'string' || !(TASK_NOTE_SOURCE_KINDS as readonly string[]).includes(sourceKind))) {
+  if (sourceKind !== undefined && !isTaskNoteSourceKind(sourceKind)) {
     reasons.push(reason({
       code: 'unsupported_task_note_source_kind',
       file: input.file,
@@ -151,7 +150,7 @@ function pushInvalidTaskNoteMetadata(
     }))
   }
   const displayMode = input.metadata.displayMode
-  if (displayMode !== undefined && (typeof displayMode !== 'string' || !(TASK_NOTE_DISPLAY_MODES as readonly string[]).includes(displayMode))) {
+  if (displayMode !== undefined && !isTaskNoteDisplayMode(displayMode)) {
     reasons.push(reason({
       code: 'unsupported_task_note_display_mode',
       file: input.file,
@@ -310,7 +309,7 @@ export function validatePersistedOutbox(raw: unknown, file = 'outbox.json'): Sta
       continue
     }
     const kind = effect.kind
-    if (typeof kind === 'string' && (OUTBOX_EFFECT_KINDS as readonly string[]).includes(kind)) continue
+    if (isOutboxEffectKind(kind)) continue
     const legacy = typeof kind === 'string' && (LEGACY_OUTBOX_EFFECT_KINDS as readonly string[]).includes(kind)
     reasons.push(reason({
       code: legacy ? 'legacy_outbox_effect_kind' : 'unsupported_outbox_effect_kind',

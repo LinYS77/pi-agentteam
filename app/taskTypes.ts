@@ -1,9 +1,10 @@
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import type { TaskStatus } from '../core/publicModel.js'
+import type { TeamTaskAction } from '../core/taskActions.js'
 import type { TeamMessageType, TeamMessageWakeHint, TeamState, TeamTask } from '../internalTypes.js'
 import type { TaskApplicationDeps } from './types.js'
 
-export type TeamTaskAction = 'create' | 'assign' | 'block' | 'unblock' | 'close' | 'note' | 'report_done' | 'report_blocked' | 'list'
+export type { TeamTaskAction } from '../core/taskActions.js'
 
 export type TeamTaskInput = {
   action: TeamTaskAction

@@ -14,8 +14,9 @@ import {
   type OutboxEffectStatus,
   type OutboxEnqueueInput,
   type OutboxFailInput,
-} from '../app/outbox.js'
+} from '../core/outboxModel.js'
 import { readJsonFile, withFileLock, writeJsonFile } from './fsStore.js'
+import { finiteNumberOrUndefined, isObjectRecord, numberValue, stringArray, stringValue } from './normalizers.js'
 import { getOutboxStatePath } from './paths.js'
 import { validateOrQuarantineTeam } from './validation.js'
 
@@ -31,23 +32,6 @@ export type OutboxStoreState = {
 
 function emptyOutboxStore(): OutboxStoreState {
   return { version: OUTBOX_STORE_VERSION, effects: {}, idempotency: {} }
-}
-
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function numberValue(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
-}
-
-function stringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value.map(item => String(item ?? '').trim()).filter(Boolean)
 }
 
 function normalizeClaim(value: unknown): OutboxClaim | undefined {
@@ -91,8 +75,8 @@ function normalizeEffect(raw: unknown): OutboxEffect | null {
     claim: normalizeClaim(raw.claim),
     lastError: typeof raw.lastError === 'string' ? raw.lastError : undefined,
     result: raw.result,
-    doneAt: typeof raw.doneAt === 'number' && Number.isFinite(raw.doneAt) ? raw.doneAt : undefined,
-    failedAt: typeof raw.failedAt === 'number' && Number.isFinite(raw.failedAt) ? raw.failedAt : undefined,
+    doneAt: finiteNumberOrUndefined(raw.doneAt),
+    failedAt: finiteNumberOrUndefined(raw.failedAt),
   }
   if (effect.status !== 'pending') effect.claim = undefined
   return effect

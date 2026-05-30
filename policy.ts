@@ -1,20 +1,10 @@
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
-import { projectWorkerHealth, type WorkerHealthProjectionInput } from './core/workerHealth.js'
+import { projectTeamMemberHealth } from './runtime/memberHealth.js'
 import { readTeamState } from './state/teamStore.js'
 import { getCurrentMemberName, getCurrentTeamName } from './session.js'
-import { TEAM_LEAD, type TeamMember } from './internalTypes.js'
+import { TEAM_LEAD } from './internalTypes.js'
 
 const AGENTTEAM_POLICY_TRIGGER_RE = /\bagentteam\b|\bagent\s*team\b|\bteammate\b|\bsubagent\b|\/team(?:-(?:sync|delete|cleanup|remove-member))?\b|\bagentteam_(?:create|spawn|send|receive|task)\b|队友|队员|待命|研究员|规划师|实现者|planner|researcher|implementer/i
-
-function projectPolicyMemberHealth(member: TeamMember): ReturnType<typeof projectWorkerHealth> {
-  const projection: WorkerHealthProjectionInput = {
-    isOperational: Boolean(member.paneId) && member.status !== 'offline',
-    hasError: member.status === 'error' || Boolean(member.bridgeLastError),
-    hasActiveTurn: member.status === 'running' || member.status === 'draining',
-    hasPendingWork: member.status === 'queued' || member.status === 'pending_delivery' || Boolean(member.bridgeWorkRequestedAt),
-  }
-  return projectWorkerHealth(projection)
-}
 
 function shouldAppendLeaderConstraints(prompt: string, ctx: ExtensionContext): boolean {
   const memberName = getCurrentMemberName(ctx)
@@ -49,7 +39,7 @@ export function buildLeaderDelegationPolicy(teamName?: string | null): string {
       const roster = Object.values(team.members)
         .filter(member => member.name !== TEAM_LEAD)
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map(member => `${member.name}(${member.role}, ${projectPolicyMemberHealth(member)})`)
+        .map(member => `${member.name}(${member.role}, ${projectTeamMemberHealth(member)})`)
         .join(', ')
       lines.push(`Current teammate roster: ${roster || '(none yet)'}`)
     }

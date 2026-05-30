@@ -1,6 +1,7 @@
 import type { TaskStatus } from '../core/publicModel.js'
+import type { TeamTaskAction } from '../core/taskActions.js'
 
-export type TeamTaskAction = 'create' | 'assign' | 'block' | 'unblock' | 'close' | 'note' | 'report_done' | 'report_blocked' | 'list'
+export type { TeamTaskAction } from '../core/taskActions.js'
 
 export type TeamTaskInput = {
   action: TeamTaskAction

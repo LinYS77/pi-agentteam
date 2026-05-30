@@ -77,25 +77,6 @@ export function canSendMessageType(actor: string, type: string): boolean {
   return decideSendMessageAttentionPolicy({ messageType: type }).intent !== 'worker_delivery'
 }
 
-export function enforcePlannerSendPolicy(input: {
-  senderRole: string
-  messageType: string
-  taskId?: string
-}): string | null {
-  void input
-  return null
-}
-
-export function shouldMirrorMessageToLeader(input: {
-  sender: string
-  sentRecipients: string[]
-  messageType: string
-  leaderExists: boolean
-}): boolean {
-  void input
-  return false
-}
-
 export function isLeaderAttentionPolicySource(type: string): boolean {
   if (isTaskReportType(type)) {
     return decideTaskReportAttentionPolicy({ reportType: type }).intent === 'leader_attention'
@@ -454,22 +435,6 @@ async function deliverMessageToRecipient(
   else sent.push(recipient)
 }
 
-async function mirrorPeerEscalationToLeaderIfNeeded(
-  state: SendMessagePlanningState,
-  deps: MessageApplicationDeps,
-): Promise<void> {
-  if (!shouldMirrorMessageToLeader({
-    sender: state.sender,
-    sentRecipients: state.sent,
-    messageType: state.messageType,
-    leaderExists: Boolean(state.team.members[TEAM_LEAD]),
-  })) return
-
-  await deliverMessageToRecipient(state, TEAM_LEAD, deps, {
-    mirrorOf: state.sent.join(',') || state.params.to || state.routing.resolvedRecipient || state.routing.mode,
-  })
-}
-
 async function appendPeerMessageEvent(state: SendMessagePlanningState, deps: MessageApplicationDeps): Promise<void> {
   const { team, sender, sent, messageType, params, resolvedThreadId, priority } = state
   const peerRecipients = sent.filter(name => name !== TEAM_LEAD)
@@ -545,22 +510,6 @@ export async function executeSendMessageApplication(
     }
   }
 
-  const senderRole = (team.members[sender]?.role ?? '').trim().toLowerCase()
-  const plannerPolicyDenied = enforcePlannerSendPolicy({ senderRole, messageType, taskId: params.taskId })
-  if (plannerPolicyDenied) {
-    return {
-      text: plannerPolicyDenied,
-      details: {
-        denied: true,
-        reason: 'planner_send_policy',
-        sender,
-        senderRole,
-        type: messageType,
-        taskId: params.taskId,
-      },
-    }
-  }
-
   if (messageType === 'assignment' && params.taskId) {
     const task = team.tasks[params.taskId]
     if (task) {
@@ -618,7 +567,6 @@ export async function executeSendMessageApplication(
     await deliverMessageToRecipient(state, recipient, deps)
   }
 
-  await mirrorPeerEscalationToLeaderIfNeeded(state, deps)
   await appendPeerMessageEvent(state, deps)
 
   deps.invalidateStatus(ctx)

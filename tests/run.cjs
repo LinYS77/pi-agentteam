@@ -117,8 +117,11 @@ const Key = {
   tab: '__tab__',
   up: '__up__',
   down: '__down__',
+  left: '__left__',
+  right: '__right__',
   escape: '__esc__',
   enter: '__enter__',
+  shift: key => 'shift+' + key,
 }
 
 function matchesKey(input, key) {

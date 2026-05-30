@@ -12,20 +12,14 @@ export type AgentTeamDeliveryPolicy = {
 export const BRIDGE_ONLY_DELIVERY_POLICY: AgentTeamDeliveryPolicyName = 'bridge-only'
 export const DEFAULT_DELIVERY_POLICY: AgentTeamDeliveryPolicyName = BRIDGE_ONLY_DELIVERY_POLICY
 
-function normalizePolicyName(value?: string | null): string {
-  return String(value ?? '').trim().toLowerCase().replace(/_/g, '-')
-}
-
 export function parseDeliveryPolicyName(value?: string | null): AgentTeamDeliveryPolicyName | null {
-  const normalized = normalizePolicyName(value)
-  if (!normalized || normalized === 'bridge-only' || normalized === 'bridgeonly' || normalized === 'bridge') {
-    return BRIDGE_ONLY_DELIVERY_POLICY
-  }
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (!normalized || normalized === BRIDGE_ONLY_DELIVERY_POLICY) return BRIDGE_ONLY_DELIVERY_POLICY
   return null
 }
 
-export function normalizeDeliveryPolicyName(value?: string | null): AgentTeamDeliveryPolicyName {
-  return parseDeliveryPolicyName(value) ?? DEFAULT_DELIVERY_POLICY
+export function normalizeDeliveryPolicyName(_value?: string | null): AgentTeamDeliveryPolicyName {
+  return DEFAULT_DELIVERY_POLICY
 }
 
 export function resolveDeliveryPolicy(_input: { policy?: string | null } = {}): AgentTeamDeliveryPolicy {

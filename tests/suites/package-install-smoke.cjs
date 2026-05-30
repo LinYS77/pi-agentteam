@@ -35,7 +35,7 @@ module.exports = {
 
     const files = pkg.files || []
     const packedFiles = packedFileList(root)
-    assert.equal(pkg.version, '0.5.5', 'release package version should match approved v0.5.5 target')
+    assert.equal(pkg.version, '0.6.0', 'release package version should match approved v0.6.0 target')
     assert.equal(pkg.scripts?.test, 'node tests/run.cjs')
     assert.equal(pkg.scripts?.typecheck, 'tsc --noEmit -p tsconfig.json')
     assert.equal(pkg.scripts?.['check:boundaries'], 'node scripts/check-import-boundaries.cjs')
