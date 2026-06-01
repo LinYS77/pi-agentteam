@@ -35,7 +35,7 @@ module.exports = {
 
     const files = pkg.files || []
     const packedFiles = packedFileList(root)
-    assert.equal(pkg.version, '0.6.0', 'release package version should match approved v0.6.0 target')
+    assert.equal(pkg.version, '0.6.1', 'release package version should match approved v0.6.1 target')
     assert.equal(pkg.scripts?.test, 'node tests/run.cjs')
     assert.equal(pkg.scripts?.typecheck, 'tsc --noEmit -p tsconfig.json')
     assert.equal(pkg.scripts?.['check:boundaries'], 'node scripts/check-import-boundaries.cjs')
@@ -215,6 +215,8 @@ module.exports = {
     const spawnSource = fs.readFileSync(path.join(root, 'tools', 'workerSpawnService.ts'), 'utf8')
     const directBridgeRequestToken = 'create' + 'BridgeDeliveryRequest'
     assert.equal(spawnSource.includes(directBridgeRequestToken), false, 'spawn path should enqueue Outbox worker_delivery_requested instead of direct bridge delivery requests')
+    assert.equal(spawnSource.includes('../state/outboxStore.js'), false, 'spawn path should use injected Outbox store port')
+    assert.equal(spawnSource.includes('../app/effectRunner.js'), false, 'spawn path should use injected Outbox runner port')
     assert.ok(spawnSource.includes("kind: 'worker_delivery_requested'"), 'spawn path should route initial instruction through durable Outbox delivery effect')
 
     assert.equal(fs.existsSync(path.join(root, 'runtimeWake.ts')), false, 'legacy runtimeWake tmux transport module should be removed')

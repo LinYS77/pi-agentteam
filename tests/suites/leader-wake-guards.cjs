@@ -111,12 +111,12 @@ module.exports = {
       summary: 'Assigned T001',
       type: 'assignment',
       taskId: 'T001',
-    }, leaderCtx, {
+    }, leaderCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       requestWorkerDelivery: async () => {
         throw new Error('simulated worker delivery failure')
       },
-    })
+    }))
     assert.deepEqual(res.details.recipients, ['researcher-guard'])
     helpers.assertContains(res.content[0].text, 'warning side effects failed')
     assert.equal(res.details.warning, 'side_effect_failed')

@@ -1031,7 +1031,7 @@ module.exports = {
       action: 'note',
       taskId: 'T001',
       note: 'ordinary note should inform only',
-    }, researchCtx, {
+    }, researchCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       requestLeaderAttentionIfNeeded: async () => {
         ordinaryNoteEffects.push('leaderAttention')
@@ -1044,7 +1044,7 @@ module.exports = {
       invalidateStatus: () => {
         ordinaryNoteEffects.push('invalidateStatus')
       },
-    })
+    }))
     helpers.assertContains(res.content[0].text, 'Noted on T001')
     assert.equal(res.details.leaderMailboxDelivered, undefined, 'ordinary worker note must not inform leader mailbox')
     assert.deepEqual(ordinaryNoteEffects, ['invalidateStatus'], 'ordinary note must only invalidate UI status')
@@ -1199,7 +1199,7 @@ module.exports = {
       action: 'report_done',
       taskId: 'T002',
       note: 'Cross-team done report must be rejected',
-    }, researchCtx, {
+    }, researchCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       pushMailboxMessage: async () => {
         nonOwnerDoneEffects.push('pushMailbox')
@@ -1216,7 +1216,7 @@ module.exports = {
       invalidateStatus: () => {
         nonOwnerDoneEffects.push('invalidateStatus')
       },
-    })
+    }))
     helpers.assertContains(res.content[0].text, 'Cannot report_done T002: research-one is not the task owner (plan-one)')
     assert.equal(res.details.denied, true)
     assert.equal(res.details.reason, 'task_reporter_not_owner')
@@ -1294,14 +1294,14 @@ module.exports = {
       action: 'report_done',
       taskId: 'T002',
       note: 'Done but projection fails',
-    }, planCtx, {
+    }, planCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       requestLeaderAttentionIfNeeded: async (_team, message) => {
         assert.equal(message.type, 'report_done')
         assert.equal(message.wakeHint, 'hard')
         throw new Error('simulated projection failure')
       },
-    })
+    }))
     helpers.assertContains(res.content[0].text, 'Reported done for T002 to team-lead')
     helpers.assertContains(res.content[0].text, 'warning: side effect failed')
     assert.equal(res.details.reportOnly, true)
@@ -1315,7 +1315,7 @@ module.exports = {
       action: 'report_done',
       taskId: 'T002',
       note: 'Done but mailbox fails',
-    }, planCtx, {
+    }, planCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       pushMailboxMessage: async () => {
         doneReportMailboxFailureOrder.push('pushMailbox')
@@ -1328,7 +1328,7 @@ module.exports = {
       invalidateStatus: () => {
         doneReportMailboxFailureOrder.push('invalidateStatus')
       },
-    })
+    }))
     helpers.assertContains(res.content[0].text, 'Reported done for T002 to team-lead')
     helpers.assertContains(res.content[0].text, 'warning: side effect failed')
     helpers.assertContains(res.content[0].text, 'leader mailbox push failed for team-lead: simulated leader mailbox failure')
@@ -1351,7 +1351,7 @@ module.exports = {
       taskId: 'T002',
       note: 'Blocked but mailbox fails',
       blockedBy: ['leader decision'],
-    }, planCtx, {
+    }, planCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       pushMailboxMessage: async () => {
         blockedMailboxFailureOrder.push('pushMailbox')
@@ -1364,7 +1364,7 @@ module.exports = {
       invalidateStatus: () => {
         blockedMailboxFailureOrder.push('invalidateStatus')
       },
-    })
+    }))
     helpers.assertContains(res.content[0].text, 'Reported blocked status for T002 to team-lead')
     helpers.assertContains(res.content[0].text, 'warning: side effect failed')
     helpers.assertContains(res.content[0].text, 'leader mailbox push failed for team-lead: simulated leader mailbox failure')
@@ -1406,7 +1406,7 @@ module.exports = {
       action: 'report_done',
       taskId: 'T001',
       note: 'late done report after close',
-    }, researchCtx, {
+    }, researchCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       pushMailboxMessage: async () => {
         doneReportEffects.push('pushMailbox')
@@ -1423,7 +1423,7 @@ module.exports = {
       invalidateStatus: () => {
         doneReportEffects.push('invalidateStatus')
       },
-    })
+    }))
     assert.equal(res.details.denied, true)
     assert.equal(res.details.reason, 'invalid_task_status')
     assert.equal(res.details.status, 'done')
@@ -1434,7 +1434,7 @@ module.exports = {
       taskId: 'T001',
       note: 'late blocked report after close',
       blockedBy: ['already done'],
-    }, researchCtx, {
+    }, researchCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       pushMailboxMessage: async () => {
         doneReportEffects.push('pushMailbox')
@@ -1451,7 +1451,7 @@ module.exports = {
       invalidateStatus: () => {
         doneReportEffects.push('invalidateStatus')
       },
-    })
+    }))
     assert.equal(res.details.denied, true)
     assert.equal(res.details.reason, 'invalid_task_status')
     assert.equal(res.details.status, 'done')
@@ -1472,7 +1472,7 @@ module.exports = {
       action: 'close',
       taskId: 'T001',
       note: 'late close after close',
-    }, leaderCtx, {
+    }, leaderCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       pushMailboxMessage: async () => {
         doneCloseEffects.push('pushMailbox')
@@ -1489,7 +1489,7 @@ module.exports = {
       invalidateStatus: () => {
         doneCloseEffects.push('invalidateStatus')
       },
-    })
+    }))
     assert.equal(res.details.denied, true)
     assert.equal(res.details.reason, 'invalid_task_status')
     assert.equal(res.details.status, 'done')

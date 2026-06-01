@@ -1,12 +1,14 @@
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import type { DeliveryResult } from '../app/deliveryTypes.js'
-import type { AppendStructuredTaskNote, MessageApplicationDeps } from '../app/types.js'
+import type { AppendStructuredTaskNote, MessageApplicationDeps, MessageReceiveApplicationDeps, TaskApplicationDeps } from '../app/types.js'
+import type { OutboxRunnerPort } from '../app/ports.js'
 import type {
   TeamMessageType,
   TeamState,
 } from '../internalTypes.js'
 
-export type ToolHandlerDeps = MessageApplicationDeps & {
+export type ToolHandlerDeps = MessageApplicationDeps & MessageReceiveApplicationDeps & Pick<TaskApplicationDeps, 'teamState' | 'taskMutations'> & {
+  outboxRunner: OutboxRunnerPort
   sanitizeTeamName: (name: string) => string
   sanitizeWorkerName: (name: string) => string
   normalizeOwnerName: (name: string) => string

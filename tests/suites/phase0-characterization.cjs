@@ -34,10 +34,10 @@ module.exports = {
     const { modules, helpers } = env
     const now = 1_700_000_000_000
 
-    assert.equal(modules.runtimeBridge.BRIDGE_PACKAGE_VERSION, '0.6.0', 'bridge package version should match approved v0.6.0 release target; npm v0.5.0 remains documented rollback baseline')
+    assert.equal(modules.runtimeBridge.BRIDGE_PACKAGE_VERSION, '0.6.1', 'bridge package version should match approved v0.6.1 release target; npm v0.5.0 remains documented rollback baseline')
 
     const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'))
-    assert.equal(packageJson.version, '0.6.0', 'package version should match approved v0.6.0 release target while v0.5.0 remains the documented rollback baseline')
+    assert.equal(packageJson.version, '0.6.1', 'package version should match approved v0.6.1 release target while v0.5.0 remains the documented rollback baseline')
 
     const root = path.resolve(__dirname, '..', '..')
     const deliverySource = fs.readFileSync(path.join(root, 'adapters', 'bridge', 'delivery.ts'), 'utf8')

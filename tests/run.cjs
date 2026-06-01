@@ -359,17 +359,46 @@ function setupRuntimePatches(modules) {
     currentActor: modules.runtime.currentActor,
     healMemberPaneBinding: modules.runtime.healMemberPaneBinding,
     isLeaderInsideTmux: () => true,
+    outboxStore: modules.outboxStorePort.fileBackedOutboxStorePort,
+    teamState: modules.appStatePorts.fileBackedTeamStatePort,
+    taskMutations: modules.appStatePorts.fileBackedTaskMutationPort,
+    mailboxRepository: modules.mailboxPorts.fileBackedMailboxRepositoryPort,
     requestWorkerDelivery: modules.runtime.requestWorkerDelivery,
     requestLeaderAttentionIfNeeded: modules.runtime.requestLeaderAttentionIfNeeded,
     appendStructuredTaskNote: modules.runtime.appendStructuredTaskNote,
     invalidateStatus: () => {},
   }
 
+  function withOutboxHandlers(overrides = {}) {
+    const hasOutboxRunnerOverride = Object.prototype.hasOwnProperty.call(overrides, 'outboxRunner')
+    const base = { ...deps, ...overrides }
+    const outboxHandlers = modules.outboxEffectHandlers.createFileBackedOutboxEffectHandlers(base)
+    const resolved = {
+      ...base,
+      outboxStore: base.outboxStore ?? modules.outboxStorePort.fileBackedOutboxStorePort,
+      teamState: base.teamState ?? modules.appStatePorts.fileBackedTeamStatePort,
+      taskMutations: base.taskMutations ?? modules.appStatePorts.fileBackedTaskMutationPort,
+      mailboxRepository: base.mailboxRepository ?? modules.mailboxPorts.fileBackedMailboxRepositoryPort,
+      outboxHandlers,
+    }
+    return {
+      ...resolved,
+      outboxRunner: hasOutboxRunnerOverride ? base.outboxRunner : {
+        runOnce(input) {
+          return modules.effectRunner.runOutboxOnce(input, resolved)
+        },
+      },
+    }
+  }
+
+  Object.assign(deps, withOutboxHandlers())
+
   return {
     sentPrompts,
     livePanes,
     clearedPaneLabels,
     deps,
+    withOutboxHandlers,
     restore() {
       Object.assign(tmux, original)
     },
@@ -395,11 +424,16 @@ function loadModules() {
     bridgeStore: req('state/bridgeStore.js'),
     deliveryStore: req('state/deliveryStore.js'),
     lifecycleService: req('hooks/lifecycleService.js'),
+    effectRunner: req('app/effectRunner.js'),
     workerTurnPrompt: req('workerTurnPrompt.js'),
     runtimeService: req('adapters/runtime/service.js'),
     leaderProjectionService: req('runtime/leaderProjectionService.js'),
     leaderAttention: req('runtime/leaderAttention.js'),
     messageRouting: req('app/messageRouting.js'),
+    outboxStorePort: req('adapters/runtime/outboxStorePort.js'),
+    outboxEffectHandlers: req('adapters/runtime/outboxEffectHandlers.js'),
+    appStatePorts: req('adapters/runtime/appStatePorts.js'),
+    mailboxPorts: req('adapters/runtime/mailboxPorts.js'),
     shared: req('tools/shared.js'),
     types: req('types.js'),
     workerSpawnService: req('tools/workerSpawnService.js'),

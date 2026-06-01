@@ -1,14 +1,11 @@
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
-import { createTask } from '../state/taskStore.js'
-import { taskLocalNoteMetadata, taskReportNoteMetadata } from '../state/taskNotes.js'
-import { updateTeamState } from '../state/teamStore.js'
+import { taskLocalNoteMetadata, taskReportNoteMetadata } from '../core/taskNoteModel.js'
 import { defaultThreadIdForTask } from '../protocol.js'
 import { planTaskReportAttention, planTaskReportEffects } from './messageApplication.js'
 import { transitionTask, type TaskState as ReducerTaskState } from '../core/taskReducer.js'
 import { TEAM_LEAD } from '../internalTypes.js'
 import { runOutboxOnce, type OutboxRunResult } from './effectRunner.js'
 import { outboxEffectWarningName, outboxHash } from './outbox.js'
-import { enqueueOutboxEffect, getOutboxEffect } from '../state/outboxStore.js'
 import { isLeader } from '../utils.js'
 import { buildImplementationCompletionNote, formatTask } from './taskFormatting.js'
 import type { TaskApplicationDeps } from './types.js'
@@ -285,11 +282,11 @@ function createTaskCommand(input: TaskCommandContext, params: TeamTaskInput): Ta
     throw new Error('title and description are required')
   }
   let createdTaskId = ''
-  const updated = requireUpdatedTeam(updateTeamState(input.teamName, latest => {
+  const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const owner = params.owner !== undefined
       ? resolveTaskOwner(input, latest, params.owner)
       : undefined
-    const task = createTask(latest, {
+    const task = input.deps.taskMutations.createTask(latest, {
       title: params.title!,
       description: params.description!,
       owner,
@@ -323,7 +320,7 @@ function assignTaskCommand(input: TaskCommandContext, taskId: string, params: Te
   const initialTransition = transitionTask(reducerTaskSnapshot(existingTask), { type: 'assign', owner, at: transitionAt })
   if (!initialTransition.ok) return taskTransitionFailure(existingTask, 'assign', initialTransition.reason)
 
-  const updated = requireUpdatedTeam(updateTeamState(input.teamName, latest => {
+  const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
     const transition = applyReducerTransition(task, { type: 'assign', owner, at: transitionAt })
     if (!transition.ok) throw new Error(transition.reason)
@@ -345,7 +342,7 @@ function blockTaskCommand(input: TaskCommandContext, taskId: string, params: Tea
   const initialTransition = transitionTask(reducerTaskSnapshot(existingTask), { type: 'block', at: transitionAt })
   if (!initialTransition.ok) return taskTransitionFailure(existingTask, 'block', initialTransition.reason)
 
-  const updated = requireUpdatedTeam(updateTeamState(input.teamName, latest => {
+  const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
     const transition = applyReducerTransition(task, { type: 'block', at: transitionAt })
     if (!transition.ok) throw new Error(transition.reason)
@@ -370,7 +367,7 @@ function unblockTaskCommand(input: TaskCommandContext, taskId: string, params: T
   const initialTransition = transitionTask(reducerTaskSnapshot(existingTask), { type: 'unblock', at: transitionAt })
   if (!initialTransition.ok) return taskTransitionFailure(existingTask, 'unblock', initialTransition.reason)
 
-  const updated = requireUpdatedTeam(updateTeamState(input.teamName, latest => {
+  const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
     const transition = applyReducerTransition(task, { type: 'unblock', at: transitionAt })
     if (!transition.ok) throw new Error(transition.reason)
@@ -395,7 +392,7 @@ function closeTaskCommand(input: TaskCommandContext, taskId: string, params: Tea
   const initialTransition = transitionTask(reducerTaskSnapshot(existingTask), { type: 'close', at: transitionAt })
   if (!initialTransition.ok) return taskTransitionFailure(existingTask, 'close', initialTransition.reason)
 
-  const updated = requireUpdatedTeam(updateTeamState(input.teamName, latest => {
+  const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
     const transition = applyReducerTransition(task, { type: 'close', at: transitionAt })
     if (!transition.ok) throw new Error(transition.reason)
@@ -419,7 +416,7 @@ function noteTaskCommand(input: TaskCommandContext, taskId: string, params: Team
   if (unsupportedStatus) return unsupportedStatus
   const unsupportedBlockedBy = unsupportedBlockedByParam(params, 'note')
   if (unsupportedBlockedBy) return unsupportedBlockedBy
-  const updated = requireUpdatedTeam(updateTeamState(input.teamName, latest => {
+  const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
     input.deps.appendStructuredTaskNote(task, input.actor, noteText(params, 'Note added'), {
       messageType: 'inform',
@@ -452,7 +449,7 @@ function reportDoneTaskCommand(input: TaskCommandContext, taskId: string, params
   let leaderWake: TaskCommandResult['leaderWake']
   let leaderMailbox: TaskCommandResult['leaderMailbox']
   const reportAttention = planTaskReportAttention('report_done')
-  const updated = requireUpdatedTeam(updateTeamState(input.teamName, latest => {
+  const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
     const role = actorRole(latest, input.actor)
     const note = role === 'implementer'
@@ -530,7 +527,7 @@ function reportBlockedTaskCommand(input: TaskCommandContext, taskId: string, par
   let leaderWake: TaskCommandResult['leaderWake']
   let leaderMailbox: TaskCommandResult['leaderMailbox']
   const reportAttention = planTaskReportAttention('report_blocked')
-  const updated = requireUpdatedTeam(updateTeamState(input.teamName, latest => {
+  const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
     const blockerText = params.blockedBy?.length
       ? `Blocked by: ${params.blockedBy.join(', ')}`
@@ -637,7 +634,7 @@ async function runTaskOutboxEffects(
   }, deps)
   result.details.outboxRun = run
   result.details.outboxEffects = effectIds.map(effectId => {
-    const effect = getOutboxEffect(teamName, effectId)
+    const effect = deps.outboxStore.get(teamName, effectId)
     return effect
       ? { effectId, kind: effect.kind, status: effect.status, idempotencyKey: effect.idempotencyKey, lastError: effect.lastError }
       : { effectId, status: 'pending' }
@@ -657,7 +654,7 @@ async function handleTaskApplicationSideEffects(result: TaskCommandResult, ctx: 
 
   if (result.leaderMailbox && result.wakeTeam) {
     const pushed = result.leaderMailbox.message
-    const mailboxEffect = enqueueOutboxEffect({
+    const mailboxEffect = deps.outboxStore.enqueue({
       teamName: result.wakeTeam.name,
       kind: 'inbox_item_append_requested',
       idempotencyKey: ['task-leader-mailbox', result.wakeTeam.name, pushed.type ?? 'inform', pushed.taskId ?? '', pushed.from, pushed.to, pushed.summary ?? '', outboxHash(pushed.text)].join(':'),
@@ -685,13 +682,13 @@ async function handleTaskApplicationSideEffects(result: TaskCommandResult, ctx: 
     }
     const run = await runTaskOutboxEffects(result, deps, result.wakeTeam.name, [mailboxEffect.effectId])
     const mailboxRunResult = run.results.find(item => item.effectId === mailboxEffect.effectId)
-    const storedMailboxEffect = getOutboxEffect(result.wakeTeam.name, mailboxEffect.effectId)
+    const storedMailboxEffect = deps.outboxStore.get(result.wakeTeam.name, mailboxEffect.effectId)
     mailboxDelivered = Boolean(mailboxRunResult?.ok || storedMailboxEffect?.status === 'done')
     sentLeaderMailboxMessage = (mailboxRunResult?.value ?? storedMailboxEffect?.result) as { id?: string } | undefined
     if (!sentLeaderMailboxMessage && mailboxDelivered) sentLeaderMailboxMessage = { id: deterministicMailboxId }
     result.details.leaderMailboxDelivered = mailboxDelivered
     if (!mailboxDelivered) {
-      const mailboxError = mailboxRunResult?.error ?? getOutboxEffect(result.wakeTeam.name, mailboxEffect.effectId)?.lastError ?? 'leader mailbox push failed'
+      const mailboxError = mailboxRunResult?.error ?? deps.outboxStore.get(result.wakeTeam.name, mailboxEffect.effectId)?.lastError ?? 'leader mailbox push failed'
       result.details.mailboxDeliveryFailed = { recipient: pushed.to, error: mailboxError }
       result.text = `${result.text} (leader mailbox push failed for ${pushed.to}: ${mailboxError})`
     }
@@ -705,7 +702,7 @@ async function handleTaskApplicationSideEffects(result: TaskCommandResult, ctx: 
     leaderMailboxRequired: Boolean(result.leaderMailbox),
   })
   if (reportEffects.leaderAttention && result.wakeTeam) {
-    const attentionEffect = enqueueOutboxEffect({
+    const attentionEffect = deps.outboxStore.enqueue({
       teamName: result.wakeTeam.name,
       kind: 'leader_attention_requested',
       idempotencyKey: ['task-leader-attention', result.wakeTeam.name, reportEffects.leaderAttention.message.type, reportEffects.leaderAttention.message.messageId ?? '', reportEffects.leaderAttention.message.taskId ?? ''].join(':'),

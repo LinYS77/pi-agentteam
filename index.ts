@@ -27,6 +27,11 @@ import {
   startWorkerBridgeForContext,
   stopWorkerBridge,
 } from './adapters/bridge/index.js'
+import { createOutboxRunner } from './app/effectRunner.js'
+import { createFileBackedOutboxEffectHandlers } from './adapters/runtime/outboxEffectHandlers.js'
+import { fileBackedOutboxStorePort } from './adapters/runtime/outboxStorePort.js'
+import { fileBackedTaskMutationPort, fileBackedTeamStatePort } from './adapters/runtime/appStatePorts.js'
+import { fileBackedMailboxRepositoryPort } from './adapters/runtime/mailboxPorts.js'
 import { registerBeforeAgentStartPolicy } from './policy.js'
 import { registerAgentTeamRenderers } from './renderers.js'
 
@@ -74,6 +79,17 @@ export default function agentTeamExtension(pi: ExtensionAPI): void {
     runOutboxMaintenance: runtime.runOutboxMaintenance,
   })
 
+  const outboxHandlers = createFileBackedOutboxEffectHandlers({
+    requestWorkerDelivery,
+    requestLeaderAttentionIfNeeded,
+  })
+  const outboxRunner = {
+    runOnce: createOutboxRunner({
+      outboxStore: fileBackedOutboxStorePort,
+      outboxHandlers,
+    }),
+  }
+
   registerAgentTeamTools(pi, {
     sanitizeTeamName,
     sanitizeWorkerName,
@@ -84,6 +100,12 @@ export default function agentTeamExtension(pi: ExtensionAPI): void {
     currentActor,
     healMemberPaneBinding,
     isLeaderInsideTmux,
+    outboxStore: fileBackedOutboxStorePort,
+    outboxRunner,
+    outboxHandlers,
+    teamState: fileBackedTeamStatePort,
+    taskMutations: fileBackedTaskMutationPort,
+    mailboxRepository: fileBackedMailboxRepositoryPort,
     requestWorkerDelivery,
     requestLeaderAttentionIfNeeded,
     appendStructuredTaskNote,

@@ -96,6 +96,68 @@ const publicSurfaceForbiddenTokens = [
 ]
 const removedRootFacadeImportPattern = /from ['"](?:\.\/|\.\.\/)(?:state|tmux|runtime|runtimeBridge|runtimeDelivery|runtimePanes|runtimeRules|runtimeService|runtimeStorage)\.js['"]/
 const directBridgeRequestToken = 'create' + 'BridgeDeliveryRequest'
+const completedPortBoundaryRules = [
+  {
+    rel: 'app/effectRunner.ts',
+    forbiddenImportPrefixes: ['state/', 'runtime/', 'adapters/', 'tmux/'],
+    requiredText: [
+      { token: 'deps.outboxStore', message: 'must use injected outboxStore dependency' },
+      { token: 'deps.outboxHandlers', message: 'must use injected outboxHandlers dependency' },
+    ],
+  },
+  {
+    rel: 'app/messageApplication.ts',
+    forbiddenImportTargets: ['state/outboxStore.ts', 'state/taskNotes.ts'],
+    requiredText: [
+      { token: '../core/taskNoteModel.js', message: 'must build task-note metadata through core taskNoteModel' },
+      { token: 'deps.outboxStore.enqueue', message: 'must enqueue durable effects through injected outboxStore port' },
+    ],
+  },
+  {
+    rel: 'app/taskApplication.ts',
+    forbiddenImportTargets: ['state/outboxStore.ts', 'state/taskNotes.ts', 'state/taskStore.ts', 'state/teamStore.ts'],
+    requiredText: [
+      { token: '../core/taskNoteModel.js', message: 'must build task-note metadata through core taskNoteModel' },
+      { token: 'deps.outboxStore.enqueue', message: 'must enqueue durable effects through injected outboxStore port' },
+      { token: 'deps.teamState.updateTeam', message: 'must mutate team state through injected teamState port' },
+      { token: 'deps.taskMutations.createTask', message: 'must create tasks through injected task mutation port' },
+    ],
+  },
+  {
+    rel: 'tools/messageReceive.ts',
+    forbiddenImportTargets: ['state/mailboxStore.ts'],
+    forbiddenText: [
+      { token: 'markMailboxMessages', message: 'must not own mailbox mark lifecycle calls' },
+      { token: '.markDelivered', message: 'must not directly mark mailbox delivery lifecycle' },
+      { token: '.markRead', message: 'must not directly mark mailbox read lifecycle' },
+    ],
+    requiredText: [
+      { token: '../app/messageReceiveApplication.js', message: 'must delegate receive read boundary to app/messageReceiveApplication' },
+      { token: 'executeReceiveMessagesApplication', message: 'must call app receive use-case' },
+    ],
+  },
+  {
+    rel: 'runtime/outboxMaintenance.ts',
+    forbiddenImportTargets: [
+      'app/effectRunner.ts',
+      'adapters/runtime/outboxStorePort.ts',
+      'adapters/runtime/outboxEffectHandlers.ts',
+    ],
+  },
+  {
+    rel: 'runtime/leaderProjectionService.ts',
+    forbiddenImportTargets: ['adapters/runtime/session.ts'],
+  },
+  {
+    rel: 'tools/workerSpawnService.ts',
+    forbiddenImportTargets: ['state/outboxStore.ts', 'app/effectRunner.ts'],
+    requiredText: [
+      { token: 'deps.outboxStore.enqueue', message: 'must enqueue initial delivery through injected outboxStore port' },
+      { token: 'deps.outboxStore.get', message: 'must read initial delivery effect through injected outboxStore port' },
+      { token: 'deps.outboxRunner.runOnce', message: 'must run initial delivery through injected outboxRunner port' },
+    ],
+  },
+]
 
 function wordTokenPattern(token) {
   return new RegExp(`(^|[^A-Za-z0-9_])${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Za-z0-9_]|$)`)
@@ -142,6 +204,38 @@ function normalizedImportTarget(file, specifier) {
 
 function isUnder(rel, dir) {
   return rel === dir.slice(0, -1) || rel.startsWith(dir)
+}
+
+function importSpecifiers(text) {
+  const specs = []
+  const importPattern = /(?:from\s+|import\s*)['"]([^'"]+)['"]/g
+  for (const match of text.matchAll(importPattern)) specs.push(match[1])
+  return specs
+}
+
+function completedPortBoundaryViolations(rel, file, text) {
+  const rule = completedPortBoundaryRules.find(item => item.rel === rel)
+  if (!rule) return []
+  const out = []
+  for (const required of rule.requiredText ?? []) {
+    if (!text.includes(required.token)) out.push(`${rel}: ${required.message} (${required.token})`)
+  }
+  for (const forbidden of rule.forbiddenText ?? []) {
+    if (text.includes(forbidden.token)) out.push(`${rel}: ${forbidden.message} (${forbidden.token})`)
+  }
+  for (const specifier of importSpecifiers(text)) {
+    if (!specifier.startsWith('.')) continue
+    const target = normalizedImportTarget(file, specifier)
+    if (!target) continue
+    const targetRel = path.relative(root, target).replace(/\\/g, '/')
+    if ((rule.forbiddenImportTargets ?? []).includes(targetRel)) {
+      out.push(`${rel}: must not import ${targetRel}; use injected port/dependency boundary`)
+    }
+    for (const prefix of rule.forbiddenImportPrefixes ?? []) {
+      if (isUnder(targetRel, prefix)) out.push(`${rel}: must not import ${targetRel}; use injected port/dependency boundary`)
+    }
+  }
+  return out
 }
 
 function dependencyBoundaryViolation(rel, targetRel) {
@@ -202,6 +296,7 @@ for (const file of walk(root)) {
   if (rel === 'adapters/bridge/index.ts' && text.includes(directBridgeRequestToken)) {
     violations.push(`${rel}: bridge adapter surface must not export direct delivery request creation`)
   }
+  violations.push(...completedPortBoundaryViolations(rel, file, text))
 
   const importPattern = /from ['"]([^'"]+)['"]/g
   for (const match of text.matchAll(importPattern)) {

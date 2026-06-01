@@ -37,6 +37,11 @@ module.exports = {
     const runner = env.helpers.requireDist('app/effectRunner.js')
     const maintenance = env.helpers.requireDist('runtime/outboxMaintenance.js')
     const { modules } = env
+    const runnerDeps = deps => env.patches.withOutboxHandlers(deps)
+    const runOutboxOnceWithDeps = (input, deps) => runner.runOutboxOnce(input, runnerDeps(deps))
+    const maintenanceDeps = deps => ({
+      outboxRunner: { runOnce: input => runOutboxOnceWithDeps(input, deps) },
+    })
 
     assert.deepEqual(outbox.OUTBOX_EFFECT_STATUSES, ['pending', 'done', 'failed'])
     assert.ok(outbox.OUTBOX_EFFECT_KINDS.includes('inbox_item_append_requested'))
@@ -79,7 +84,7 @@ module.exports = {
     assert.equal(store.getOutboxEffectByIdempotencyKey(teamName, 'inbox:M001').effectId, first.effectId)
 
     let pushCount = 0
-    let result = await runner.runOutboxOnce({ teamName, workerId: 'runner-a', limit: 10, now: 1020 }, {
+    let result = await runOutboxOnceWithDeps({ teamName, workerId: 'runner-a', limit: 10, now: 1020 }, {
       pushMailboxMessage: (targetTeam, memberName, message) => {
         pushCount += 1
         return modules.state.pushMailboxMessage(targetTeam, memberName, message)
@@ -93,7 +98,7 @@ module.exports = {
     assert.equal(store.getOutboxEffect(teamName, first.effectId).status, 'done')
     assert.equal(modules.state.readMailbox(teamName, 'worker-a').length, 1)
 
-    result = await runner.runOutboxOnce({ teamName, workerId: 'runner-a', limit: 10, now: 1030 }, {
+    result = await runOutboxOnceWithDeps({ teamName, workerId: 'runner-a', limit: 10, now: 1030 }, {
       pushMailboxMessage: () => {
         pushCount += 1
         throw new Error('done effect should not run again')
@@ -118,7 +123,7 @@ module.exports = {
       now: 2000,
     })
     let deliveryAttempts = 0
-    result = await runner.runOutboxOnce({ teamName, workerId: 'runner-b', limit: 10, now: 2010 }, {
+    result = await runOutboxOnceWithDeps({ teamName, workerId: 'runner-b', limit: 10, now: 2010 }, {
       requestWorkerDelivery: async (_team, memberName, _explicitTask, options) => {
         deliveryAttempts += 1
         return { ok: false, recipient: memberName, wakeHint: options?.wakeHint, reason: 'transient bridge failure' }
@@ -134,7 +139,7 @@ module.exports = {
     assert.equal(retryAfterFailure.nextAttemptAt, 3010, 'first retry should use deterministic default backoff')
     assert.equal(retryAfterFailure.lastError, 'transient bridge failure')
 
-    result = await runner.runOutboxOnce({ teamName, workerId: 'runner-b', limit: 10, now: 2500 }, {
+    result = await runOutboxOnceWithDeps({ teamName, workerId: 'runner-b', limit: 10, now: 2500 }, {
       requestWorkerDelivery: async () => {
         deliveryAttempts += 1
         throw new Error('should not run before nextAttemptAt')
@@ -144,7 +149,7 @@ module.exports = {
     assert.equal(result.claimed, 0, 'effect should not be eligible before nextAttemptAt')
     assert.equal(deliveryAttempts, 1)
 
-    result = await runner.runOutboxOnce({ teamName, workerId: 'runner-b', limit: 10, now: 3010 }, {
+    result = await runOutboxOnceWithDeps({ teamName, workerId: 'runner-b', limit: 10, now: 3010 }, {
       requestWorkerDelivery: async (_team, memberName, _explicitTask, options) => {
         deliveryAttempts += 1
         return { ok: true, recipient: memberName, wakeHint: options?.wakeHint, reason: 'ok', method: 'bridge_requested' }
@@ -164,7 +169,7 @@ module.exports = {
       now: 4000,
     })
     for (const now of [4010, 5020]) {
-      result = await runner.runOutboxOnce({ teamName, workerId: 'runner-c', limit: 10, now }, {
+      result = await runOutboxOnceWithDeps({ teamName, workerId: 'runner-c', limit: 10, now }, {
         requestWorkerDelivery: async (_team, memberName, _explicitTask, options) => ({
           ok: false,
           recipient: memberName,
@@ -190,7 +195,7 @@ module.exports = {
     })
     assert.equal(terminalDuplicate.effectId, terminal.effectId)
     assert.equal(terminalDuplicate.status, 'failed', 'idempotent upsert should not resurrect terminal failed effects')
-    result = await runner.runOutboxOnce({ teamName, workerId: 'runner-c', limit: 10, now: 7000 }, {
+    result = await runOutboxOnceWithDeps({ teamName, workerId: 'runner-c', limit: 10, now: 7000 }, {
       requestWorkerDelivery: async () => {
         throw new Error('failed terminal effect should not run again')
       },
@@ -218,7 +223,7 @@ module.exports = {
     assert.equal(recovered.length, 1)
     assert.equal(recovered[0].effectId, claimRecovery.effectId)
     assert.equal(store.getOutboxEffect(teamName, claimRecovery.effectId).claim, undefined)
-    result = await runner.runOutboxOnce({ teamName, workerId: 'runner-e', limit: 10, now: 8120 }, {
+    result = await runOutboxOnceWithDeps({ teamName, workerId: 'runner-e', limit: 10, now: 8120 }, {
       requestWorkerDelivery: noopDelivery(),
       requestLeaderAttentionIfNeeded: async (_team, message) => ({
         ok: true,
@@ -263,13 +268,13 @@ module.exports = {
     const expiredClaim = store.claimOutboxEffects({ teamName: maintenanceTeamName, workerId: 'stale-maintenance', effectIds: [expiredEffect.effectId], claimTtlMs: 10, now: 9020 })
     assert.equal(expiredClaim.length, 1)
     let maintenanceProjectionCalls = 0
-    const maintenanceRun = await maintenance.runOutboxMaintenanceForTeam(maintenanceTeamName, {
+    const maintenanceRun = await maintenance.runOutboxMaintenanceForTeam(maintenanceTeamName, maintenanceDeps({
       requestWorkerDelivery: noopDelivery(),
       requestLeaderAttentionIfNeeded: async (_team, message) => {
         maintenanceProjectionCalls += 1
         return { ok: true, recipient: 'team-lead', wakeHint: message.wakeHint, reason: 'maintenance recovered attention', method: 'leader_attention_requested' }
       },
-    }, { now: 9050, limit: 10 })
+    }), { now: 9050, limit: 10 })
     assert.equal(maintenanceRun.recovered, 1, 'maintenance should recover expired claims before running')
     assert.equal(maintenanceRun.run.done, 2, 'maintenance tick should run eligible pending effects')
     assert.equal(store.getOutboxEffect(maintenanceTeamName, maintenanceEffect.effectId).status, 'done')
@@ -280,14 +285,14 @@ module.exports = {
     assert.equal(maintenanceSummary.pending, 0)
     assert.equal(maintenanceSummary.failed, 0)
     assert.equal(maintenanceSummary.lastRunAt, 9050)
-    const repeatedMaintenance = await maintenance.runOutboxMaintenanceForTeam(maintenanceTeamName, {
+    const repeatedMaintenance = await maintenance.runOutboxMaintenanceForTeam(maintenanceTeamName, maintenanceDeps({
       requestWorkerDelivery: async () => {
         throw new Error('done maintenance effects must not rerun')
       },
       requestLeaderAttentionIfNeeded: async () => {
         throw new Error('done maintenance attention must not rerun')
       },
-    }, { now: 9060, limit: 10 })
+    }), { now: 9060, limit: 10 })
     assert.equal(repeatedMaintenance.run.claimed, 0, 'repeated maintenance should not claim done effects')
     assert.equal(modules.state.readMailbox(maintenanceTeamName, 'worker-a').filter(item => item.text === 'maintenance retries pending mailbox effect').length, 1, 'repeated maintenance should not duplicate mailbox output')
     maintenanceSummary = maintenance.outboxDiagnosticsSummary(maintenanceTeamName)
@@ -306,12 +311,12 @@ module.exports = {
       maxAttempts: 1,
       now: 9100,
     })
-    const diagnosticsRun = await maintenance.runOutboxMaintenanceForTeam(diagnosticsTeamName, {
+    const diagnosticsRun = await maintenance.runOutboxMaintenanceForTeam(diagnosticsTeamName, maintenanceDeps({
       requestWorkerDelivery: noopDelivery(),
       requestLeaderAttentionIfNeeded: async () => {
         throw new Error('diagnostic terminal failure')
       },
-    }, { now: 9110, limit: 10 })
+    }), { now: 9110, limit: 10 })
     assert.equal(diagnosticsRun.run.terminalFailed, 1)
     const failedStored = store.getOutboxEffect(diagnosticsTeamName, failedEffect.effectId)
     assert.equal(failedStored.status, 'failed')
@@ -356,13 +361,13 @@ module.exports = {
       message: 'durable assignment with retry',
       summary: 'retry assignment',
       taskId: 'T001',
-    }, messageCtx, {
+    }, messageCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       requestWorkerDelivery: async (_team, memberName, _explicitTask, options) => {
         failingMessageCalls.push(memberName)
         throw new Error('transient message delivery failure')
       },
-    })
+    }))
     assert.deepEqual(sendResult.details.recipients, ['worker-a'], 'failed delivery should not make successful mailbox send disappear')
     assert.equal(sendResult.details.warning, 'side_effect_failed')
     assert.equal(failingMessageCalls.length, 1)
@@ -426,12 +431,12 @@ module.exports = {
       message: 'durable assignment with retry',
       summary: 'retry assignment',
       taskId: 'T001',
-    }, messageCtx, {
+    }, messageCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       requestWorkerDelivery: async () => {
         throw new Error('repeated send should not run pending delivery before retry backoff')
       },
-    })
+    }))
     assert.deepEqual(sendResult.details.recipients, ['worker-a'], 'retry send should reuse done mailbox outbox effect as delivered')
     assert.equal(sendResult.details.warning, undefined)
     assert.equal(sendResult.details.wakeByRecipient[0].requestId, failedWorkerEffects[0].effectId, 'repeated command before retry eligibility should expose the pending outbox request id')
@@ -448,7 +453,7 @@ module.exports = {
     assert.equal(messageTask.notes.filter(note => note.text === 'Linked message: durable assignment with retry').length, 0, 'repeated task-bound send should not create visible linked task note')
     assert.equal(messageTask.notes.filter(note => modules.state.isCommunicationReferenceNote(note)).length, 1, 'repeated task-bound send should not duplicate hidden communication ref')
     assert.equal(modules.state.latestVisibleTaskNote(messageTask), undefined, 'hidden communication ref should remain excluded from latest substantive task note')
-    const linkedNoteRetry = await runner.runOutboxOnce({ teamName: messageTeamName, workerId: 'message-note-rerun', effectIds: [linkedTaskNoteEffects[0].effectId], now: Date.now() + 5_000 }, {
+    const linkedNoteRetry = await runOutboxOnceWithDeps({ teamName: messageTeamName, workerId: 'message-note-rerun', effectIds: [linkedTaskNoteEffects[0].effectId], now: Date.now() + 5_000 }, {
       requestWorkerDelivery: noopDelivery(),
       requestLeaderAttentionIfNeeded: async () => ({ ok: true, recipient: 'team-lead', wakeHint: 'hard', reason: 'unused', method: 'leader_attention_requested' }),
     })
@@ -467,7 +472,7 @@ module.exports = {
       },
       now: Date.now() + 6_000,
     })
-    const duplicateNoteRun = await runner.runOutboxOnce({ teamName: messageTeamName, workerId: 'message-note-duplicate', effectIds: [duplicateNoteEffect.effectId], now: Date.now() + 6_100 }, {
+    const duplicateNoteRun = await runOutboxOnceWithDeps({ teamName: messageTeamName, workerId: 'message-note-duplicate', effectIds: [duplicateNoteEffect.effectId], now: Date.now() + 6_100 }, {
       requestWorkerDelivery: noopDelivery(),
       requestLeaderAttentionIfNeeded: async () => ({ ok: true, recipient: 'team-lead', wakeHint: 'hard', reason: 'unused', method: 'leader_attention_requested' }),
     })
@@ -480,7 +485,7 @@ module.exports = {
     assert.equal(retriedWorkerEffects.length, 1, 'retry should reuse one worker delivery outbox effect')
     assert.equal(retriedWorkerEffects[0].status, 'pending', 'already requested delivery remains retryable for the outbox pump')
     assert.equal(retriedWorkerEffects[0].attempts, 1)
-    const messageRetryRun = await runner.runOutboxOnce({ teamName: messageTeamName, workerId: 'message-retry', effectIds: [retriedWorkerEffects[0].effectId], now: Date.now() + 5_000 }, {
+    const messageRetryRun = await runOutboxOnceWithDeps({ teamName: messageTeamName, workerId: 'message-retry', effectIds: [retriedWorkerEffects[0].effectId], now: Date.now() + 5_000 }, {
       requestWorkerDelivery: async (_team, memberName, _explicitTask, options) => ({
         ok: true,
         recipient: memberName,
@@ -513,13 +518,13 @@ module.exports = {
       action: 'report_done',
       taskId: 'T001',
       note: 'report mailbox succeeds but attention fails once',
-    }, workerCtx, {
+    }, workerCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       requestLeaderAttentionIfNeeded: async () => {
         leaderAttentionCalls += 1
         throw new Error('transient report attention failure')
       },
-    })
+    }))
     assert.equal(reportResult.details.reportOnly, true)
     assert.equal(typeof taskApplication.executeTaskApplication, 'function', 'report task path should be backed by app task boundary')
     assert.equal(reportResult.details.warning, 'side_effect_failed')
@@ -540,7 +545,7 @@ module.exports = {
     assert.equal(reportEffects.filter(effect => effect.kind === 'task_note_append_requested').length, 0, 'task report should not enqueue linked task-note effect')
     assert.equal(modules.state.readTeamState(taskTeamName).tasks.T001.notes.filter(note => note.text.startsWith('Linked message:')).length, 0)
 
-    const retryRun = await runner.runOutboxOnce({ teamName: taskTeamName, workerId: 'report-retry', effectIds: [attentionEffect.effectId], now: Date.now() + 5_000 }, {
+    const retryRun = await runOutboxOnceWithDeps({ teamName: taskTeamName, workerId: 'report-retry', effectIds: [attentionEffect.effectId], now: Date.now() + 5_000 }, {
       requestWorkerDelivery: noopDelivery(),
       requestLeaderAttentionIfNeeded: async (_team, message) => {
         leaderAttentionCalls += 1

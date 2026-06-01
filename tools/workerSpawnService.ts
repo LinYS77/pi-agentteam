@@ -11,10 +11,8 @@ import {
   waitForPaneAppStart,
 } from '../adapters/tmux/index.js'
 import { formatConfigDiagnostic, summarizeConfigDiagnostics } from '../config.js'
-import { runOutboxOnce } from '../app/effectRunner.js'
 import { isBridgeFresh } from '../adapters/bridge/index.js'
 import { transitionWorkerFsm } from '../runtime/workerFsm.js'
-import { enqueueOutboxEffect, getOutboxEffect } from '../state/outboxStore.js'
 import { TEAM_LEAD } from '../internalTypes.js'
 import type { TeamState } from '../internalTypes.js'
 import type { ToolHandlerDeps } from './shared.js'
@@ -107,7 +105,7 @@ async function requestInitialSpawnDeliveryThroughOutbox(
   workerName: string,
   initialInstruction: string,
 ): Promise<InitialSpawnDeliveryResult> {
-  const effect = enqueueOutboxEffect({
+  const effect = deps.outboxStore.enqueue({
     teamName,
     kind: 'worker_delivery_requested',
     idempotencyKey: ['spawn-initial-worker-delivery', teamName, workerName].join(':'),
@@ -122,14 +120,14 @@ async function requestInitialSpawnDeliveryThroughOutbox(
       },
     },
   })
-  const run = await runOutboxOnce({
+  const run = await deps.outboxRunner.runOnce({
     teamName,
     workerId: 'worker-spawn-service',
     effectIds: [effect.effectId],
     limit: 1,
-  }, deps)
+  })
   const runResult = run.results.find(item => item.effectId === effect.effectId)
-  const stored = getOutboxEffect(teamName, effect.effectId)
+  const stored = deps.outboxStore.get(teamName, effect.effectId)
   const value = runResult?.value ?? stored?.result
   const deliveryRequestId = value && typeof value === 'object' && 'requestId' in value && typeof value.requestId === 'string'
     ? value.requestId

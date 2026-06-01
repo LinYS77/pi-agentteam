@@ -6,9 +6,8 @@ import {
 import { MESSAGE_TYPES, isMessageType, isTaskReportType, type MessageType, type TaskReportType } from '../core/publicModel.js'
 import { defaultThreadIdForTask, normalizePriority } from '../protocol.js'
 import { TEAM_LEAD, type MailboxMessage, type TeamMessageWakeHint, type TeamState } from '../internalTypes.js'
-import { COMMUNICATION_REF_TEXT, communicationRefMetadata } from '../state/taskNotes.js'
+import { COMMUNICATION_REF_TEXT, communicationRefMetadata } from '../core/taskNoteModel.js'
 import { oneLine } from '../utils.js'
-import { enqueueOutboxEffect, getOutboxEffect } from '../state/outboxStore.js'
 import { outboxEffectWarningName, outboxHash } from './outbox.js'
 import { resolveMessageRecipients } from './messageRouting.js'
 import type { OutboxRunResult } from './effectRunner.js'
@@ -199,7 +198,7 @@ async function runOutboxForState(state: SendMessagePlanningState, deps: MessageA
   state.outboxRun = run
   appendOutboxWarnings(state, run)
   for (const effectId of effectIds) {
-    const effect = getOutboxEffect(state.team.name, effectId)
+    const effect = deps.outboxStore.get(state.team.name, effectId)
     if (!effect) continue
     state.outboxEffects.push({
       effectId,
@@ -263,7 +262,7 @@ async function deliverMessageToRecipient(
     params.summary ?? '',
     outboxHash(params.message),
   ].join(':')
-  const mailboxEffect = enqueueOutboxEffect({
+  const mailboxEffect = deps.outboxStore.enqueue({
     teamName: team.name,
     kind: 'inbox_item_append_requested',
     idempotencyKey: mailboxIdempotencyKey,
@@ -291,7 +290,7 @@ async function deliverMessageToRecipient(
   mailboxEffect.payload.message.id = deterministicMailboxId
   const mailboxRun = await runOutboxForState(state, deps, [mailboxEffect.effectId])
   const mailboxRunResult = mailboxRun.results.find(item => item.effectId === mailboxEffect.effectId)
-  const storedMailboxEffect = getOutboxEffect(team.name, mailboxEffect.effectId)
+  const storedMailboxEffect = deps.outboxStore.get(team.name, mailboxEffect.effectId)
   const mailboxSucceeded = Boolean(mailboxRunResult?.ok || storedMailboxEffect?.status === 'done')
   if (!mailboxSucceeded) {
     const reason = mailboxRunResult?.error ?? storedMailboxEffect?.lastError ?? 'failed to push mailbox message'
@@ -317,7 +316,7 @@ async function deliverMessageToRecipient(
       mirrorOf: options?.mirrorOf,
       extra: metadata,
     })
-    const taskNoteEffect = enqueueOutboxEffect({
+    const taskNoteEffect = deps.outboxStore.enqueue({
       teamName: team.name,
       kind: 'task_note_append_requested',
       idempotencyKey: ['send-linked-task-note', team.name, params.taskId, sentMessage.id].join(':'),
@@ -341,7 +340,7 @@ async function deliverMessageToRecipient(
 
   if (policy.shouldWake) {
     if (policy.intent === 'leader_attention' && recipient === TEAM_LEAD) {
-      const attentionEffect = enqueueOutboxEffect({
+      const attentionEffect = deps.outboxStore.enqueue({
         teamName: team.name,
         kind: 'leader_attention_requested',
         idempotencyKey: ['send-leader-attention', team.name, sentMessage.id, messageType, params.taskId ?? ''].join(':'),
@@ -361,7 +360,7 @@ async function deliverMessageToRecipient(
       })
       const run = await runOutboxForState(state, deps, [attentionEffect.effectId])
       const result = run.results.find(item => item.effectId === attentionEffect.effectId)
-      const storedAttentionEffect = getOutboxEffect(team.name, attentionEffect.effectId)
+      const storedAttentionEffect = deps.outboxStore.get(team.name, attentionEffect.effectId)
       const attentionResultValue = result?.value ?? storedAttentionEffect?.result
       const deliveryResult = (result?.ok || storedAttentionEffect?.status === 'done') && attentionResultValue
         ? attentionResultValue as Awaited<ReturnType<typeof deps.requestLeaderAttentionIfNeeded>>
@@ -380,7 +379,7 @@ async function deliverMessageToRecipient(
       if ('error' in deliveryResult && deliveryResult.error) wakeDetails.error = deliveryResult.error
       if (deliveryResult.requestId) wakeDetails.requestId = deliveryResult.requestId
     } else if (policy.intent === 'worker_delivery' || policy.intent === 'recipient_attention') {
-      const deliveryEffect = enqueueOutboxEffect({
+      const deliveryEffect = deps.outboxStore.enqueue({
         teamName: team.name,
         kind: 'worker_delivery_requested',
         idempotencyKey: ['send-worker-delivery', team.name, recipient, sentMessage.id, policy.intent].join(':'),
@@ -397,7 +396,7 @@ async function deliverMessageToRecipient(
       })
       const run = await runOutboxForState(state, deps, [deliveryEffect.effectId])
       const result = run.results.find(item => item.effectId === deliveryEffect.effectId)
-      const storedDeliveryEffect = getOutboxEffect(team.name, deliveryEffect.effectId)
+      const storedDeliveryEffect = deps.outboxStore.get(team.name, deliveryEffect.effectId)
       const deliveryResultValue = result?.value ?? storedDeliveryEffect?.result
       const deliveryResult = (result?.ok || storedDeliveryEffect?.status === 'done') && deliveryResultValue
         ? deliveryResultValue as Awaited<ReturnType<typeof deps.requestWorkerDelivery>>
@@ -420,7 +419,7 @@ async function deliverMessageToRecipient(
         if (typeof requestId === 'string') wakeDetails.requestId = requestId
       }
       if (!wakeDetails.requestId && policy.intent === 'worker_delivery') {
-        const storedDelivery = getOutboxEffect(team.name, deliveryEffect.effectId)
+        const storedDelivery = deps.outboxStore.get(team.name, deliveryEffect.effectId)
         const storedResult = storedDelivery?.result
         if (storedResult && typeof storedResult === 'object' && 'requestId' in storedResult) {
           const requestId = (storedResult as { requestId?: unknown }).requestId
@@ -473,7 +472,7 @@ async function appendPeerMessageEvent(state: SendMessagePlanningState, deps: Mes
     },
     summary: params.summary,
   }
-  const eventEffect = enqueueOutboxEffect({
+  const eventEffect = deps.outboxStore.enqueue({
     teamName: team.name,
     kind: 'append_event_requested',
     idempotencyKey: ['send-peer-event', team.name, sender, peerRecipients.join(','), Object.values(linkedMessageIds).join(','), messageType, params.taskId ?? '', resolvedThreadId ?? '', params.summary ?? '', outboxHash(params.message)].join(':'),

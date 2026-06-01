@@ -15,11 +15,9 @@ import {
   markLeaderAttentionSkipped,
 } from '../state/leaderAttentionStore.js'
 import { getSessionFile } from '../session.js'
-import { TEAM_LEAD } from '../internalTypes.js'
+import { TEAM_LEAD, type TeamMessagePriority, type TeamMessageType, type TeamMessageWakeHint } from '../internalTypes.js'
 import { displayMessageType } from '../protocol.js'
 import { oneLine } from '../utils.js'
-type LeaderMailboxProjectionItem = ReturnType<typeof deliverLeaderMailbox>[number]
-import { attachCurrentSessionIfNeeded, deliverLeaderMailbox } from '../adapters/runtime/session.js'
 import { isLeaderAttentionMessageType, resetLeaderAttentionThrottle, sendLeaderAttentionMessage } from './leaderAttention.js'
 import { watchFileDebounced } from './watchFileDebounced.js'
 import type { DebouncedFileWatcher } from './watchFileDebounced.js'
@@ -28,9 +26,35 @@ export type LeaderMailboxProjectionWatcher = {
   stop: () => void
 }
 
+export type LeaderMailboxProjectionItem = {
+  id: string
+  teamName: string
+  from: string
+  text: string
+  summary?: string
+  type?: TeamMessageType
+  taskId?: string
+  threadId?: string
+  requestId?: string
+  replyTo?: string
+  priority?: TeamMessagePriority
+  wakeHint?: TeamMessageWakeHint
+  createdAt: number
+}
+
+export type AttachedLeaderSessionContext = {
+  context: { teamName: string | null; memberName: string | null }
+  source: 'cached' | 'derived' | 'cleared' | 'none'
+}
+
+export type LeaderProjectionServiceDeps = {
+  attachCurrentSessionIfNeeded(ctx: ExtensionContext): AttachedLeaderSessionContext
+  deliverLeaderMailbox(ctx: ExtensionContext): LeaderMailboxProjectionItem[]
+}
+
 export type LeaderProjectionService = {
   runMailboxSync: (ctx: ExtensionContext) => void
-  startLeaderMailboxProjectionWatcher: (ctx: ExtensionContext, attached?: ReturnType<typeof attachCurrentSessionIfNeeded>) => LeaderMailboxProjectionWatcher | null
+  startLeaderMailboxProjectionWatcher: (ctx: ExtensionContext, attached?: AttachedLeaderSessionContext) => LeaderMailboxProjectionWatcher | null
   stopLeaderMailboxProjectionWatcher: (ctx: ExtensionContext) => void
   resetMailboxSyncKey: () => void
 }
@@ -171,12 +195,12 @@ function requestLeaderAttentionForProjectedMessage(
   return false
 }
 
-export function createLeaderProjectionService(pi: ExtensionAPI): LeaderProjectionService {
+export function createLeaderProjectionService(pi: ExtensionAPI, deps: LeaderProjectionServiceDeps): LeaderProjectionService {
   const projectedMailboxIds = new Set<string>()
   const leaderProjectionWatchers = new Map<string, LeaderMailboxProjectionWatcher>()
 
   function runMailboxSync(ctx: ExtensionContext): void {
-    const unread = deliverLeaderMailbox(ctx)
+    const unread = deps.deliverLeaderMailbox(ctx)
     if (unread.length === 0) return
     let projectedCount = 0
     let attentionCount = 0
@@ -193,7 +217,7 @@ export function createLeaderProjectionService(pi: ExtensionAPI): LeaderProjectio
 
   function startLeaderMailboxProjectionWatcher(
     ctx: ExtensionContext,
-    attached = attachCurrentSessionIfNeeded(ctx),
+    attached = deps.attachCurrentSessionIfNeeded(ctx),
   ): LeaderMailboxProjectionWatcher | null {
     const { teamName, memberName } = attached.context
     if (!teamName || memberName !== TEAM_LEAD) return null

@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-a
 import {
   attachCurrentSessionIfNeeded,
   buildSessionStatusKey,
+  deliverLeaderMailbox,
   refreshForSession,
 } from './session.js'
 import { createLeaderProjectionService } from '../../runtime/leaderProjectionService.js'
@@ -11,6 +12,9 @@ import {
   requestLeaderAttentionIfNeeded,
   requestWorkerDelivery,
 } from '../bridge/delivery.js'
+import { createOutboxRunner } from '../../app/effectRunner.js'
+import { createFileBackedOutboxEffectHandlers } from './outboxEffectHandlers.js'
+import { fileBackedOutboxStorePort } from './outboxStorePort.js'
 
 export type RuntimeHookState = {
   lastLeaderDigestKey: string
@@ -33,10 +37,20 @@ type RuntimeService = {
 }
 
 export function createRuntimeService(pi: ExtensionAPI): RuntimeService {
-  const leaderProjectionService = createLeaderProjectionService(pi)
-  const outboxMaintenanceDeps: OutboxMaintenanceDeps = {
+  const leaderProjectionService = createLeaderProjectionService(pi, {
+    attachCurrentSessionIfNeeded,
+    deliverLeaderMailbox,
+  })
+  const outboxMaintenanceHandlers = createFileBackedOutboxEffectHandlers({
     requestWorkerDelivery,
     requestLeaderAttentionIfNeeded,
+  })
+  const outboxMaintenanceRunner = createOutboxRunner({
+    outboxStore: fileBackedOutboxStorePort,
+    outboxHandlers: outboxMaintenanceHandlers,
+  })
+  const outboxMaintenanceDeps: OutboxMaintenanceDeps = {
+    outboxRunner: { runOnce: outboxMaintenanceRunner },
   }
   let lastStatusKey = ''
 

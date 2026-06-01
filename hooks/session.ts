@@ -22,7 +22,7 @@ export type SessionHookDeps = {
   ) => AttachedSessionHookContext
   invalidateStatus: (ctx: ExtensionContext) => void
   runMailboxSync: (ctx: ExtensionContext) => void
-  runOutboxMaintenance?: (ctx: ExtensionContext) => void
+  runOutboxMaintenance?: (ctx: ExtensionContext) => void | Promise<unknown>
 }
 
 export function registerSessionHooks(pi: ExtensionAPI, deps: SessionHookDeps): void {
@@ -30,7 +30,7 @@ export function registerSessionHooks(pi: ExtensionAPI, deps: SessionHookDeps): v
     const attached = deps.attachCurrentSessionIfNeeded(ctx)
     resetDigestState(deps)
     deps.invalidateStatus(ctx)
-    deps.runOutboxMaintenance?.(ctx)
+    await deps.runOutboxMaintenance?.(ctx)
     deps.runMailboxSync(ctx)
     deps.startLeaderMailboxProjectionWatcher?.(ctx, attached)
     deps.startWorkerBridge?.(ctx, attached.context)

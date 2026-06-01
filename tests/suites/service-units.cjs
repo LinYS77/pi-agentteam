@@ -164,6 +164,26 @@ module.exports = {
     assert.ok(messageServiceSource.includes('../app/messageApplication.js'), 'message service should delegate send orchestration to app boundary')
     assert.ok(!messageServiceSource.includes('runTeamSideEffects'), 'message service should not execute runtime effects directly')
     assert.ok(!messageServiceSource.includes('resolveMessageRecipients'), 'message service should not own routing orchestration')
+    const messageReceiveSource = env.helpers.readSource('tools/messageReceive.ts')
+    assert.ok(messageReceiveSource.includes('../app/messageReceiveApplication.js'), 'message receive tool should delegate read boundary to app boundary')
+    assert.ok(!messageReceiveSource.includes('../state/mailboxStore.js'), 'message receive tool should not access mailbox state directly')
+    assert.ok(!messageReceiveSource.includes('markMailboxMessages'), 'message receive tool should not own read lifecycle mutations')
+    const appMessageReceiveSource = env.helpers.readSource('app/messageReceiveApplication.ts')
+    assert.ok(appMessageReceiveSource.includes('mailboxRepository.readMailbox'), 'app receive boundary should read mailbox through port')
+    assert.ok(appMessageReceiveSource.includes('mailboxRepository.markDelivered'), 'app receive boundary should mark delivered through port')
+    assert.ok(appMessageReceiveSource.includes('mailboxRepository.markRead'), 'app receive boundary should mark read through port')
+    const leaderProjectionServiceSource = env.helpers.readSource('runtime/leaderProjectionService.ts')
+    assert.ok(!leaderProjectionServiceSource.includes('../adapters/runtime/session.js'), 'leader projection runtime service should not import adapter session back-edge')
+    assert.ok(leaderProjectionServiceSource.includes('LeaderProjectionServiceDeps'), 'leader projection runtime service should receive session/delivery ports')
+    const runtimeServiceSource = env.helpers.readSource('adapters/runtime/service.ts')
+    assert.ok(runtimeServiceSource.includes('deliverLeaderMailbox') && runtimeServiceSource.includes('createLeaderProjectionService(pi, {'), 'runtime adapter service should compose leader projection deps')
+    const workerSpawnSource = env.helpers.readSource('tools/workerSpawnService.ts')
+    assert.ok(!workerSpawnSource.includes('../state/outboxStore.js'), 'worker spawn service should use injected outbox store port')
+    assert.ok(!workerSpawnSource.includes('../app/effectRunner.js'), 'worker spawn service should use injected outbox runner port')
+    assert.ok(workerSpawnSource.includes('deps.outboxStore.enqueue') && workerSpawnSource.includes('deps.outboxStore.get'), 'worker spawn initial delivery should use injected outbox store')
+    assert.ok(workerSpawnSource.includes('deps.outboxRunner.runOnce'), 'worker spawn initial delivery should run through injected outbox runner')
+    const sharedToolDepsSource = env.helpers.readSource('tools/shared.ts')
+    assert.ok(sharedToolDepsSource.includes('outboxRunner: OutboxRunnerPort'), 'tool deps should expose a narrow outbox runner port')
     const bridgeStoreSource = env.helpers.readSource('state/bridgeStore.ts')
     const deliveryStoreSource = env.helpers.readSource('state/deliveryStore.ts')
     const leaderProjectionStoreSource = env.helpers.readSource('state/leaderProjectionStore.ts')
@@ -185,8 +205,15 @@ module.exports = {
     assert.ok(!taskServiceSource.includes('enqueueOutboxEffect'), 'task service should not plan durable task side effects')
     const appTaskSource = env.helpers.readSource('app/taskApplication.ts')
     assert.ok(appTaskSource.includes('../core/taskReducer.js'), 'app task boundary should depend on core task reducer')
+    assert.ok(appTaskSource.includes('../core/taskNoteModel.js'), 'app task boundary should depend on core task note metadata model')
     assert.ok(appTaskSource.includes('transitionTask'), 'app task boundary should apply reducer transitions')
-    assert.ok(appTaskSource.includes('enqueueOutboxEffect'), 'app task boundary should plan durable outbox effects')
+    assert.ok(!appTaskSource.includes('../state/outboxStore.js'), 'app task boundary should use injected outbox store port')
+    assert.ok(!appTaskSource.includes('../state/taskNotes.js'), 'app task boundary should not import state task note metadata helpers')
+    assert.ok(!appTaskSource.includes('../state/taskStore.js'), 'app task boundary should use injected task mutation port')
+    assert.ok(!appTaskSource.includes('../state/teamStore.js'), 'app task boundary should use injected team state port')
+    assert.ok(appTaskSource.includes('deps.outboxStore.enqueue'), 'app task boundary should plan durable outbox effects through port')
+    assert.ok(appTaskSource.includes('deps.teamState.updateTeam'), 'app task boundary should mutate team state through port')
+    assert.ok(appTaskSource.includes('deps.taskMutations.createTask'), 'app task boundary should create tasks through port')
     assert.ok(appTaskSource.includes('executeTaskApplication'), 'app task boundary should expose the task use-case')
     for (const removedCompatWrapper of [
       'tools/messageDelivery.ts',
@@ -200,7 +227,10 @@ module.exports = {
     }
     const appMessageSource = env.helpers.readSource('app/messageApplication.ts')
     assert.ok(appMessageSource.includes('../core/messagePolicy.js'), 'app message boundary should depend on core message policy')
-    assert.ok(appMessageSource.includes('enqueueOutboxEffect'), 'app message boundary should plan durable outbox effect intents')
+    assert.ok(appMessageSource.includes('../core/taskNoteModel.js'), 'app message boundary should depend on core task note metadata model')
+    assert.ok(!appMessageSource.includes('../state/outboxStore.js'), 'app message boundary should use injected outbox store port')
+    assert.ok(!appMessageSource.includes('../state/taskNotes.js'), 'app message boundary should not import state task note metadata helpers')
+    assert.ok(appMessageSource.includes('deps.outboxStore.enqueue'), 'app message boundary should plan durable outbox effect intents through port')
     assert.ok(appMessageSource.includes('executeSendMessageApplication'), 'app message boundary should expose the send use-case')
     assert.ok(appMessageSource.includes('planTaskReportEffects'), 'app message boundary should expose report attention/effect planning for task reports')
     assert.ok(appMessageSource.includes('communicationRefMetadata'), 'task-bound send should build refs through centralized metadata model')
@@ -301,7 +331,7 @@ module.exports = {
     const appResult = await messageApplication.executeSendMessageApplication({
       ctx: appBoundaryCtx,
       params: { to: 'worker-a', type: 'question', message: 'app boundary direct send' },
-    }, {
+    }, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       pushMailboxMessage: (teamName, memberName, message) => {
         appEffectOrder.push(`pushMailbox:${memberName}:${message.type}:${message.wakeHint}`)
@@ -314,7 +344,7 @@ module.exports = {
       invalidateStatus: () => {
         appEffectOrder.push('invalidateStatus')
       },
-    })
+    }))
     assert.equal(appResult.text, 'Sent message to worker-a')
     assert.deepEqual(appResult.details.recipients, ['worker-a'])
     assert.equal(appResult.details.wakeByRecipient[0].policyIntent, 'recipient_attention')
@@ -330,12 +360,12 @@ module.exports = {
     const taskAppResult = await taskApplication.executeTaskApplication({
       ctx: appBoundaryCtx,
       params: { action: 'create', title: 'Task app boundary task', description: 'created directly through app task boundary', owner: 'worker-a' },
-    }, {
+    }, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       invalidateStatus: () => {
         appEffectOrder.push('taskInvalidateStatus')
       },
-    })
+    }))
     assert.ok(taskAppResult.text.includes('Created T001'), 'task app boundary should execute task create use-case directly')
     assert.equal(taskAppResult.details.task.status, 'open', 'task app boundary create should use vNext open status')
     assert.equal(taskAppResult.details.task.owner, 'worker-a')
@@ -853,6 +883,8 @@ module.exports = {
     env.modules.state.writeTeamState(sideEffectsTeam)
     const effectRunner = env.helpers.requireDist('app/effectRunner.js')
     const outboxStore = env.helpers.requireDist('state/outboxStore.js')
+    const runnerDeps = deps => env.patches.withOutboxHandlers(deps)
+    const runOutboxOnceWithDeps = (input, deps) => effectRunner.runOutboxOnce(input, runnerDeps(deps))
     const effectOrder = []
     const noteEffect = outboxStore.enqueueOutboxEffect({
       teamName: sideEffectsTeam.name,
@@ -902,7 +934,7 @@ module.exports = {
       dependsOn: [leaderEffect.effectId],
       now: 14,
     })
-    const sideEffectResults = await effectRunner.runOutboxOnce({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, now: 20 }, {
+    const sideEffectResults = await runOutboxOnceWithDeps({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, now: 20 }, {
       requestLeaderAttentionIfNeeded: async () => {
         effectOrder.push('leaderAttention')
         return { ok: true, recipient: 'team-lead', wakeHint: 'hard', reason: 'projected', method: 'projection_requested' }
@@ -913,7 +945,7 @@ module.exports = {
       },
     })
     assert.equal(sideEffectResults.done, 1, 'first outbox pass should execute first dependency effect')
-    const sideEffectRun2 = await effectRunner.runOutboxOnce({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, now: 21 }, {
+    const sideEffectRun2 = await runOutboxOnceWithDeps({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, now: 21 }, {
       requestLeaderAttentionIfNeeded: async () => {
         effectOrder.push('leaderAttention')
         return { ok: true, recipient: 'team-lead', wakeHint: 'hard', reason: 'projected', method: 'projection_requested' }
@@ -923,7 +955,7 @@ module.exports = {
         return { ok: true, recipient: memberName, wakeHint: 'hard', reason: 'requested', method: 'bridge_requested', requestId: 'req-side-effect' }
       },
     })
-    const sideEffectRun3 = await effectRunner.runOutboxOnce({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, now: 22 }, {
+    const sideEffectRun3 = await runOutboxOnceWithDeps({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, now: 22 }, {
       requestLeaderAttentionIfNeeded: async () => {
         effectOrder.push('leaderAttention')
         return { ok: true, recipient: 'team-lead', wakeHint: 'hard', reason: 'projected', method: 'projection_requested' }
@@ -933,7 +965,7 @@ module.exports = {
         return { ok: true, recipient: memberName, wakeHint: 'hard', reason: 'requested', method: 'bridge_requested', requestId: 'req-side-effect' }
       },
     })
-    const sideEffectRun4 = await effectRunner.runOutboxOnce({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, now: 23 }, {
+    const sideEffectRun4 = await runOutboxOnceWithDeps({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, now: 23 }, {
       requestLeaderAttentionIfNeeded: async () => {
         effectOrder.push('leaderAttention')
         return { ok: true, recipient: 'team-lead', wakeHint: 'hard', reason: 'projected', method: 'projection_requested' }
@@ -943,7 +975,7 @@ module.exports = {
         return { ok: true, recipient: memberName, wakeHint: 'hard', reason: 'requested', method: 'bridge_requested', requestId: 'req-side-effect' }
       },
     })
-    const sideEffectRun5 = await effectRunner.runOutboxOnce({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, now: 24 }, {
+    const sideEffectRun5 = await runOutboxOnceWithDeps({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, now: 24 }, {
       requestLeaderAttentionIfNeeded: async () => {
         effectOrder.push('leaderAttention')
         return { ok: true, recipient: 'team-lead', wakeHint: 'hard', reason: 'projected', method: 'projection_requested' }
@@ -972,7 +1004,7 @@ module.exports = {
       },
       now: 25,
     })
-    const hiddenNoteRun = await effectRunner.runOutboxOnce({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, effectIds: [hiddenNoteEffect.effectId], now: 26 }, {
+    const hiddenNoteRun = await runOutboxOnceWithDeps({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, effectIds: [hiddenNoteEffect.effectId], now: 26 }, {
       requestLeaderAttentionIfNeeded: async () => { throw new Error('unused') },
       requestWorkerDelivery: async () => { throw new Error('unused') },
     })
@@ -991,7 +1023,7 @@ module.exports = {
       payload: { teamName: sideEffectsTeam.name, taskId: 'T999', author: 'tester', text: 'missing' },
       now: 30,
     })
-    const failingSideEffects = await effectRunner.runOutboxOnce({ teamName: sideEffectsTeam.name, workerId: 'side-effects-failure', effectIds: [missingNoteEffect.effectId], now: 31 }, {
+    const failingSideEffects = await runOutboxOnceWithDeps({ teamName: sideEffectsTeam.name, workerId: 'side-effects-failure', effectIds: [missingNoteEffect.effectId], now: 31 }, {
       requestLeaderAttentionIfNeeded: async () => { throw new Error('unused') },
       requestWorkerDelivery: async () => { throw new Error('unused') },
     })
