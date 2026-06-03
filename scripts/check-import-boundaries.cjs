@@ -119,6 +119,38 @@ const publicSurfaceForbiddenTokens = [
   'MemberStatus',
   'WORKER_FSM_STATUSES',
 ]
+const appBoundaryForbiddenTokens = [
+  {
+    token: '@earendil-works/pi-coding-agent',
+    message: 'app boundary must not import or mention Pi runtime APIs',
+  },
+  {
+    token: 'ExtensionContext',
+    message: 'app boundary must remain Pi-context-free',
+  },
+]
+const contextFreeAppUseCaseFiles = new Set([
+  'app/messageReceiveApplication.ts',
+  'app/messageApplication.ts',
+  'app/taskApplication.ts',
+  'app/messageTypes.ts',
+  'app/taskTypes.ts',
+  'app/types.ts',
+])
+const contextFreeAppUseCaseForbiddenTokens = [
+  {
+    token: 'ensureTeamForSession',
+    message: 'context-free app use cases must not resolve Pi session/team context',
+  },
+  {
+    token: 'currentActor',
+    message: 'context-free app use cases must receive actor context explicitly',
+  },
+  {
+    token: 'invalidateStatus',
+    message: 'context-free app use cases must leave Pi status invalidation to tools/adapters',
+  },
+]
 const removedRootFacadeImportPattern = /from ['"](?:\.\/|\.\.\/)(?:state|tmux|runtime|runtimeBridge|runtimeDelivery|runtimePanes|runtimeRules|runtimeService|runtimeStorage)\.js['"]/
 const directBridgeRequestToken = 'create' + 'BridgeDeliveryRequest'
 const completedPortBoundaryRules = [
@@ -310,6 +342,16 @@ for (const file of walk(root)) {
   const text = fs.readFileSync(file, 'utf8')
   if (rel === 'tools.ts' || rel === 'commands.ts') {
     violations.push(`${rel}: legacy top-level registration entrypoint should live under api/`)
+  }
+  if (isUnder(rel, 'app/')) {
+    for (const item of appBoundaryForbiddenTokens) {
+      if (text.includes(item.token)) violations.push(`${rel}: ${item.message} (${item.token})`)
+    }
+  }
+  if (contextFreeAppUseCaseFiles.has(rel)) {
+    for (const item of contextFreeAppUseCaseForbiddenTokens) {
+      if (wordTokenPattern(item.token).test(text)) violations.push(`${rel}: ${item.message} (${item.token})`)
+    }
   }
   for (const token of removedRuntimeAliasTokens) {
     if ((token === 'leader_triage_requested' || token === 'leader_triage') && rel === 'state/validation.ts') continue

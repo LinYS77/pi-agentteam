@@ -8,7 +8,20 @@ export function executeReceiveMessages(
   ctx: ExtensionContext,
   deps: ToolHandlerDeps,
 ) {
-  const result = executeReceiveMessagesApplication({ params, ctx }, deps)
+  const team = deps.ensureTeamForSession(ctx)
+  if (!team) {
+    return {
+      content: [{ type: 'text' as const, text: 'No current team context.' }],
+      details: {},
+    }
+  }
+  const result = executeReceiveMessagesApplication({
+    params,
+    context: {
+      team,
+      actor: deps.currentActor(ctx),
+    },
+  }, deps)
   return {
     content: [{ type: 'text' as const, text: result.text }],
     details: result.details,

@@ -1,4 +1,3 @@
-import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import type { TeamState, TeamMessageType } from '../internalTypes.js'
 import type { DeliveryResult } from './deliveryTypes.js'
 import type { OutboxEffectRunnerDeps } from './effectRunner.js'
@@ -34,16 +33,11 @@ export type MessageReceiveMailboxRepository = MailboxRepositoryPort
 export type MessageApplicationDeps = Omit<OutboxEffectRunnerDeps, 'outboxStore'> & DeliveryRequestDeps & {
   outboxStore: MessageApplicationOutboxStore
   sanitizeWorkerName: (name: string) => string
-  ensureTeamForSession: (ctx: ExtensionContext) => TeamState | null
-  currentActor: (ctx: ExtensionContext) => string
-  invalidateStatus: (ctx: ExtensionContext) => void
 }
 
 export type MessageReceiveApplicationDeps = {
   mailboxRepository: MessageReceiveMailboxRepository
   taskHistory: Pick<TaskHistoryQueryPort, 'findTaskReport'>
-  ensureTeamForSession: (ctx: ExtensionContext) => TeamState | null
-  currentActor: (ctx: ExtensionContext) => string
 }
 
 export type TaskApplicationDeps = Omit<OutboxEffectRunnerDeps, 'outboxStore'> & {
@@ -53,7 +47,4 @@ export type TaskApplicationDeps = Omit<OutboxEffectRunnerDeps, 'outboxStore'> & 
   taskHistory: TaskHistoryQueryPort
   normalizeOwnerName: (name: string) => string
   assertValidOwner: (team: TeamState, owner: string) => void
-  ensureTeamForSession: (ctx: ExtensionContext) => TeamState | null
-  currentActor: (ctx: ExtensionContext) => string
-  invalidateStatus: (ctx: ExtensionContext) => void
 }

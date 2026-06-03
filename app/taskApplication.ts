@@ -1,8 +1,8 @@
-import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { defaultThreadIdForTask } from '../protocol.js'
 import { planTaskReportAttention, planTaskReportEffects } from './messageApplication.js'
 import { transitionTask, type TaskState as ReducerTaskState } from '../core/taskReducer.js'
-import { TEAM_LEAD, type TaskEvent, type TaskMessageRef, type TaskReport, type TaskReportStatusAtReport } from '../internalTypes.js'
+import { TEAM_LEAD, type TaskReportStatusAtReport } from '../internalTypes.js'
+import { compactTaskActivity, compactTaskHistorySummary, compactTaskReport, taskHistoryCompactSummary, taskHistoryTimelineItems, taskReportsForTask, type TaskHistoryActivityCompact } from '../state/taskHistoryReadModel.js'
 import { runOutboxOnce, type OutboxRunResult } from './effectRunner.js'
 import { outboxEffectWarningName, outboxHash } from './outbox.js'
 import { isLeader } from '../utils.js'
@@ -207,11 +207,6 @@ function noteText(params: TeamTaskInput, fallback: string): string {
   return params.note?.trim() || fallback
 }
 
-function compactTaskHistorySummary(text: string): string {
-  const singleLine = text.replace(/\s+/g, ' ').trim()
-  return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine
-}
-
 function taskStatusAtReport(task: ReturnType<typeof requireTask>): TaskReportStatusAtReport {
   return task.status === 'blocked' ? 'blocked' : 'open'
 }
@@ -275,89 +270,15 @@ function taskBrief(task: ReturnType<typeof requireTask>) {
   }
 }
 
-function historyItemTime(item: TaskReport | TaskEvent | TaskMessageRef): number {
-  return 'createdAt' in item ? item.createdAt : item.at
-}
-
-function historyItemKind(item: TaskReport | TaskEvent | TaskMessageRef): 'report' | 'event' | 'messageRef' {
-  if ('author' in item) return 'report'
-  if ('mailboxMessageId' in item) return 'messageRef'
-  return 'event'
-}
-
-function displayEventType(type: TaskEvent['type']): string {
-  return type === 'report_submitted' ? 'report' : type
-}
-
-function compactReport(report: TaskReport) {
-  return {
-    id: report.id,
-    taskId: report.taskId,
-    type: report.type,
-    author: report.author,
-    summary: report.summary,
-    createdAt: report.createdAt,
-    threadId: report.threadId,
-    reportOnly: report.reportOnly,
-    reporterIsOwner: report.reporterIsOwner,
-    reportedBlockedBy: report.reportedBlockedBy ?? [],
-    statusAtReport: report.statusAtReport,
-    ownerAtReport: report.ownerAtReport,
-    mailboxMessageId: report.mailboxMessageId,
-  }
-}
-
-function compactActivity(item: TaskReport | TaskEvent | TaskMessageRef | undefined) {
-  if (!item) return undefined
-  if (historyItemKind(item) === 'report') {
-    const report = item as TaskReport
-    return {
-      kind: 'report' as const,
-      id: report.id,
-      taskId: report.taskId,
-      type: report.type,
-      at: report.createdAt,
-      by: report.author,
-      summary: report.summary,
-    }
-  }
-  if (historyItemKind(item) === 'messageRef') {
-    const ref = item as TaskMessageRef
-    return {
-      kind: 'messageRef' as const,
-      id: ref.id,
-      taskId: ref.taskId,
-      mailboxMessageId: ref.mailboxMessageId,
-      type: ref.type,
-      at: ref.createdAt,
-      from: ref.from,
-      to: ref.to,
-      summary: ref.summary,
-    }
-  }
-  const event = item as TaskEvent
-  return {
-    kind: 'event' as const,
-    id: event.id,
-    taskId: event.taskId,
-    type: event.type,
-    displayType: displayEventType(event.type),
-    at: event.at,
-    by: event.by,
-    summary: event.summary,
-    reportId: event.reportId,
-  }
-}
-
 function formatMaybeList(values: string[]): string {
   return values.length ? values.join(', ') : '-'
 }
 
 function showTaskCommand(input: TaskCommandContext, taskId: string): TaskCommandResult {
   const task = requireTask(input.team, taskId)
-  const summary = input.deps.taskHistory.taskHistorySummary(input.team, task.id)
-  const latestReport = summary.latestReport ? compactReport(summary.latestReport) : undefined
-  const latestActivity = compactActivity(summary.latestActivity)
+  const summary = taskHistoryCompactSummary(input.team, task.id)
+  const latestReport = summary.latestReport
+  const latestActivity = summary.latestActivity
   const latestActivityDisplayType = latestActivity
     ? (latestActivity.kind === 'event' ? latestActivity.displayType : latestActivity.type)
     : undefined
@@ -388,17 +309,7 @@ function showTaskCommand(input: TaskCommandContext, taskId: string): TaskCommand
   }
 }
 
-function historyTimelineItems(input: TaskCommandContext, taskId: string, includeMessages: boolean): Array<TaskReport | TaskEvent | TaskMessageRef> {
-  const items: Array<TaskReport | TaskEvent | TaskMessageRef> = [
-    ...input.deps.taskHistory.taskEventsForTask(input.team, taskId),
-    ...input.deps.taskHistory.taskReportsForTask(input.team, taskId),
-  ]
-  if (includeMessages) items.push(...input.deps.taskHistory.taskMessageRefsForTask(input.team, taskId))
-  return items.sort((a, b) => historyItemTime(a) - historyItemTime(b) || a.id.localeCompare(b.id))
-}
-
-function formatHistoryRow(item: TaskReport | TaskEvent | TaskMessageRef): string {
-  const compact = compactActivity(item)!
+function formatHistoryRow(compact: TaskHistoryActivityCompact): string {
   if (compact.kind === 'report') return `${compact.at} report ${compact.id} ${compact.type} by ${compact.by}: ${compact.summary}`
   if (compact.kind === 'messageRef') return `${compact.at} messageRef ${compact.id} ${compact.type} ${compact.from}->${compact.to}: ${compact.summary ?? '(no summary)'}`
   return `${compact.at} event ${compact.id} ${compact.displayType} by ${compact.by}: ${compact.summary}`
@@ -407,13 +318,14 @@ function formatHistoryRow(item: TaskReport | TaskEvent | TaskMessageRef): string
 function historyTaskCommand(input: TaskCommandContext, taskId: string, params: TeamTaskInput): TaskCommandResult {
   const task = requireTask(input.team, taskId)
   const includeMessages = params.includeMessages !== false
-  const allItems = historyTimelineItems(input, task.id, includeMessages)
+  const allItems = taskHistoryTimelineItems(input.team, task.id, { includeMessages })
   const all = params.all === true
   const effectiveLimit = all ? allItems.length : clampHistoryLimit(params.limit)
   const shown = all ? allItems : allItems.slice(Math.max(0, allItems.length - effectiveLimit))
+  const shownRows = shown.map(item => compactTaskActivity(item)!)
   const hiddenCount = Math.max(0, allItems.length - shown.length)
   const header = `History for ${task.id}: showing ${shown.length} of ${allItems.length} rows (hidden ${hiddenCount}; limit ${all ? 'all' : effectiveLimit}; messageRefs ${includeMessages ? 'included' : 'excluded'}). Use action=report reportId=<id> for full report text.`
-  const rows = shown.map(formatHistoryRow)
+  const rows = shownRows.map(formatHistoryRow)
   const filter: { all: boolean; limit?: number; includeMessages: boolean } = { all, includeMessages }
   if (!all) filter.limit = effectiveLimit
   return {
@@ -425,14 +337,14 @@ function historyTaskCommand(input: TaskCommandContext, taskId: string, params: T
       totalCount: allItems.length,
       hiddenCount,
       filter,
-      rows: shown.map(compactActivity),
+      rows: shownRows,
     },
   }
 }
 
 function reportsTaskCommand(input: TaskCommandContext, taskId: string): TaskCommandResult {
   const task = requireTask(input.team, taskId)
-  const reports = input.deps.taskHistory.taskReportsForTask(input.team, task.id)
+  const reports = taskReportsForTask(input.team, task.id)
   const rows = reports.map(report => {
     const blockedBy = report.reportedBlockedBy?.length ? ` blockedBy=${report.reportedBlockedBy.join(',')}` : ''
     return `${report.id} ${report.type} by ${report.author} at ${report.createdAt} statusAtReport=${report.statusAtReport}${blockedBy}: ${report.summary}`
@@ -443,7 +355,7 @@ function reportsTaskCommand(input: TaskCommandContext, taskId: string): TaskComm
     text: rows.length ? `${header}\n${rows.join('\n')}` : `${header}\nNo reports`,
     details: {
       task: taskBrief(task),
-      reports: reports.map(compactReport),
+      reports: reports.map(compactTaskReport),
     },
   }
 }
@@ -457,7 +369,7 @@ function reportTaskCommand(input: TaskCommandContext, params: TeamTaskInput): Ta
     throw new Error(`Task report ${report.id} is for task ${report.taskId}, not ${params.taskId}`)
   }
   const task = requireTask(input.team, report.taskId)
-  const meta = compactReport(report)
+  const meta = compactTaskReport(report)
   return {
     task,
     text: [
@@ -939,9 +851,7 @@ async function runTaskOutboxEffects(
   return run
 }
 
-async function handleTaskApplicationSideEffects(result: TaskCommandResult, ctx: ExtensionContext, deps: TaskApplicationDeps): Promise<void> {
-  deps.invalidateStatus(ctx)
-
+async function handleTaskApplicationSideEffects(result: TaskCommandResult, deps: TaskApplicationDeps): Promise<void> {
   let leaderWakeMessage = result.leaderWake
   let mailboxDelivered = false
   let sentLeaderMailboxMessage: { id?: string } | undefined
@@ -1032,17 +942,14 @@ export async function executeTaskApplication(
   input: TaskApplicationInput,
   deps: TaskApplicationDeps,
 ): Promise<TaskApplicationResult> {
-  const { params, ctx } = input
-  const team = deps.ensureTeamForSession(ctx)
-  if (!team) return { text: 'No current team context.', details: {} }
-
+  const { params, context } = input
+  const { team, actor } = context
   const teamName = team.name
-  const actor = deps.currentActor(ctx)
   const denied = ensureTaskPrivilege(team, actor, params.action)
   if (denied) {
     const result: TaskCommandResult = { text: denied, details: { denied: true, action: params.action, actor } }
-    await handleTaskApplicationSideEffects(result, ctx, deps)
-    return { text: result.text, details: result.details, sideEffectWarnings: result.sideEffectWarnings }
+    await handleTaskApplicationSideEffects(result, deps)
+    return { text: result.text, details: result.details, sideEffectWarnings: result.sideEffectWarnings, statusInvalidationRequested: true }
   }
 
   const commandContext: TaskCommandContext = { team, teamName, actor, deps }
@@ -1058,8 +965,8 @@ export async function executeTaskApplication(
 
   if (params.action === 'create') {
     const result = createTaskCommand(commandContext, params)
-    await handleTaskApplicationSideEffects(result, ctx, deps)
-    return { text: result.text, details: result.details, sideEffectWarnings: result.sideEffectWarnings }
+    await handleTaskApplicationSideEffects(result, deps)
+    return { text: result.text, details: result.details, sideEffectWarnings: result.sideEffectWarnings, statusInvalidationRequested: true }
   }
 
   if (!params.taskId) throw new Error('taskId is required for this action')
@@ -1105,6 +1012,6 @@ export async function executeTaskApplication(
     return { text: result.text, details: result.details, sideEffectWarnings: result.sideEffectWarnings }
   }
 
-  await handleTaskApplicationSideEffects(result, ctx, deps)
-  return { text: result.text, details: result.details, sideEffectWarnings: result.sideEffectWarnings }
+  await handleTaskApplicationSideEffects(result, deps)
+  return { text: result.text, details: result.details, sideEffectWarnings: result.sideEffectWarnings, statusInvalidationRequested: true }
 }

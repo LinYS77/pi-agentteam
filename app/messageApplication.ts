@@ -1,4 +1,3 @@
-import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import {
   decideMessagePolicy,
   type MessagePolicyAudienceKind,
@@ -486,11 +485,8 @@ export async function executeSendMessageApplication(
   input: SendMessageApplicationInput,
   deps: MessageApplicationDeps,
 ): Promise<SendMessageApplicationResult> {
-  const { params, ctx } = input
-  const team = deps.ensureTeamForSession(ctx)
-  if (!team) return { text: 'No current team context.', details: {} }
-
-  const sender = deps.currentActor(ctx)
+  const { params, context } = input
+  const { team, actor: sender } = context
   const rawType = (params.type ?? 'question') as string
   if (!isMessageType(rawType)) return unsupportedSendType(sender, rawType)
   const messageType: MessageType = rawType
@@ -561,7 +557,6 @@ export async function executeSendMessageApplication(
 
   await appendPeerMessageEvent(state, deps)
 
-  deps.invalidateStatus(ctx)
   const routingSuffix = state.sent.length > 0 ? formatRoutingSuffix(state) : ''
   const summary = state.sent.length > 0
     ? `Sent message to ${state.sent.join(', ')}${routingSuffix}`
@@ -588,5 +583,6 @@ export async function executeSendMessageApplication(
       ...(state.outboxRun ? { outboxRun: state.outboxRun } : {}),
       ...(state.sideEffectWarnings.length > 0 ? { warning: 'side_effect_failed', sideEffectWarnings: state.sideEffectWarnings } : {}),
     },
+    statusInvalidationRequested: true,
   }
 }

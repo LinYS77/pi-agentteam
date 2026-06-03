@@ -5,6 +5,7 @@ function createStateBundle(requireDist) {
     ...requireDist('state/sessionBinding.js'),
     ...requireDist('state/merge.js'),
     ...requireDist('state/taskStore.js'),
+    ...requireDist('state/taskHistoryReadModel.js'),
     ...requireDist('state/taskHistory.js'),
     ...requireDist('state/taskHistoryMigration.js'),
     ...requireDist('state/mailboxStore.js'),

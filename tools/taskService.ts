@@ -15,6 +15,20 @@ export async function executeTaskAction(
   ctx: ExtensionContext,
   deps: ToolHandlerDeps,
 ) {
-  const result = await executeTaskApplication({ params, ctx }, deps)
+  const team = deps.ensureTeamForSession(ctx)
+  if (!team) {
+    return {
+      content: [{ type: 'text' as const, text: 'No current team context.' }],
+      details: {},
+    }
+  }
+  const result = await executeTaskApplication({
+    params,
+    context: {
+      team,
+      actor: deps.currentActor(ctx),
+    },
+  }, deps)
+  if (result.statusInvalidationRequested) deps.invalidateStatus(ctx)
   return taskApplicationResultToToolResponse(result)
 }

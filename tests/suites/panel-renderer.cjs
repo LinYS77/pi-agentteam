@@ -10,9 +10,14 @@ module.exports = {
 
     assert.ok(!Object.prototype.hasOwnProperty.call(modules.viewModel, 'loadPanelData'), 'viewModel should not expose runtime-loading side effects')
     const pureImportSource = helpers.readSource('teamPanel/viewModel.ts')
+    const taskApplicationSource = helpers.readSource('app/taskApplication.ts')
     assert.ok(!pureImportSource.includes('../state.js'), 'viewModel should not import removed state facade')
     assert.ok(!pureImportSource.includes('../tmux.js'), 'viewModel should not import removed tmux facade')
     assert.ok(!pureImportSource.includes('../runtime.js'), 'viewModel should not import removed runtime facade side effects')
+    assert.ok(pureImportSource.includes('../state/taskHistoryReadModel.js'), 'viewModel should use the shared task-history read model')
+    assert.ok(taskApplicationSource.includes('../state/taskHistoryReadModel.js'), 'task application should use the shared task-history read model')
+    assert.equal(pureImportSource.includes('function historyReportsForTask'), false, 'viewModel should not duplicate local task-history selectors')
+    assert.equal(taskApplicationSource.includes('function historyTimelineItems'), false, 'task application should not duplicate local task-history timeline selector')
 
     const team = modules.state.createInitialTeamState({
       teamName: 'render-suite',

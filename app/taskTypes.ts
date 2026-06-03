@@ -1,4 +1,3 @@
-import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import type { TaskStatus } from '../core/publicModel.js'
 import type { TeamTaskAction } from '../core/taskActions.js'
 import type { TeamMessageType, TeamMessageWakeHint, TeamState, TeamTask } from '../internalTypes.js'
@@ -75,13 +74,19 @@ export type TaskCommandResult = {
   leaderMailbox?: TaskLeaderMailboxEffect
 }
 
+export type TaskApplicationContext = {
+  team: TeamState
+  actor: string
+}
+
 export type TaskApplicationInput = {
   params: TeamTaskInput
-  ctx: ExtensionContext
+  context: TaskApplicationContext
 }
 
 export type TaskApplicationResult = {
   text: string
   details: Record<string, unknown>
   sideEffectWarnings?: TaskSideEffectWarning[]
+  statusInvalidationRequested?: boolean
 }

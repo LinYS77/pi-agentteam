@@ -18,6 +18,7 @@ module.exports = {
     const workerRole = env.helpers.requireDist('tools/workerRole.js')
     const workerPrompt = env.helpers.requireDist('tools/workerPrompt.js')
     const messageApplication = env.helpers.requireDist('app/messageApplication.js')
+    const messageReceiveApplication = env.helpers.requireDist('app/messageReceiveApplication.js')
     const taskApplication = env.helpers.requireDist('app/taskApplication.js')
     const taskFormatting = env.helpers.requireDist('app/taskFormatting.js')
     const corePublicModel = env.helpers.requireDist('core/publicModel.js')
@@ -137,6 +138,9 @@ module.exports = {
 
     const messageServiceSource = env.helpers.readSource('tools/messageService.ts')
     assert.ok(messageServiceSource.includes('../app/messageApplication.js'), 'message service should delegate send orchestration to app boundary')
+    assert.ok(messageServiceSource.includes('deps.ensureTeamForSession(ctx)'), 'message service should resolve send team context outside app boundary')
+    assert.ok(messageServiceSource.includes('deps.currentActor(ctx)'), 'message service should resolve send actor context outside app boundary')
+    assert.ok(messageServiceSource.includes('deps.invalidateStatus(ctx)'), 'message service should own send status invalidation outside app boundary')
     assert.ok(!messageServiceSource.includes('runTeamSideEffects'), 'message service should not execute runtime effects directly')
     assert.ok(!messageServiceSource.includes('resolveMessageRecipients'), 'message service should not own routing orchestration')
     const messageReceiveSource = env.helpers.readSource('tools/messageReceive.ts')
@@ -144,9 +148,35 @@ module.exports = {
     assert.ok(!messageReceiveSource.includes('../state/mailboxStore.js'), 'message receive tool should not access mailbox state directly')
     assert.ok(!messageReceiveSource.includes('markMailboxMessages'), 'message receive tool should not own read lifecycle mutations')
     const appMessageReceiveSource = env.helpers.readSource('app/messageReceiveApplication.ts')
+    const appTypesSource = env.helpers.readSource('app/types.ts')
+    const appPortsSource = env.helpers.readSource('app/ports.ts')
+    assert.equal(appPortsSource.includes('ExtensionContext'), false, 'app ports should not mention Pi ExtensionContext')
+    assert.equal(appPortsSource.includes('@earendil-works/pi-coding-agent'), false, 'app ports should not import Pi APIs')
+    assert.equal(appPortsSource.includes('TeamContextPort'), false, 'retired app TeamContextPort should be removed after context-free seams')
     assert.ok(appMessageReceiveSource.includes('mailboxRepository.readMailbox'), 'app receive boundary should read mailbox through port')
     assert.ok(appMessageReceiveSource.includes('mailboxRepository.markDelivered'), 'app receive boundary should mark delivered through port')
     assert.ok(appMessageReceiveSource.includes('mailboxRepository.markRead'), 'app receive boundary should mark read through port')
+    assert.equal(appMessageReceiveSource.includes('ExtensionContext'), false, 'app receive boundary should not mention Pi ExtensionContext')
+    assert.equal(appMessageReceiveSource.includes('@earendil-works/pi-coding-agent'), false, 'app receive boundary should not import Pi APIs')
+    const receiveDepsBlock = appTypesSource.slice(appTypesSource.indexOf('export type MessageReceiveApplicationDeps'), appTypesSource.indexOf('export type TaskApplicationDeps'))
+    assert.equal(receiveDepsBlock.includes('ExtensionContext'), false, 'receive app dependency types should be Pi-context-free')
+    assert.equal(receiveDepsBlock.includes('ensureTeamForSession'), false, 'receive app dependency types should not resolve team/session context')
+    assert.equal(receiveDepsBlock.includes('currentActor'), false, 'receive app dependency types should not resolve actor context')
+    const receiveNoContextTool = env.pi.__tools.get('agentteam_receive')
+    const receiveNoContextCtx = env.helpers.createCtx('/tmp/receive-no-context-project', '/tmp/receive-no-context-session.jsonl', env.notifications)
+    const receiveNoContext = await receiveNoContextTool.execute('receive-no-context', {}, null, () => {}, receiveNoContextCtx)
+    assert.equal(receiveNoContext.content[0].text, 'No current team context.', 'receive tool no-context output should remain exact')
+    assert.deepEqual(receiveNoContext.details, {}, 'receive tool no-context details should remain empty')
+    const sendNoContextTool = env.pi.__tools.get('agentteam_send')
+    const sendNoContextCtx = env.helpers.createCtx('/tmp/send-no-context-project', '/tmp/send-no-context-session.jsonl', env.notifications)
+    const sendNoContext = await sendNoContextTool.execute('send-no-context', { to: 'team-lead', message: 'no context', type: 'inform' }, null, () => {}, sendNoContextCtx)
+    assert.equal(sendNoContext.content[0].text, 'No current team context.', 'send tool no-context output should remain exact')
+    assert.deepEqual(sendNoContext.details, {}, 'send tool no-context details should remain empty')
+    const taskNoContextTool = env.pi.__tools.get('agentteam_task')
+    const taskNoContextCtx = env.helpers.createCtx('/tmp/task-no-context-project', '/tmp/task-no-context-session.jsonl', env.notifications)
+    const taskNoContext = await taskNoContextTool.execute('task-no-context', { action: 'list' }, null, () => {}, taskNoContextCtx)
+    assert.equal(taskNoContext.content[0].text, 'No current team context.', 'task tool no-context output should remain exact')
+    assert.deepEqual(taskNoContext.details, {}, 'task tool no-context details should remain empty')
     const leaderProjectionServiceSource = env.helpers.readSource('runtime/leaderProjectionService.ts')
     assert.ok(!leaderProjectionServiceSource.includes('../adapters/runtime/session.js'), 'leader projection runtime service should not import adapter session back-edge')
     assert.ok(leaderProjectionServiceSource.includes('LeaderProjectionServiceDeps'), 'leader projection runtime service should receive session/delivery ports')
@@ -175,10 +205,26 @@ module.exports = {
     assert.ok(!messageServiceSource.includes('decideMessagePolicy'), 'message service should not own core policy decisions')
     const taskServiceSource = env.helpers.readSource('tools/taskService.ts')
     assert.ok(taskServiceSource.includes('../app/taskApplication.js'), 'task service should delegate task orchestration to app boundary')
+    assert.ok(taskServiceSource.includes('deps.ensureTeamForSession(ctx)'), 'task service should resolve task team context outside app boundary')
+    assert.ok(taskServiceSource.includes('deps.currentActor(ctx)'), 'task service should resolve task actor context outside app boundary')
+    assert.ok(taskServiceSource.includes('deps.invalidateStatus(ctx)'), 'task service should own task status invalidation outside app boundary')
     assert.ok(!taskServiceSource.includes('transitionTask'), 'task service should not own core task reducer orchestration')
     assert.ok(!taskServiceSource.includes('ensureTaskPrivilege'), 'task service should not own task privilege validation')
     assert.ok(!taskServiceSource.includes('enqueueOutboxEffect'), 'task service should not plan durable task side effects')
     const appTaskSource = env.helpers.readSource('app/taskApplication.ts')
+    const appTaskTypesSource = env.helpers.readSource('app/taskTypes.ts')
+    const taskDepsBlock = appTypesSource.slice(appTypesSource.indexOf('export type TaskApplicationDeps'))
+    assert.equal(appTaskSource.includes('ExtensionContext'), false, 'app task boundary should not mention Pi ExtensionContext')
+    assert.equal(appTaskSource.includes('@earendil-works/pi-coding-agent'), false, 'app task boundary should not import Pi APIs')
+    assert.equal(appTaskSource.includes('ensureTeamForSession('), false, 'app task boundary should not resolve team/session context')
+    assert.equal(appTaskSource.includes('currentActor('), false, 'app task boundary should not resolve actor context')
+    assert.equal(appTaskSource.includes('invalidateStatus('), false, 'app task boundary should not invalidate Pi status directly')
+    assert.equal(appTaskTypesSource.includes('ExtensionContext'), false, 'task app input types should be Pi-context-free')
+    assert.equal(appTaskTypesSource.includes('@earendil-works/pi-coding-agent'), false, 'task app input types should not import Pi APIs')
+    assert.equal(taskDepsBlock.includes('ExtensionContext'), false, 'task app dependency types should be Pi-context-free')
+    assert.equal(taskDepsBlock.includes('ensureTeamForSession'), false, 'task app dependency types should not resolve team/session context')
+    assert.equal(taskDepsBlock.includes('currentActor'), false, 'task app dependency types should not resolve actor context')
+    assert.equal(taskDepsBlock.includes('invalidateStatus'), false, 'task app dependency types should not invalidate Pi status')
     assert.ok(appTaskSource.includes('../core/taskReducer.js'), 'app task boundary should depend on core task reducer')
     assert.equal(appTaskSource.includes('../core/taskNoteModel.js'), false, 'active app task boundary should no longer depend on core task note metadata model')
     assert.equal(appTaskSource.includes('appendStructuredTaskNote'), false, 'active app task boundary should not append legacy task notes')
@@ -202,6 +248,19 @@ module.exports = {
       assert.equal(fs.existsSync(path.join(env.helpers.extRoot, removedCompatWrapper)), false, `${removedCompatWrapper} compatibility wrapper should be removed`)
     }
     const appMessageSource = env.helpers.readSource('app/messageApplication.ts')
+    const appMessageTypesSource = env.helpers.readSource('app/messageTypes.ts')
+    const sendDepsBlock = appTypesSource.slice(appTypesSource.indexOf('export type MessageApplicationDeps'), appTypesSource.indexOf('export type MessageReceiveApplicationDeps'))
+    assert.equal(appMessageSource.includes('ExtensionContext'), false, 'app send boundary should not mention Pi ExtensionContext')
+    assert.equal(appMessageSource.includes('@earendil-works/pi-coding-agent'), false, 'app send boundary should not import Pi APIs')
+    assert.equal(appMessageSource.includes('ensureTeamForSession('), false, 'app send boundary should not resolve team/session context')
+    assert.equal(appMessageSource.includes('currentActor('), false, 'app send boundary should not resolve actor context')
+    assert.equal(appMessageSource.includes('invalidateStatus('), false, 'app send boundary should not invalidate Pi status directly')
+    assert.equal(appMessageTypesSource.includes('ExtensionContext'), false, 'send app input types should be Pi-context-free')
+    assert.equal(appMessageTypesSource.includes('@earendil-works/pi-coding-agent'), false, 'send app input types should not import Pi APIs')
+    assert.equal(sendDepsBlock.includes('ExtensionContext'), false, 'send app dependency types should be Pi-context-free')
+    assert.equal(sendDepsBlock.includes('ensureTeamForSession'), false, 'send app dependency types should not resolve team/session context')
+    assert.equal(sendDepsBlock.includes('currentActor'), false, 'send app dependency types should not resolve actor context')
+    assert.equal(sendDepsBlock.includes('invalidateStatus'), false, 'send app dependency types should not invalidate Pi status')
     assert.ok(appMessageSource.includes('../core/messagePolicy.js'), 'app message boundary should depend on core message policy')
     assert.ok(!appMessageSource.includes('../core/taskNoteModel.js'), 'app message boundary should not build new task-bound send refs through task-note metadata model')
     assert.ok(!appMessageSource.includes('../state/outboxStore.js'), 'app message boundary should use injected outbox store port')
@@ -306,8 +365,8 @@ module.exports = {
     const appBoundaryCtx = env.helpers.createCtx('/tmp/app-boundary-suite', '/tmp/app-boundary-suite-leader.jsonl', env.notifications)
     const appEffectOrder = []
     const appResult = await messageApplication.executeSendMessageApplication({
-      ctx: appBoundaryCtx,
       params: { to: 'worker-a', type: 'question', message: 'app boundary direct send' },
+      context: { team: appBoundaryTeam, actor: 'team-lead' },
     }, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       pushMailboxMessage: (teamName, memberName, message) => {
@@ -318,10 +377,8 @@ module.exports = {
         appEffectOrder.push(`requestWorkerDelivery:${memberName}:${options?.wakeHint}:${options?.reason}`)
         return { ok: true, recipient: memberName, wakeHint: options?.wakeHint, reason: 'app boundary requested', method: 'bridge_requested', requestId: 'req-app-boundary' }
       },
-      invalidateStatus: () => {
-        appEffectOrder.push('invalidateStatus')
-      },
     }))
+    if (appResult.statusInvalidationRequested) appEffectOrder.push('invalidateStatus')
     assert.equal(appResult.text, 'Sent message to worker-a')
     assert.deepEqual(appResult.details.recipients, ['worker-a'])
     assert.equal(appResult.details.wakeByRecipient[0].policyIntent, 'recipient_attention')
@@ -334,19 +391,88 @@ module.exports = {
       'invalidateStatus',
     ])
 
+    const appReceiveMailboxRows = [{
+      id: 'app-receive-oldest',
+      from: 'worker-a',
+      to: 'team-lead',
+      text: 'oldest direct receive body',
+      type: 'inform',
+      createdAt: 10,
+    }, {
+      id: 'app-receive-report',
+      from: 'worker-a',
+      to: 'team-lead',
+      text: 'compact report notification',
+      summary: 'compact report notification summary',
+      type: 'report_done',
+      createdAt: 20,
+      metadata: { reportId: 'TRAPP' },
+    }, {
+      id: 'app-receive-newest',
+      from: 'worker-a',
+      to: 'team-lead',
+      text: 'newest direct receive body',
+      type: 'question',
+      createdAt: 30,
+    }]
+    const appReceiveTeam = {
+      ...appBoundaryTeam,
+      taskReports: {
+        TRAPP: {
+          id: 'TRAPP',
+          taskId: 'TAPP',
+          type: 'report_done',
+          author: 'worker-a',
+          text: 'hydrated direct receive report body',
+          summary: 'hydrated direct receive report summary',
+          createdAt: 15,
+          reportOnly: true,
+          reporterIsOwner: true,
+          statusAtReport: 'open',
+          ownerAtReport: 'worker-a',
+        },
+      },
+    }
+    const receiveMarks = []
+    const directReceive = messageReceiveApplication.executeReceiveMessagesApplication({
+      params: { markRead: false, limit: 2 },
+      context: { team: appReceiveTeam, actor: 'team-lead' },
+    }, {
+      mailboxRepository: {
+        readMailbox: () => appReceiveMailboxRows,
+        markDelivered: (_teamName, memberName, ids) => receiveMarks.push({ kind: 'delivered', memberName, ids }),
+        markRead: (_teamName, memberName, ids) => receiveMarks.push({ kind: 'read', memberName, ids }),
+      },
+      taskHistory: { findTaskReport: (team, reportId) => team.taskReports[reportId] },
+    })
+    assert.deepEqual(directReceive.details.messages.map(message => message.id), ['app-receive-oldest', 'app-receive-report'], 'direct receive app should preserve chronological unread return order and limit')
+    assert.equal(directReceive.details.markRead, false, 'direct receive app should preserve markRead=false')
+    assert.equal(directReceive.details.hydratedReports.TRAPP.text, 'hydrated direct receive report body', 'direct receive app should hydrate TaskReport bodies')
+    assert.deepEqual(receiveMarks, [{ kind: 'delivered', memberName: 'team-lead', ids: ['app-receive-oldest', 'app-receive-report'] }], 'markRead=false should mark delivered only')
+    const directReceiveDenied = messageReceiveApplication.executeReceiveMessagesApplication({
+      params: { markRead: true, limit: 1 },
+      context: { team: appReceiveTeam, actor: 'missing-worker' },
+    }, {
+      mailboxRepository: {
+        readMailbox: () => { throw new Error('should not read mailbox for non-member actor') },
+        markDelivered: () => {},
+        markRead: () => {},
+      },
+      taskHistory: { findTaskReport: () => undefined },
+    })
+    assert.equal(directReceiveDenied.text, 'Current actor missing-worker is not a member of team app-boundary-suite.', 'non-member receive denial should remain unchanged')
+
     const taskAppResult = await taskApplication.executeTaskApplication({
-      ctx: appBoundaryCtx,
       params: { action: 'create', title: 'Task app boundary task', description: 'created directly through app task boundary', owner: 'worker-a' },
+      context: { team: appBoundaryTeam, actor: 'team-lead' },
     }, env.patches.withOutboxHandlers({
       ...env.patches.deps,
-      invalidateStatus: () => {
-        appEffectOrder.push('taskInvalidateStatus')
-      },
     }))
+    if (taskAppResult.statusInvalidationRequested) appEffectOrder.push('taskInvalidateStatus')
     assert.ok(taskAppResult.text.includes('Created T001'), 'task app boundary should execute task create use-case directly')
     assert.equal(taskAppResult.details.task.status, 'open', 'task app boundary create should use vNext open status')
     assert.equal(taskAppResult.details.task.owner, 'worker-a')
-    assert.ok(appEffectOrder.includes('taskInvalidateStatus'), 'task app boundary should own status invalidation side effect')
+    assert.ok(appEffectOrder.includes('taskInvalidateStatus'), 'task app boundary should request status invalidation for the adapter')
 
     modules.state.deleteTeamState('app-boundary-suite')
     modules.state.clearSessionContext('/tmp/app-boundary-suite-leader.jsonl')
@@ -3036,6 +3162,18 @@ module.exports = {
       encoding: 'utf8',
     })
     assert.equal(boundaryCheck.status, 0, `import boundary advisory should pass\n${boundaryCheck.stdout}\n${boundaryCheck.stderr}`)
+    const boundaryScriptSource = env.helpers.readSource('scripts/check-import-boundaries.cjs')
+    assert.ok(boundaryScriptSource.includes('appBoundaryForbiddenTokens'), 'boundary checker should enforce app-layer Pi API tokens')
+    assert.ok(boundaryScriptSource.includes('contextFreeAppUseCaseFiles'), 'boundary checker should explicitly guard context-free app use cases')
+    assert.ok(boundaryScriptSource.includes('app/messageReceiveApplication.ts'), 'boundary checker should guard receive app use case')
+    assert.ok(boundaryScriptSource.includes('app/messageApplication.ts'), 'boundary checker should guard send app use case')
+    assert.ok(boundaryScriptSource.includes('app/taskApplication.ts'), 'boundary checker should guard task app use case')
+    assert.ok(boundaryScriptSource.includes('app/messageTypes.ts'), 'boundary checker should guard send app input types')
+    assert.ok(boundaryScriptSource.includes('app/taskTypes.ts'), 'boundary checker should guard task app input types')
+    assert.ok(boundaryScriptSource.includes('app/types.ts'), 'boundary checker should guard app dependency types')
+    for (const token of ['@earendil-works/pi-coding-agent', 'ExtensionContext', 'ensureTeamForSession', 'currentActor', 'invalidateStatus']) {
+      assert.ok(boundaryScriptSource.includes(token), `boundary checker should guard ${token}`)
+    }
 
     const declarationDir = path.join(env.helpers.distRoot, '..', 'public-surface-dts')
     fs.rmSync(declarationDir, { recursive: true, force: true })

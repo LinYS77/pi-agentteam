@@ -1,15 +1,24 @@
-import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { displayMessageType } from '../protocol.js'
 import { unreadMailboxMessages } from '../messageLifecycle.js'
 import { oneLine } from '../utils.js'
-import type { MailboxMessage, TaskReport } from '../internalTypes.js'
+import type { MailboxMessage, TaskReport, TeamState } from '../internalTypes.js'
 import type { MessageReceiveApplicationDeps } from './types.js'
 
 const PREVIEW_MAX = 120
 
-export type ReceiveMessagesApplicationInput = {
+export type ReceiveMessagesApplicationParams = {
   markRead?: boolean
   limit?: number
+}
+
+export type ReceiveMessagesApplicationContext = {
+  team: TeamState
+  actor: string
+}
+
+export type ReceiveMessagesApplicationInput = {
+  params: ReceiveMessagesApplicationParams
+  context: ReceiveMessagesApplicationContext
 }
 
 export type ReceiveMessagesApplicationResult = {
@@ -153,15 +162,11 @@ function formatGroupedMessages(returned: HydratedMailboxMessage[]): string[] {
 }
 
 export function executeReceiveMessagesApplication(
-  input: { params: ReceiveMessagesApplicationInput; ctx: ExtensionContext },
+  input: ReceiveMessagesApplicationInput,
   deps: MessageReceiveApplicationDeps,
 ): ReceiveMessagesApplicationResult {
-  const { params, ctx } = input
-  const team = deps.ensureTeamForSession(ctx)
-  if (!team) {
-    return { text: 'No current team context.', details: {} }
-  }
-  const recipient = deps.currentActor(ctx)
+  const { params, context } = input
+  const { team, actor: recipient } = context
   if (!team.members[recipient]) {
     return {
       text: `Current actor ${recipient} is not a member of team ${team.name}.`,

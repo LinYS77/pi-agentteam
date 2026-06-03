@@ -4,8 +4,10 @@ import { readTeamState, updateTeamState } from '../../state/teamStore.js'
 import {
   appendTaskEvent,
   appendTaskReport,
-  findTaskReport,
   updateTaskReport,
+} from '../../state/taskHistory.js'
+import {
+  findTaskReport,
   latestTaskActivity,
   latestTaskReport,
   taskEventsForTask,
@@ -13,7 +15,7 @@ import {
   taskHistorySummary,
   taskMessageRefsForTask,
   taskReportsForTask,
-} from '../../state/taskHistory.js'
+} from '../../state/taskHistoryReadModel.js'
 import type { TeamState } from '../../internalTypes.js'
 
 export const fileBackedTeamStatePort: TeamStatePort = {

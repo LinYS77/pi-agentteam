@@ -6,9 +6,14 @@ import type { OutboxRunResult } from './effectRunner.js'
 export type MessageAttentionPolicy = import('../core/messagePolicy.js').MessagePolicyDecision
 export type SendMessageType = MessageType
 
+export type SendMessageApplicationContext = {
+  team: TeamState
+  actor: string
+}
+
 export type SendMessageApplicationInput = {
   params: SendMessageInput
-  ctx: import('@earendil-works/pi-coding-agent').ExtensionContext
+  context: SendMessageApplicationContext
 }
 
 export type SendMessageInput = {
@@ -111,6 +116,7 @@ export type SendMessageApplicationResult = {
     outboxEffects?: MessageOutboxRecord[]
     outboxRun?: OutboxRunResult
   }
+  statusInvalidationRequested?: boolean
 }
 
 export type TaskReportAttentionPlan = {

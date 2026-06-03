@@ -9,20 +9,43 @@ import type {
   TeamMessageWakeHint,
   TeamState,
 } from '../internalTypes.js'
-
-export type TaskHistoryCounts = {
-  reports: number
-  events: number
-  messageRefs: number
-}
-
-export type TaskHistorySummary = TaskHistoryCounts & {
-  taskId: string
-  latestReport?: TaskReport
-  latestActivity?: TaskReport | TaskEvent | TaskMessageRef
-}
-
-type TimedTaskHistoryItem = (TaskReport | TaskMessageRef) & { createdAt: number } | TaskEvent
+import { compactTaskHistorySummary } from './taskHistoryReadModel.js'
+export {
+  compactTaskActivity,
+  compactTaskHistorySummary,
+  compactTaskHistoryTimeline,
+  compactTaskReport,
+  compactTaskReportsForTask,
+  displayTaskActivity,
+  displayTaskEventType,
+  displayTaskHistoryTimeline,
+  displayTaskReport,
+  displayTaskReportsForTask,
+  findTaskReport,
+  latestTaskActivity,
+  latestTaskReport,
+  taskEventsForTask,
+  taskHistoryCompactSummary,
+  taskHistoryCounts,
+  taskHistoryDisplaySummary,
+  taskHistoryItemKind,
+  taskHistoryItemTime,
+  taskHistorySummary,
+  taskHistoryTimelineItems,
+  taskMessageRefsForTask,
+  taskReportsForTask,
+} from './taskHistoryReadModel.js'
+export type {
+  TaskHistoryActivityCompact,
+  TaskHistoryActivityDisplay,
+  TaskHistoryCompactSummary,
+  TaskHistoryCounts,
+  TaskHistoryDisplaySummary,
+  TaskHistoryItem,
+  TaskHistoryReportCompact,
+  TaskHistoryReportDisplay,
+  TaskHistorySummary,
+} from './taskHistoryReadModel.js'
 
 function seq(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 1
@@ -32,15 +55,6 @@ function seq(value: unknown): number {
 
 function id(prefix: string, value: number): string {
   return `${prefix}${String(value).padStart(4, '0')}`
-}
-
-function itemTime(item: TimedTaskHistoryItem): number {
-  return 'createdAt' in item ? item.createdAt : item.at
-}
-
-export function compactTaskHistorySummary(text: string): string {
-  const singleLine = text.replace(/\s+/g, ' ').trim()
-  return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine
 }
 
 export function formatTaskReportId(seqValue: number): string {
@@ -205,59 +219,4 @@ export function findTaskMessageRefByMailboxMessageId(
   mailboxMessageId: string,
 ): TaskMessageRef | undefined {
   return Object.values(team.taskMessageRefs).find(ref => ref.mailboxMessageId === mailboxMessageId)
-}
-
-function byTask<T extends { taskId: string }>(items: Record<string, T>, taskId: string): T[] {
-  return Object.values(items).filter(item => item.taskId === taskId)
-}
-
-function newest<T extends TimedTaskHistoryItem>(items: T[]): T | undefined {
-  return items
-    .slice()
-    .sort((a, b) => itemTime(b) - itemTime(a) || b.id.localeCompare(a.id))[0]
-}
-
-export function taskReportsForTask(team: TeamState, taskId: string): TaskReport[] {
-  return byTask(team.taskReports, taskId).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
-}
-
-export function taskEventsForTask(team: TeamState, taskId: string): TaskEvent[] {
-  return byTask(team.taskEvents, taskId).sort((a, b) => a.at - b.at || a.id.localeCompare(b.id))
-}
-
-export function taskMessageRefsForTask(team: TeamState, taskId: string): TaskMessageRef[] {
-  return byTask(team.taskMessageRefs, taskId).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
-}
-
-export function findTaskReport(team: TeamState, reportId: string): TaskReport | undefined {
-  return team.taskReports[reportId]
-}
-
-export function latestTaskReport(team: TeamState, taskId: string): TaskReport | undefined {
-  return newest(taskReportsForTask(team, taskId))
-}
-
-export function latestTaskActivity(team: TeamState, taskId: string): TaskReport | TaskEvent | TaskMessageRef | undefined {
-  return newest([
-    ...taskReportsForTask(team, taskId),
-    ...taskEventsForTask(team, taskId),
-    ...taskMessageRefsForTask(team, taskId),
-  ])
-}
-
-export function taskHistoryCounts(team: TeamState, taskId: string): TaskHistoryCounts {
-  return {
-    reports: taskReportsForTask(team, taskId).length,
-    events: taskEventsForTask(team, taskId).length,
-    messageRefs: taskMessageRefsForTask(team, taskId).length,
-  }
-}
-
-export function taskHistorySummary(team: TeamState, taskId: string): TaskHistorySummary {
-  return {
-    taskId,
-    ...taskHistoryCounts(team, taskId),
-    latestReport: latestTaskReport(team, taskId),
-    latestActivity: latestTaskActivity(team, taskId),
-  }
 }

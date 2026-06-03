@@ -1,4 +1,3 @@
-import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import type {
   MailboxMessage,
   TeamState,
@@ -7,6 +6,8 @@ import type {
   TaskReport,
   TeamTask,
 } from '../internalTypes.js'
+import type { TaskHistoryCounts, TaskHistorySummary } from '../state/taskHistoryReadModel.js'
+export type { TaskHistoryCounts, TaskHistorySummary } from '../state/taskHistoryReadModel.js'
 import type {
   OutboxClaimInput,
   OutboxCompleteInput,
@@ -15,12 +16,6 @@ import type {
   OutboxFailInput,
 } from './outbox.js'
 import type { OutboxRunResult, RunOutboxInput } from './effectRunner.js'
-
-export type TeamContextPort<Context = ExtensionContext> = {
-  ensureTeamForSession(ctx: Context): TeamState | null
-  currentActor(ctx: Context): string
-  invalidateStatus(ctx: Context): void
-}
 
 export type TeamStateUpdater = (team: TeamState) => void | TeamState
 
@@ -39,18 +34,6 @@ export type AppendTaskEventInput = Omit<TaskEvent, 'id'>
 export type AppendTaskReportInput = Omit<TaskReport, 'id' | 'reportOnly'>
 export type UpdateTaskReportInput = Partial<Omit<TaskReport, 'id' | 'taskId'>>
 export type AppendTaskMessageRefInput = Omit<TaskMessageRef, 'id'>
-
-export type TaskHistoryCounts = {
-  reports: number
-  events: number
-  messageRefs: number
-}
-
-export type TaskHistorySummary = TaskHistoryCounts & {
-  taskId: string
-  latestReport?: TaskReport
-  latestActivity?: TaskReport | TaskEvent | TaskMessageRef
-}
 
 export type TaskHistoryQueryPort = {
   taskReportsForTask(team: TeamState, taskId: string): TaskReport[]

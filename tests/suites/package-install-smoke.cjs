@@ -35,7 +35,7 @@ module.exports = {
 
     const files = pkg.files || []
     const packedFiles = packedFileList(root)
-    assert.equal(pkg.version, '0.6.2', 'release package version should match approved v0.6.2 target')
+    assert.equal(pkg.version, '0.6.3', 'release package version should match approved v0.6.3 target')
     assert.equal(pkg.scripts?.test, 'node tests/run.cjs')
     assert.equal(pkg.scripts?.typecheck, 'tsc --noEmit -p tsconfig.json')
     assert.equal(pkg.scripts?.['check:boundaries'], 'node scripts/check-import-boundaries.cjs')
@@ -190,6 +190,7 @@ module.exports = {
       'state/teamStore.ts',
       'state/taskHistory.ts',
       'state/taskHistoryMigration.ts',
+      'state/taskHistoryReadModel.ts',
       'tools/team.ts',
       'commands/team.ts',
       'agents/implementer.md',

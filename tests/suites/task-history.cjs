@@ -205,6 +205,133 @@ module.exports = {
       })
     })
 
+    await withTempHome(modules, 'read-model', () => {
+      const team = freshTeam(modules, 'task-history-read-model')
+      team.tasks.T001 = taskFixture('T001')
+      team.tasks.T002 = taskFixture('T002')
+
+      assert.equal(
+        modules.state.compactTaskHistorySummary('  compact\nsummary\twith   whitespace  '),
+        'compact summary with whitespace',
+        'compact summary should preserve v0.6.2 whitespace folding',
+      )
+      const exactly140 = 'x'.repeat(140)
+      const over140 = `${'x'.repeat(140)}y`
+      assert.equal(modules.state.compactTaskHistorySummary(exactly140), exactly140, '140-character summaries should not truncate')
+      assert.equal(
+        modules.state.compactTaskHistorySummary(over140),
+        `${'x'.repeat(137)}...`,
+        'over-140 summaries should truncate to 137 characters plus ellipsis',
+      )
+
+      const reportFullText = 'full report body must only appear through explicit action=report'
+      const mailboxFullBody = 'mailbox body must not leak through task message refs'
+      const firstReport = modules.state.appendTaskReport(team, {
+        taskId: 'T001',
+        type: 'report_done',
+        author: 'worker-a',
+        text: reportFullText,
+        summary: 'first compact report',
+        createdAt: 10,
+        reporterIsOwner: true,
+        statusAtReport: 'open',
+        ownerAtReport: 'worker-a',
+      })
+      const secondReport = modules.state.appendTaskReport(team, {
+        taskId: 'T001',
+        type: 'report_blocked',
+        author: 'worker-a',
+        text: 'second full report body',
+        summary: 'second compact report',
+        createdAt: 10,
+        reporterIsOwner: true,
+        reportedBlockedBy: ['leader decision'],
+        statusAtReport: 'blocked',
+        ownerAtReport: 'worker-a',
+      })
+      const earlyEvent = modules.state.appendTaskEvent(team, {
+        taskId: 'T001',
+        type: 'created',
+        by: 'team-lead',
+        at: 5,
+        summary: 'created event',
+      })
+      const tieEvent = modules.state.appendTaskEvent(team, {
+        taskId: 'T001',
+        type: 'progress',
+        by: 'worker-a',
+        at: 10,
+        summary: 'same timestamp event',
+      })
+      const tieRef = modules.state.appendTaskMessageRef(team, {
+        taskId: 'T001',
+        mailboxMessageId: 'mailbox-read-model-1',
+        from: 'team-lead',
+        to: 'worker-a',
+        type: 'assignment',
+        createdAt: 10,
+        summary: 'compact mailbox ref',
+        metadata: { copiedBodyThatMustStayOut: mailboxFullBody },
+      })
+      modules.state.appendTaskReport(team, {
+        taskId: 'T002',
+        type: 'report_done',
+        author: 'worker-b',
+        text: 'other task report body',
+        summary: 'other task report',
+        createdAt: 99,
+        reporterIsOwner: true,
+        statusAtReport: 'open',
+        ownerAtReport: 'worker-b',
+      })
+
+      assert.deepEqual(modules.state.taskHistoryCounts(team, 'T001'), {
+        reports: 2,
+        events: 2,
+        messageRefs: 1,
+      }, 'shared read model should count all task-history artifact types for one task only')
+      assert.equal(modules.state.latestTaskReport(team, 'T001'), secondReport, 'latest report tie-break should use timestamp then id descending')
+      assert.equal(modules.state.latestTaskActivity(team, 'T001'), secondReport, 'latest activity tie-break should use timestamp then id descending across artifact kinds')
+
+      const timeline = modules.state.taskHistoryTimelineItems(team, 'T001')
+      assert.deepEqual(
+        timeline.map(item => item.id),
+        [earlyEvent.id, tieEvent.id, tieRef.id, firstReport.id, secondReport.id],
+        'timeline should order by timestamp then id ascending across events/messageRefs/reports',
+      )
+      assert.deepEqual(
+        modules.state.taskHistoryTimelineItems(team, 'T001', { includeMessages: false }).map(item => item.id),
+        [earlyEvent.id, tieEvent.id, firstReport.id, secondReport.id],
+        'timeline should honor includeMessages=false',
+      )
+
+      const compactSummary = modules.state.taskHistoryCompactSummary(team, 'T001')
+      assert.equal(compactSummary.latestReport.id, secondReport.id)
+      assert.equal(compactSummary.latestActivity.kind, 'report')
+      assert.equal(compactSummary.latestActivity.id, secondReport.id)
+      assert.equal(JSON.stringify(compactSummary).includes(reportFullText), false, 'compact summary must not expose full TaskReport.text')
+      assert.equal(JSON.stringify(compactSummary).includes(mailboxFullBody), false, 'compact summary must not expose mailbox message bodies or ref metadata')
+
+      const compactReports = modules.state.compactTaskReportsForTask(team, 'T001')
+      assert.equal(compactReports.length, 2)
+      assert.equal(compactReports[0].text, undefined, 'compact report metadata must exclude full report text')
+      assert.equal(compactReports[0].summary, 'first compact report')
+      assert.deepEqual(compactReports[1].reportedBlockedBy, ['leader decision'])
+
+      const compactRows = modules.state.compactTaskHistoryTimeline(team, 'T001')
+      assert.deepEqual(compactRows.map(row => row.id), timeline.map(item => item.id), 'compact timeline should preserve shared timeline ordering')
+      assert.equal(JSON.stringify(compactRows).includes(reportFullText), false, 'compact timeline rows must not expose full report text')
+      assert.equal(JSON.stringify(compactRows).includes(mailboxFullBody), false, 'compact timeline rows must not expose mailbox message bodies')
+      const compactRef = compactRows.find(row => row.kind === 'messageRef')
+      assert.equal(compactRef.summary, 'compact mailbox ref')
+      assert.equal(compactRef.reportId, undefined, 'app compact messageRef shape should stay minimal')
+
+      const displaySummary = modules.state.taskHistoryDisplaySummary(team, 'T001')
+      assert.equal(displaySummary.latestReport.id, secondReport.id)
+      assert.equal(displaySummary.latestActivity.kind, 'report')
+      assert.equal(JSON.stringify(displaySummary).includes(reportFullText), false, 'panel/display summary must not expose full TaskReport.text')
+    })
+
     await withTempHome(modules, 'migration', () => {
       const team = freshTeam(modules, 'task-history-migration')
       team.tasks.T001 = legacyTaskFixture('T001')
