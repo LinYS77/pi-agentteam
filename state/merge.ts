@@ -1,8 +1,10 @@
 import type {
+  TaskEvent,
+  TaskMessageRef,
+  TaskReport,
   TeamEvent,
   TeamState,
   TeamTask,
-  TeamTaskNote,
 } from '../internalTypes.js'
 import { TEAM_LEAD } from '../internalTypes.js'
 
@@ -10,12 +12,41 @@ import { TEAM_LEAD } from '../internalTypes.js'
 // Merge policy for concurrent/stale team-state writers.
 // ---------------------------------------------------------------------------
 
+function nextSeq(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 1
+    ? Math.floor(value)
+    : 1
+}
+
+function recordValue<T>(value: unknown): Record<string, T> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? { ...(value as Record<string, T>) }
+    : {}
+}
+
+function stripLegacyTaskNotes<T extends Record<string, unknown>>(task: T): Omit<T, 'notes'> {
+  const { notes: _notes, ...rest } = task
+  return rest
+}
+
 export function normalizeTeamState(state: TeamState): TeamState {
+  const rawTasks = recordValue<TeamTask & { notes?: unknown }>((state as TeamState & { tasks?: unknown }).tasks)
+  const tasks = Object.fromEntries(
+    Object.entries(rawTasks).map(([taskId, task]) => [taskId, stripLegacyTaskNotes(task) as TeamTask]),
+  )
   return {
     ...state,
+    tasks,
     revision: Number.isFinite(state.revision) ? Number(state.revision) : 0,
     memberTombstones: { ...(state.memberTombstones ?? {}) },
     events: [...(state.events ?? [])],
+    taskReports: recordValue<TaskReport>(state.taskReports),
+    taskEvents: recordValue<TaskEvent>(state.taskEvents),
+    taskMessageRefs: recordValue<TaskMessageRef>(state.taskMessageRefs),
+    nextTaskSeq: nextSeq(state.nextTaskSeq),
+    nextTaskReportSeq: nextSeq(state.nextTaskReportSeq),
+    nextTaskEventSeq: nextSeq(state.nextTaskEventSeq),
+    nextTaskMessageRefSeq: nextSeq(state.nextTaskMessageRefSeq),
   }
 }
 
@@ -25,7 +56,6 @@ function pickLatestEntity<T extends { updatedAt: number }>(
   options?: {
     currentRevision?: number
     incomingRevision?: number
-    mergeEqual?: (currentEntity: T, incomingEntity: T) => T
   },
 ): T | undefined {
   if (!current) return incoming
@@ -38,44 +68,7 @@ function pickLatestEntity<T extends { updatedAt: number }>(
   if (incomingRevision > currentRevision) return incoming
   if (currentRevision > incomingRevision) return current
 
-  return options?.mergeEqual ? options.mergeEqual(current, incoming) : incoming
-}
-
-function taskNoteFingerprint(note: TeamTaskNote): string {
-  return [
-    note.at,
-    note.author,
-    note.text,
-    note.threadId ?? '',
-    note.messageType ?? '',
-    note.requestId ?? '',
-    note.linkedMessageId ?? '',
-  ].join('|')
-}
-
-export function mergeTaskNotes(currentNotes: TeamTaskNote[], incomingNotes: TeamTaskNote[]): TeamTaskNote[] {
-  const seen = new Set<string>()
-  const merged: TeamTaskNote[] = []
-  const ordered = [...currentNotes, ...incomingNotes]
-    .slice()
-    .sort((a, b) => a.at - b.at || a.author.localeCompare(b.author) || a.text.localeCompare(b.text))
-
-  for (const note of ordered) {
-    const key = taskNoteFingerprint(note)
-    if (seen.has(key)) continue
-    seen.add(key)
-    merged.push(note)
-  }
-  return merged
-}
-
-function mergeTaskStates(currentTask: TeamTask, incomingTask: TeamTask): TeamTask {
-  return {
-    ...currentTask,
-    ...incomingTask,
-    notes: mergeTaskNotes(currentTask.notes, incomingTask.notes),
-    updatedAt: Math.max(currentTask.updatedAt, incomingTask.updatedAt),
-  }
+  return incoming
 }
 
 export function mergeTeamEvents(currentEvents: TeamEvent[], incomingEvents: TeamEvent[]): TeamEvent[] {
@@ -87,6 +80,45 @@ export function mergeTeamEvents(currentEvents: TeamEvent[], incomingEvents: Team
     }
   }
   return [...byId.values()].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id))
+}
+
+function taskHistoryItemTime(item: { at?: number; createdAt?: number }): number {
+  return item.createdAt ?? item.at ?? 0
+}
+
+function mergeTaskHistoryRecord<T extends { id: string; at?: number; createdAt?: number }>(
+  currentItems: Record<string, T>,
+  incomingItems: Record<string, T>,
+): Record<string, T> {
+  const byId = new Map<string, T>()
+  for (const item of [...Object.values(currentItems), ...Object.values(incomingItems)]) {
+    const existing = byId.get(item.id)
+    if (!existing || taskHistoryItemTime(item) >= taskHistoryItemTime(existing)) byId.set(item.id, item)
+  }
+  return Object.fromEntries([...byId.entries()].sort(([a], [b]) => a.localeCompare(b)))
+}
+
+function mergeTaskMessageRefs(
+  currentItems: Record<string, TaskMessageRef>,
+  incomingItems: Record<string, TaskMessageRef>,
+): Record<string, TaskMessageRef> {
+  const byId = new Map<string, TaskMessageRef>()
+  const mailboxIdToId = new Map<string, string>()
+  for (const item of [...Object.values(currentItems), ...Object.values(incomingItems)]) {
+    const duplicateId = mailboxIdToId.get(item.mailboxMessageId)
+    const existing = duplicateId ? byId.get(duplicateId) : byId.get(item.id)
+    if (!existing) {
+      byId.set(item.id, item)
+      mailboxIdToId.set(item.mailboxMessageId, item.id)
+      continue
+    }
+    const chosen = item.createdAt >= existing.createdAt ? item : existing
+    const chosenId = chosen.id
+    byId.delete(existing.id)
+    byId.set(chosenId, chosen)
+    mailboxIdToId.set(chosen.mailboxMessageId, chosenId)
+  }
+  return Object.fromEntries([...byId.entries()].sort(([a], [b]) => a.localeCompare(b)))
 }
 
 export function mergeTeamStates(current: TeamState, incoming: TeamState): TeamState {
@@ -129,7 +161,6 @@ export function mergeTeamStates(current: TeamState, incoming: TeamState): TeamSt
       {
         currentRevision: currentState.revision,
         incomingRevision: incomingState.revision,
-        mergeEqual: mergeTaskStates,
       },
     )
     if (chosen) tasks[taskId] = chosen
@@ -146,7 +177,13 @@ export function mergeTeamStates(current: TeamState, incoming: TeamState): TeamSt
     members,
     tasks,
     events: mergeTeamEvents(currentState.events ?? [], incomingState.events ?? []),
+    taskReports: mergeTaskHistoryRecord(currentState.taskReports, incomingState.taskReports),
+    taskEvents: mergeTaskHistoryRecord(currentState.taskEvents, incomingState.taskEvents),
+    taskMessageRefs: mergeTaskMessageRefs(currentState.taskMessageRefs, incomingState.taskMessageRefs),
     nextTaskSeq: Math.max(currentState.nextTaskSeq, incomingState.nextTaskSeq),
+    nextTaskReportSeq: Math.max(currentState.nextTaskReportSeq, incomingState.nextTaskReportSeq),
+    nextTaskEventSeq: Math.max(currentState.nextTaskEventSeq, incomingState.nextTaskEventSeq),
+    nextTaskMessageRefSeq: Math.max(currentState.nextTaskMessageRefSeq, incomingState.nextTaskMessageRefSeq),
     revision: Math.max(currentState.revision ?? 0, incomingState.revision ?? 0) + 1,
     memberTombstones: tombstones,
   }

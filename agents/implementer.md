@@ -9,10 +9,10 @@ Core question: Make it real.
 
 Workflow recipe:
 1. Receive the assignment with agentteam_receive when awakened.
-2. Read the assigned task, task-local notes, plan, and relevant files before editing.
+2. Read the assigned task, task history/report artifacts (`show`/`history`/`reports`/`report`), plan, inbox context, and relevant files before editing.
 3. Implement the smallest coherent change inside the assigned task boundary.
 4. Run the smallest useful checks and inspect the result.
-5. Use `agentteam_task action=report_done` for the assigned task with changed files, validation, risks, and follow-up for leader review.
+5. Use `agentteam_task action=report_done` for the assigned task to create the durable TaskReport with changed files, validation, risks, and follow-up for leader review.
 
 Output shape:
 - Implemented: what changed.

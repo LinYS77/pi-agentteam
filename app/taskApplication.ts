@@ -1,9 +1,8 @@
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
-import { taskLocalNoteMetadata, taskReportNoteMetadata } from '../core/taskNoteModel.js'
 import { defaultThreadIdForTask } from '../protocol.js'
 import { planTaskReportAttention, planTaskReportEffects } from './messageApplication.js'
 import { transitionTask, type TaskState as ReducerTaskState } from '../core/taskReducer.js'
-import { TEAM_LEAD } from '../internalTypes.js'
+import { TEAM_LEAD, type TaskEvent, type TaskMessageRef, type TaskReport, type TaskReportStatusAtReport } from '../internalTypes.js'
 import { runOutboxOnce, type OutboxRunResult } from './effectRunner.js'
 import { outboxEffectWarningName, outboxHash } from './outbox.js'
 import { isLeader } from '../utils.js'
@@ -25,10 +24,10 @@ export function ensureTaskPrivilege(
 
   const role = actorRole(team, actor)
 
-  // Non-leaders can inspect, annotate, and send report-only task reports.
-  if (action === 'list' || action === 'note' || action === 'report_done' || action === 'report_blocked') return null
+  // Non-leaders can inspect, record compact progress, and send report-only task reports.
+  if (action === 'list' || action === 'show' || action === 'history' || action === 'reports' || action === 'report' || action === 'progress' || action === 'report_done' || action === 'report_blocked') return null
 
-  return `Task action '${action}' is leader-only for ${actor} (${role || 'worker'}). Allowed for non-leaders: list/note/report_done/report_blocked`
+  return `Task action '${action}' is leader-only for ${actor} (${role || 'worker'}). Allowed for non-leaders: list/show/history/reports/report/progress/report_done/report_blocked`
 }
 
 function requireUpdatedTeam(team: TaskCommandContext['team'] | null, teamName: string): TaskCommandContext['team'] {
@@ -115,7 +114,9 @@ function resolveTaskOwner(
 }
 
 const DEFAULT_TASK_LIST_LIMIT = 10
+const DEFAULT_TASK_HISTORY_LIMIT = 20
 const MAX_TASK_LIST_LIMIT = 100
+const MAX_TASK_HISTORY_LIMIT = 100
 
 type TaskStatus = NonNullable<TeamTaskInput['status']>
 
@@ -155,6 +156,11 @@ function compareTasksForList(a: ReturnType<typeof requireTask>, b: ReturnType<ty
 function clampListLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit)) return DEFAULT_TASK_LIST_LIMIT
   return Math.max(1, Math.min(MAX_TASK_LIST_LIMIT, Math.floor(limit)))
+}
+
+function clampHistoryLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return DEFAULT_TASK_HISTORY_LIMIT
+  return Math.max(1, Math.min(MAX_TASK_HISTORY_LIMIT, Math.floor(limit)))
 }
 
 function countTasksByStatus(tasks: Array<ReturnType<typeof requireTask>>): Record<TaskStatus, number> {
@@ -201,6 +207,29 @@ function noteText(params: TeamTaskInput, fallback: string): string {
   return params.note?.trim() || fallback
 }
 
+function compactTaskHistorySummary(text: string): string {
+  const singleLine = text.replace(/\s+/g, ' ').trim()
+  return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine
+}
+
+function taskStatusAtReport(task: ReturnType<typeof requireTask>): TaskReportStatusAtReport {
+  return task.status === 'blocked' ? 'blocked' : 'open'
+}
+
+function appendTaskEventHistory(
+  input: TaskCommandContext,
+  event: Parameters<TaskApplicationDeps['taskMutations']['appendTaskEvent']>[1],
+): void {
+  input.deps.taskMutations.appendTaskEvent(input.team, event)
+}
+
+function appendTaskReportHistory(
+  input: TaskCommandContext,
+  report: Parameters<TaskApplicationDeps['taskMutations']['appendTaskReport']>[1],
+) {
+  return input.deps.taskMutations.appendTaskReport(input.team, report)
+}
+
 function unsupportedStatusParam(params: TeamTaskInput, action: string): TaskCommandResult | null {
   if (params.status === undefined) return null
   return {
@@ -229,6 +258,218 @@ function denyNonOwnerReport(task: ReturnType<typeof requireTask>, actor: string,
       taskId: task.id,
       actor,
       taskOwner: task.owner ?? null,
+    },
+  }
+}
+
+function taskBrief(task: ReturnType<typeof requireTask>) {
+  return {
+    id: task.id,
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    owner: task.owner,
+    blockedBy: [...task.blockedBy],
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+  }
+}
+
+function historyItemTime(item: TaskReport | TaskEvent | TaskMessageRef): number {
+  return 'createdAt' in item ? item.createdAt : item.at
+}
+
+function historyItemKind(item: TaskReport | TaskEvent | TaskMessageRef): 'report' | 'event' | 'messageRef' {
+  if ('author' in item) return 'report'
+  if ('mailboxMessageId' in item) return 'messageRef'
+  return 'event'
+}
+
+function displayEventType(type: TaskEvent['type']): string {
+  return type === 'report_submitted' ? 'report' : type
+}
+
+function compactReport(report: TaskReport) {
+  return {
+    id: report.id,
+    taskId: report.taskId,
+    type: report.type,
+    author: report.author,
+    summary: report.summary,
+    createdAt: report.createdAt,
+    threadId: report.threadId,
+    reportOnly: report.reportOnly,
+    reporterIsOwner: report.reporterIsOwner,
+    reportedBlockedBy: report.reportedBlockedBy ?? [],
+    statusAtReport: report.statusAtReport,
+    ownerAtReport: report.ownerAtReport,
+    mailboxMessageId: report.mailboxMessageId,
+  }
+}
+
+function compactActivity(item: TaskReport | TaskEvent | TaskMessageRef | undefined) {
+  if (!item) return undefined
+  if (historyItemKind(item) === 'report') {
+    const report = item as TaskReport
+    return {
+      kind: 'report' as const,
+      id: report.id,
+      taskId: report.taskId,
+      type: report.type,
+      at: report.createdAt,
+      by: report.author,
+      summary: report.summary,
+    }
+  }
+  if (historyItemKind(item) === 'messageRef') {
+    const ref = item as TaskMessageRef
+    return {
+      kind: 'messageRef' as const,
+      id: ref.id,
+      taskId: ref.taskId,
+      mailboxMessageId: ref.mailboxMessageId,
+      type: ref.type,
+      at: ref.createdAt,
+      from: ref.from,
+      to: ref.to,
+      summary: ref.summary,
+    }
+  }
+  const event = item as TaskEvent
+  return {
+    kind: 'event' as const,
+    id: event.id,
+    taskId: event.taskId,
+    type: event.type,
+    displayType: displayEventType(event.type),
+    at: event.at,
+    by: event.by,
+    summary: event.summary,
+    reportId: event.reportId,
+  }
+}
+
+function formatMaybeList(values: string[]): string {
+  return values.length ? values.join(', ') : '-'
+}
+
+function showTaskCommand(input: TaskCommandContext, taskId: string): TaskCommandResult {
+  const task = requireTask(input.team, taskId)
+  const summary = input.deps.taskHistory.taskHistorySummary(input.team, task.id)
+  const latestReport = summary.latestReport ? compactReport(summary.latestReport) : undefined
+  const latestActivity = compactActivity(summary.latestActivity)
+  const latestActivityDisplayType = latestActivity
+    ? (latestActivity.kind === 'event' ? latestActivity.displayType : latestActivity.type)
+    : undefined
+  const lines = [
+    `${task.id} [${task.status}] ${task.title}`,
+    `Owner: ${task.owner ?? '-'}`,
+    `Blocked by: ${formatMaybeList(task.blockedBy)}`,
+    `Description: ${task.description || '-'}`,
+    `History counts: reports ${summary.reports}, events ${summary.events}, messageRefs ${summary.messageRefs}`,
+    `Latest report: ${latestReport ? `${latestReport.id} ${latestReport.type} by ${latestReport.author} — ${latestReport.summary}` : '-'}`,
+    `Latest activity: ${latestActivity ? `${latestActivity.kind} ${latestActivity.id} ${latestActivityDisplayType} — ${latestActivity.summary ?? '-'}` : '-'}`,
+    `Hints: use action=history taskId=${task.id}; action=reports taskId=${task.id}; action=report reportId=<id>`,
+  ]
+  return {
+    task,
+    text: lines.join('\n'),
+    details: {
+      task: taskBrief(task),
+      counts: { reports: summary.reports, events: summary.events, messageRefs: summary.messageRefs },
+      latestReport,
+      latestActivity,
+      hints: {
+        history: { action: 'history', taskId: task.id },
+        reports: { action: 'reports', taskId: task.id },
+        report: latestReport ? { action: 'report', reportId: latestReport.id } : { action: 'report', reportId: '<id>' },
+      },
+    },
+  }
+}
+
+function historyTimelineItems(input: TaskCommandContext, taskId: string, includeMessages: boolean): Array<TaskReport | TaskEvent | TaskMessageRef> {
+  const items: Array<TaskReport | TaskEvent | TaskMessageRef> = [
+    ...input.deps.taskHistory.taskEventsForTask(input.team, taskId),
+    ...input.deps.taskHistory.taskReportsForTask(input.team, taskId),
+  ]
+  if (includeMessages) items.push(...input.deps.taskHistory.taskMessageRefsForTask(input.team, taskId))
+  return items.sort((a, b) => historyItemTime(a) - historyItemTime(b) || a.id.localeCompare(b.id))
+}
+
+function formatHistoryRow(item: TaskReport | TaskEvent | TaskMessageRef): string {
+  const compact = compactActivity(item)!
+  if (compact.kind === 'report') return `${compact.at} report ${compact.id} ${compact.type} by ${compact.by}: ${compact.summary}`
+  if (compact.kind === 'messageRef') return `${compact.at} messageRef ${compact.id} ${compact.type} ${compact.from}->${compact.to}: ${compact.summary ?? '(no summary)'}`
+  return `${compact.at} event ${compact.id} ${compact.displayType} by ${compact.by}: ${compact.summary}`
+}
+
+function historyTaskCommand(input: TaskCommandContext, taskId: string, params: TeamTaskInput): TaskCommandResult {
+  const task = requireTask(input.team, taskId)
+  const includeMessages = params.includeMessages !== false
+  const allItems = historyTimelineItems(input, task.id, includeMessages)
+  const all = params.all === true
+  const effectiveLimit = all ? allItems.length : clampHistoryLimit(params.limit)
+  const shown = all ? allItems : allItems.slice(Math.max(0, allItems.length - effectiveLimit))
+  const hiddenCount = Math.max(0, allItems.length - shown.length)
+  const header = `History for ${task.id}: showing ${shown.length} of ${allItems.length} rows (hidden ${hiddenCount}; limit ${all ? 'all' : effectiveLimit}; messageRefs ${includeMessages ? 'included' : 'excluded'}). Use action=report reportId=<id> for full report text.`
+  const rows = shown.map(formatHistoryRow)
+  const filter: { all: boolean; limit?: number; includeMessages: boolean } = { all, includeMessages }
+  if (!all) filter.limit = effectiveLimit
+  return {
+    task,
+    text: rows.length ? `${header}\n${rows.join('\n')}` : `${header}\nNo history rows`,
+    details: {
+      task: taskBrief(task),
+      shownCount: shown.length,
+      totalCount: allItems.length,
+      hiddenCount,
+      filter,
+      rows: shown.map(compactActivity),
+    },
+  }
+}
+
+function reportsTaskCommand(input: TaskCommandContext, taskId: string): TaskCommandResult {
+  const task = requireTask(input.team, taskId)
+  const reports = input.deps.taskHistory.taskReportsForTask(input.team, task.id)
+  const rows = reports.map(report => {
+    const blockedBy = report.reportedBlockedBy?.length ? ` blockedBy=${report.reportedBlockedBy.join(',')}` : ''
+    return `${report.id} ${report.type} by ${report.author} at ${report.createdAt} statusAtReport=${report.statusAtReport}${blockedBy}: ${report.summary}`
+  })
+  const header = `Reports for ${task.id}: ${reports.length} report${reports.length === 1 ? '' : 's'}. Use action=report reportId=<id> for full report text.`
+  return {
+    task,
+    text: rows.length ? `${header}\n${rows.join('\n')}` : `${header}\nNo reports`,
+    details: {
+      task: taskBrief(task),
+      reports: reports.map(compactReport),
+    },
+  }
+}
+
+function reportTaskCommand(input: TaskCommandContext, params: TeamTaskInput): TaskCommandResult {
+  const reportId = params.reportId?.trim()
+  if (!reportId) throw new Error('reportId is required for action=report')
+  const report = input.deps.taskHistory.findTaskReport(input.team, reportId)
+  if (!report) throw new Error(`Task report ${reportId} not found`)
+  if (params.taskId && report.taskId !== params.taskId) {
+    throw new Error(`Task report ${report.id} is for task ${report.taskId}, not ${params.taskId}`)
+  }
+  const task = requireTask(input.team, report.taskId)
+  const meta = compactReport(report)
+  return {
+    task,
+    text: [
+      `${report.id} ${report.type} for ${report.taskId} by ${report.author} at ${report.createdAt}`,
+      `Status at report: ${report.statusAtReport}; owner at report: ${report.ownerAtReport ?? '-'}; blockedBy: ${formatMaybeList(report.reportedBlockedBy ?? [])}`,
+      'Report text:',
+      report.text,
+    ].join('\n'),
+    details: {
+      task: taskBrief(task),
+      report: meta,
+      text: report.text,
     },
   }
 }
@@ -292,16 +533,22 @@ function createTaskCommand(input: TaskCommandContext, params: TeamTaskInput): Ta
       owner,
     })
     createdTaskId = task.id
-    input.deps.appendStructuredTaskNote(task, input.actor, 'Task created', {
-      messageType: 'inform',
-      threadId: defaultThreadIdForTask(task.id),
-      metadata: taskLocalNoteMetadata({ action: 'create' }),
+    appendTaskEventHistory({ ...input, team: latest }, {
+      taskId: task.id,
+      type: 'created',
+      by: input.actor,
+      at: task.createdAt,
+      summary: 'Task created',
+      data: { source: 'agentteam_task_dual_write' },
     })
     if (owner) {
-      input.deps.appendStructuredTaskNote(task, input.actor, `Assigned to ${owner} on create`, {
-        messageType: 'assignment',
-        threadId: defaultThreadIdForTask(task.id),
-        metadata: taskLocalNoteMetadata({ action: 'assign' }),
+      appendTaskEventHistory({ ...input, team: latest }, {
+        taskId: task.id,
+        type: 'assigned',
+        by: input.actor,
+        at: task.updatedAt,
+        summary: `Assigned to ${owner} on create`,
+        data: { source: 'agentteam_task_dual_write', newOwner: owner, onCreate: true },
       })
     }
   }), input.teamName)
@@ -322,12 +569,17 @@ function assignTaskCommand(input: TaskCommandContext, taskId: string, params: Te
 
   const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
+    const previousOwner = task.owner
     const transition = applyReducerTransition(task, { type: 'assign', owner, at: transitionAt })
     if (!transition.ok) throw new Error(transition.reason)
-    input.deps.appendStructuredTaskNote(task, input.actor, noteText(params, `Assigned to ${owner}`), {
-      messageType: 'assignment',
-      threadId: defaultThreadIdForTask(task.id),
-      metadata: taskLocalNoteMetadata({ action: 'assign', owner }),
+    const note = noteText(params, `Assigned to ${owner}`)
+    appendTaskEventHistory({ ...input, team: latest }, {
+      taskId: task.id,
+      type: 'assigned',
+      by: input.actor,
+      at: transitionAt,
+      summary: compactTaskHistorySummary(note),
+      data: { source: 'agentteam_task_dual_write', previousOwner, newOwner: owner },
     })
   }), input.teamName)
   const task = requireTask(updated, taskId)
@@ -347,10 +599,14 @@ function blockTaskCommand(input: TaskCommandContext, taskId: string, params: Tea
     const transition = applyReducerTransition(task, { type: 'block', at: transitionAt })
     if (!transition.ok) throw new Error(transition.reason)
     task.blockedBy = params.blockedBy ?? []
-    input.deps.appendStructuredTaskNote(task, input.actor, noteText(params, 'Task blocked'), {
-      messageType: 'inform',
-      threadId: defaultThreadIdForTask(task.id),
-      metadata: taskLocalNoteMetadata({ action: 'block', blockedBy: task.blockedBy }),
+    const note = noteText(params, 'Task blocked')
+    appendTaskEventHistory({ ...input, team: latest }, {
+      taskId: task.id,
+      type: 'blocked',
+      by: input.actor,
+      at: transitionAt,
+      summary: compactTaskHistorySummary(note),
+      data: { source: 'agentteam_task_dual_write', blockedBy: task.blockedBy },
     })
   }), input.teamName)
   const task = requireTask(updated, taskId)
@@ -369,13 +625,18 @@ function unblockTaskCommand(input: TaskCommandContext, taskId: string, params: T
 
   const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
+    const previousBlockedBy = [...task.blockedBy]
     const transition = applyReducerTransition(task, { type: 'unblock', at: transitionAt })
     if (!transition.ok) throw new Error(transition.reason)
     task.blockedBy = []
-    input.deps.appendStructuredTaskNote(task, input.actor, noteText(params, 'Task unblocked'), {
-      messageType: 'inform',
-      threadId: defaultThreadIdForTask(task.id),
-      metadata: taskLocalNoteMetadata({ action: 'unblock' }),
+    const note = noteText(params, 'Task unblocked')
+    appendTaskEventHistory({ ...input, team: latest }, {
+      taskId: task.id,
+      type: 'unblocked',
+      by: input.actor,
+      at: transitionAt,
+      summary: compactTaskHistorySummary(note),
+      data: { source: 'agentteam_task_dual_write', previousBlockedBy },
     })
   }), input.teamName)
   const task = requireTask(updated, taskId)
@@ -394,6 +655,8 @@ function closeTaskCommand(input: TaskCommandContext, taskId: string, params: Tea
 
   const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
+    const previousStatus = task.status
+    const previousBlockedBy = [...task.blockedBy]
     const transition = applyReducerTransition(task, { type: 'close', at: transitionAt })
     if (!transition.ok) throw new Error(transition.reason)
     const role = actorRole(latest, input.actor)
@@ -401,31 +664,39 @@ function closeTaskCommand(input: TaskCommandContext, taskId: string, params: Tea
       ? buildImplementationCompletionNote(params.note)
       : noteText(params, 'Task closed')
     task.blockedBy = []
-    input.deps.appendStructuredTaskNote(task, input.actor, note, {
-      messageType: 'inform',
-      threadId: defaultThreadIdForTask(task.id),
-      metadata: taskLocalNoteMetadata({ action: 'close' }),
+    appendTaskEventHistory({ ...input, team: latest }, {
+      taskId: task.id,
+      type: 'closed',
+      by: input.actor,
+      at: transitionAt,
+      summary: compactTaskHistorySummary(note),
+      data: { source: 'agentteam_task_dual_write', previousStatus, previousBlockedBy },
     })
   }), input.teamName)
   const task = requireTask(updated, taskId)
   return { task, text: `Closed ${formatTask(task)}`, details: { task } }
 }
 
-function noteTaskCommand(input: TaskCommandContext, taskId: string, params: TeamTaskInput): TaskCommandResult {
-  const unsupportedStatus = unsupportedStatusParam(params, 'note')
+function progressTaskCommand(input: TaskCommandContext, taskId: string, params: TeamTaskInput): TaskCommandResult {
+  const unsupportedStatus = unsupportedStatusParam(params, 'progress')
   if (unsupportedStatus) return unsupportedStatus
-  const unsupportedBlockedBy = unsupportedBlockedByParam(params, 'note')
+  const unsupportedBlockedBy = unsupportedBlockedByParam(params, 'progress')
   if (unsupportedBlockedBy) return unsupportedBlockedBy
+  const at = Date.now()
   const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
-    input.deps.appendStructuredTaskNote(task, input.actor, noteText(params, 'Note added'), {
-      messageType: 'inform',
-      threadId: defaultThreadIdForTask(task.id),
-      metadata: taskLocalNoteMetadata({ action: 'note' }),
+    const progress = noteText(params, 'Progress recorded')
+    appendTaskEventHistory({ ...input, team: latest }, {
+      taskId: task.id,
+      type: 'progress',
+      by: input.actor,
+      at,
+      summary: compactTaskHistorySummary(progress),
+      data: { source: 'agentteam_task_progress' },
     })
   }), input.teamName)
   const task = requireTask(updated, taskId)
-  return { task, text: `Noted on ${task.id}`, details: { task } }
+  return { task, text: `Recorded progress on ${task.id}`, details: { task } }
 }
 
 function reportDoneTaskCommand(input: TaskCommandContext, taskId: string, params: TeamTaskInput): TaskCommandResult {
@@ -440,7 +711,6 @@ function reportDoneTaskCommand(input: TaskCommandContext, taskId: string, params
     at: transitionAt,
     actor: input.actor,
     note: params.note,
-    metadata: taskReportNoteMetadata({ reportOnly: true, reporterIsOwner: true, to: TEAM_LEAD }),
   })
   if (!initialTransition.ok) return taskTransitionFailure(existingTask, 'report_done', initialTransition.reason)
   if (input.actor !== TEAM_LEAD && input.actor !== existingTask.owner) {
@@ -451,6 +721,9 @@ function reportDoneTaskCommand(input: TaskCommandContext, taskId: string, params
   const reportAttention = planTaskReportAttention('report_done')
   const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
+    const ownerAtReport = task.owner
+    const statusAtReport = taskStatusAtReport(task)
+    const reporterIsOwner = input.actor === task.owner
     const role = actorRole(latest, input.actor)
     const note = role === 'implementer'
       ? buildImplementationCompletionNote(params.note)
@@ -460,27 +733,44 @@ function reportDoneTaskCommand(input: TaskCommandContext, taskId: string, params
       at: transitionAt,
       actor: input.actor,
       note,
-      metadata: taskReportNoteMetadata({ reportOnly: true, reporterIsOwner: true, to: TEAM_LEAD }),
     })
     if (!transition.ok) throw new Error(transition.reason)
-    input.deps.appendStructuredTaskNote(task, input.actor, note, {
-      messageType: 'report_done',
-      threadId: defaultThreadIdForTask(task.id),
-      metadata: taskReportNoteMetadata({ reportOnly: true, reporterIsOwner: true, to: TEAM_LEAD }),
+    const threadId = defaultThreadIdForTask(task.id)
+    const report = appendTaskReportHistory({ ...input, team: latest }, {
+      taskId: task.id,
+      type: 'report_done',
+      author: input.actor,
+      text: note,
+      summary: compactTaskHistorySummary(note),
+      createdAt: transitionAt,
+      threadId,
+      reporterIsOwner,
+      statusAtReport,
+      ownerAtReport,
+      metadata: { source: 'agentteam_task_dual_write' },
+    })
+    appendTaskEventHistory({ ...input, team: latest }, {
+      taskId: task.id,
+      type: 'report_submitted',
+      by: input.actor,
+      at: transitionAt,
+      summary: compactTaskHistorySummary(note),
+      reportId: report.id,
+      data: { source: 'agentteam_task_dual_write', reportType: 'report_done' },
     })
     if (input.actor !== TEAM_LEAD) {
       leaderMailbox = {
         message: {
           from: input.actor,
           to: TEAM_LEAD,
-          text: `${task.id} done report by ${input.actor}: ${task.title}\n\n${note}`,
-          summary: `${task.id} done report`,
+          text: `${task.id} done report by ${input.actor}: ${task.title}`,
+          summary: `${task.id} done report: ${report.summary}`,
           type: 'report_done',
           taskId: task.id,
           threadId: defaultThreadIdForTask(task.id),
           priority: 'normal',
           wakeHint: reportAttention.wakeHint,
-          metadata: { reportOnly: true, reporterIsOwner: true, ...reportAttention.metadata },
+          metadata: { reportOnly: true, reporterIsOwner: true, reportId: report.id, ...reportAttention.metadata },
         },
       }
       leaderWake = {
@@ -513,12 +803,6 @@ function reportBlockedTaskCommand(input: TaskCommandContext, taskId: string, par
     at: transitionAt,
     actor: input.actor,
     note: params.note,
-    metadata: taskReportNoteMetadata({
-      reportOnly: true,
-      reportedBlockedBy: params.blockedBy ?? [],
-      reporterIsOwner: true,
-      to: TEAM_LEAD,
-    }),
   })
   if (!initialTransition.ok) return taskTransitionFailure(existingTask, 'report_blocked', initialTransition.reason)
   if (input.actor !== TEAM_LEAD && input.actor !== existingTask.owner) {
@@ -529,6 +813,9 @@ function reportBlockedTaskCommand(input: TaskCommandContext, taskId: string, par
   const reportAttention = planTaskReportAttention('report_blocked')
   const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
+    const ownerAtReport = task.owner
+    const statusAtReport = taskStatusAtReport(task)
+    const reporterIsOwner = input.actor === task.owner
     const blockerText = params.blockedBy?.length
       ? `Blocked by: ${params.blockedBy.join(', ')}`
       : undefined
@@ -538,31 +825,39 @@ function reportBlockedTaskCommand(input: TaskCommandContext, taskId: string, par
       at: transitionAt,
       actor: input.actor,
       note,
-      metadata: taskReportNoteMetadata({
-        reportOnly: true,
-        reportedBlockedBy: params.blockedBy ?? [],
-        reporterIsOwner: true,
-        to: TEAM_LEAD,
-      }),
     })
     if (!transition.ok) throw new Error(transition.reason)
-    input.deps.appendStructuredTaskNote(task, input.actor, note, {
-      messageType: 'report_blocked',
-      threadId: defaultThreadIdForTask(task.id),
-      metadata: taskReportNoteMetadata({
-        reportOnly: true,
-        reportedBlockedBy: params.blockedBy ?? [],
-        reporterIsOwner: true,
-        to: TEAM_LEAD,
-      }),
+    const threadId = defaultThreadIdForTask(task.id)
+    const report = appendTaskReportHistory({ ...input, team: latest }, {
+      taskId: task.id,
+      type: 'report_blocked',
+      author: input.actor,
+      text: note,
+      summary: compactTaskHistorySummary(note),
+      createdAt: transitionAt,
+      threadId,
+      reporterIsOwner,
+      reportedBlockedBy: params.blockedBy ?? [],
+      statusAtReport,
+      ownerAtReport,
+      metadata: { source: 'agentteam_task_dual_write' },
+    })
+    appendTaskEventHistory({ ...input, team: latest }, {
+      taskId: task.id,
+      type: 'report_submitted',
+      by: input.actor,
+      at: transitionAt,
+      summary: compactTaskHistorySummary(note),
+      reportId: report.id,
+      data: { source: 'agentteam_task_dual_write', reportType: 'report_blocked', reportedBlockedBy: params.blockedBy ?? [] },
     })
     if (input.actor !== TEAM_LEAD) {
       leaderMailbox = {
         message: {
           from: input.actor,
           to: TEAM_LEAD,
-          text: `${task.id} blocked report by ${input.actor}: ${task.title}\n\n${note}`,
-          summary: `${task.id} blocked report`,
+          text: `${task.id} blocked report by ${input.actor}: ${task.title}`,
+          summary: `${task.id} blocked report: ${report.summary}`,
           type: 'report_blocked',
           taskId: task.id,
           threadId: defaultThreadIdForTask(task.id),
@@ -571,6 +866,7 @@ function reportBlockedTaskCommand(input: TaskCommandContext, taskId: string, par
           metadata: {
             reportOnly: true,
             ...reportAttention.metadata,
+            reportId: report.id,
             reportedBlockedBy: params.blockedBy ?? [],
             reporterIsOwner: true,
           },
@@ -650,14 +946,16 @@ async function handleTaskApplicationSideEffects(result: TaskCommandResult, ctx: 
   let mailboxDelivered = false
   let sentLeaderMailboxMessage: { id?: string } | undefined
   let mailboxOutboxEffectId: string | undefined
+  let leaderMailboxReportId: string | undefined
   const outboxEffectIds: string[] = []
 
   if (result.leaderMailbox && result.wakeTeam) {
     const pushed = result.leaderMailbox.message
+    leaderMailboxReportId = typeof pushed.metadata?.reportId === 'string' ? pushed.metadata.reportId : undefined
     const mailboxEffect = deps.outboxStore.enqueue({
       teamName: result.wakeTeam.name,
       kind: 'inbox_item_append_requested',
-      idempotencyKey: ['task-leader-mailbox', result.wakeTeam.name, pushed.type ?? 'inform', pushed.taskId ?? '', pushed.from, pushed.to, pushed.summary ?? '', outboxHash(pushed.text)].join(':'),
+      idempotencyKey: ['task-leader-mailbox', result.wakeTeam.name, pushed.type ?? 'inform', pushed.taskId ?? '', pushed.from, pushed.to, String(pushed.metadata?.reportId ?? ''), outboxHash(pushed.summary ?? ''), outboxHash(pushed.text)].join(':'),
       payload: {
         teamName: result.wakeTeam.name,
         recipient: pushed.to,
@@ -687,6 +985,14 @@ async function handleTaskApplicationSideEffects(result: TaskCommandResult, ctx: 
     sentLeaderMailboxMessage = (mailboxRunResult?.value ?? storedMailboxEffect?.result) as { id?: string } | undefined
     if (!sentLeaderMailboxMessage && mailboxDelivered) sentLeaderMailboxMessage = { id: deterministicMailboxId }
     result.details.leaderMailboxDelivered = mailboxDelivered
+    if (mailboxDelivered && leaderMailboxReportId && sentLeaderMailboxMessage?.id) {
+      const reportId = leaderMailboxReportId
+      const mailboxMessageId = sentLeaderMailboxMessage.id
+      const refreshed = deps.teamState.updateTeam(result.wakeTeam.name, latest => {
+        deps.taskMutations.updateTaskReport(latest, reportId, { mailboxMessageId })
+      })
+      if (refreshed) result.wakeTeam = refreshed
+    }
     if (!mailboxDelivered) {
       const mailboxError = mailboxRunResult?.error ?? deps.outboxStore.get(result.wakeTeam.name, mailboxEffect.effectId)?.lastError ?? 'leader mailbox push failed'
       result.details.mailboxDeliveryFailed = { recipient: pushed.to, error: mailboxError }
@@ -745,6 +1051,11 @@ export async function executeTaskApplication(
     return { text: result.text, details: result.details, sideEffectWarnings: result.sideEffectWarnings }
   }
 
+  if (params.action === 'report') {
+    const result = reportTaskCommand(commandContext, params)
+    return { text: result.text, details: result.details, sideEffectWarnings: result.sideEffectWarnings }
+  }
+
   if (params.action === 'create') {
     const result = createTaskCommand(commandContext, params)
     await handleTaskApplicationSideEffects(result, ctx, deps)
@@ -756,6 +1067,15 @@ export async function executeTaskApplication(
 
   let result: TaskCommandResult
   switch (params.action) {
+    case 'show':
+      result = showTaskCommand(commandContext, taskId)
+      break
+    case 'history':
+      result = historyTaskCommand(commandContext, taskId, params)
+      break
+    case 'reports':
+      result = reportsTaskCommand(commandContext, taskId)
+      break
     case 'assign':
       result = assignTaskCommand(commandContext, taskId, params)
       break
@@ -768,8 +1088,8 @@ export async function executeTaskApplication(
     case 'close':
       result = closeTaskCommand(commandContext, taskId, params)
       break
-    case 'note':
-      result = noteTaskCommand(commandContext, taskId, params)
+    case 'progress':
+      result = progressTaskCommand(commandContext, taskId, params)
       break
     case 'report_done':
       result = reportDoneTaskCommand(commandContext, taskId, params)
@@ -779,6 +1099,10 @@ export async function executeTaskApplication(
       break
     default:
       throw new Error(`Unsupported action ${(params as { action: string }).action}`)
+  }
+
+  if (params.action === 'show' || params.action === 'history' || params.action === 'reports') {
+    return { text: result.text, details: result.details, sideEffectWarnings: result.sideEffectWarnings }
   }
 
   await handleTaskApplicationSideEffects(result, ctx, deps)

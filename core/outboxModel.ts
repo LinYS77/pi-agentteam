@@ -5,7 +5,7 @@ const OUTBOX_EFFECT_KINDS = Object.freeze([
   'inbox_item_append_requested',
   'worker_delivery_requested',
   'leader_attention_requested',
-  'task_note_append_requested',
+  'task_message_ref_append_requested',
   'append_event_requested',
 ] as const)
 export type OutboxEffectKind = typeof OUTBOX_EFFECT_KINDS[number]
@@ -69,19 +69,21 @@ export type OutboxEffectPayloadMap = {
       threadId?: string
     }
   }
-  task_note_append_requested: {
+  task_message_ref_append_requested: {
     teamName: string
     taskId: string
-    author: string
-    text: string
-    details?: {
-      threadId?: string
-      messageType?: OutboxMessageType
-      requestId?: string
-      linkedMessageId?: string
-      metadata?: Record<string, unknown>
-      hidden?: boolean
-    }
+    mailboxMessageId: string
+    from: string
+    to: string
+    type: OutboxMessageType
+    createdAt?: number
+    threadId?: string
+    summary?: string
+    priority?: OutboxMessagePriority
+    wakeHint?: OutboxMessageWakeHint
+    reportId?: string
+    diagnostic?: boolean
+    metadata?: Record<string, unknown>
   }
   append_event_requested: {
     teamName: string

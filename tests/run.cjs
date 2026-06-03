@@ -362,10 +362,10 @@ function setupRuntimePatches(modules) {
     outboxStore: modules.outboxStorePort.fileBackedOutboxStorePort,
     teamState: modules.appStatePorts.fileBackedTeamStatePort,
     taskMutations: modules.appStatePorts.fileBackedTaskMutationPort,
+    taskHistory: modules.appStatePorts.fileBackedTaskHistoryQueryPort,
     mailboxRepository: modules.mailboxPorts.fileBackedMailboxRepositoryPort,
     requestWorkerDelivery: modules.runtime.requestWorkerDelivery,
     requestLeaderAttentionIfNeeded: modules.runtime.requestLeaderAttentionIfNeeded,
-    appendStructuredTaskNote: modules.runtime.appendStructuredTaskNote,
     invalidateStatus: () => {},
   }
 
@@ -378,6 +378,7 @@ function setupRuntimePatches(modules) {
       outboxStore: base.outboxStore ?? modules.outboxStorePort.fileBackedOutboxStorePort,
       teamState: base.teamState ?? modules.appStatePorts.fileBackedTeamStatePort,
       taskMutations: base.taskMutations ?? modules.appStatePorts.fileBackedTaskMutationPort,
+      taskHistory: base.taskHistory ?? modules.appStatePorts.fileBackedTaskHistoryQueryPort,
       mailboxRepository: base.mailboxRepository ?? modules.mailboxPorts.fileBackedMailboxRepositoryPort,
       outboxHandlers,
     }

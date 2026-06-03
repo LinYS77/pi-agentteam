@@ -1,6 +1,6 @@
 {
   "name": "pi-agentteam",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Multi-agent team orchestration for pi — leader-coordinator pattern with researcher, planner, and implementer teammates in tmux panes",
   "keywords": [
     "pi-package",
@@ -59,7 +59,9 @@
     "core/",
     "runtime/",
     "!runtime/teamSideEffects.ts",
+    "!core/taskNoteModel.ts",
     "state/",
+    "!state/taskNotes.ts",
     "teamPanel/",
     "tmux/",
     "tools/",

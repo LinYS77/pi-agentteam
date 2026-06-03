@@ -25,7 +25,7 @@ each running in a visible tmux pane, collaborating through shared tasks and type
 | 🎯 | **Role-based tool guard** | Researcher/Planner (read-only) → Implementer (full tools) — least privilege by default |
 | 📡 | **Event-driven delivery** | Teammates are notified for actionable messages when tasks are unblocked; mailbox reads stay explicit |
 | 📊 | **Unified `/team` console** | Browse state, recover old teams, remove stale teammates, and cleanup without memorizing extra commands |
-| 🔗 | **Peer context handoff** | Workers communicate through mailboxes with hidden task audit refs/diagnostics; leader reviews attention signals and explicitly starts downstream work |
+| 🔗 | **Peer context handoff** | Workers communicate through mailboxes with compact `TaskMessageRef` task audit refs/diagnostics; leader reviews attention signals and explicitly starts downstream work |
 | 🧹 | **Zero footprint** | One folder, file-based state, no database — delete and it's gone |
 
 ---
@@ -83,8 +83,8 @@ Use agentteam when work benefits from visible role separation, not for every sma
 
 | Want | Suggested flow |
 |------|----------------|
-| Understand unfamiliar code | Spawn `researcher` → task-local note with files, facts, risks → `report_done` for leader review → leader synthesizes |
-| Plan a risky change | Leader assigns `researcher` fact-finding first → researcher reports to leader → leader reviews task-local notes → leader creates/assigns a separate `planner` planning task |
+| Understand unfamiliar code | Spawn `researcher` → `report_done` creates a durable TaskReport with files, facts, risks → leader receives/reviews → leader synthesizes |
+| Plan a risky change | Leader assigns `researcher` fact-finding first → researcher reports to leader → leader receives the inbox report and reviews task history/reports → leader creates/assigns a separate `planner` planning task |
 | Execute an approved plan | Assign one focused task to `implementer` → run checks → worker `report_done` with files changed → leader `close` when accepted |
 | Keep a handoff from stalling | Ask the leader to route a task-id based `inform` or `assignment` to the right teammate |
 | Resolve uncertainty | Worker sends `question` or an `agentteam_task` blocker report → leader `agentteam_receive()` → decide next step |
@@ -93,7 +93,7 @@ Use agentteam when work benefits from visible role separation, not for every sma
 Recommended loop:
 
 ```text
-clarify → create task with owner when clear → send task-id assignment → teammate works visibly → receive full mailbox text → inspect task-local notes → synthesize
+clarify → create task with owner when clear → send task-id assignment → teammate works visibly → receive full inbox text → inspect task history/reports when needed → synthesize
 ```
 
 Use natural language first:
@@ -122,7 +122,7 @@ Attached to a team:
 → a opens team maintenance actions
 ```
 
-The Cockpit tab is an interactive attention queue for active tasks and unread mailbox items, not a passive status box.
+The Cockpit tab is an interactive attention queue for active tasks and unread mailbox items, not a passive status box. The Tasks tab surfaces compact v0.6.2 history: latest TaskReport id/type/author/summary, latest TaskEvent/TaskMessageRef activity, and counts for reports/events/messageRefs. It does not hydrate full report text or task-bound message bodies; use `agentteam_task action=report reportId=<id>` or `agentteam_receive` for explicit full-text reads.
 
 Not attached to a team:
 
@@ -146,7 +146,7 @@ Not attached to a team:
 | `a` | Open team/global maintenance actions |
 | `q` | Close |
 
-The panel intentionally does **not** focus tmux panes or perform task/message CRUD. Use tmux for pane navigation, and use tools for collaboration work. `/team` is for local runtime visibility, recovery, and cleanup. Expanded Details use an internal reader so long notes/messages remain readable without flooding terminal scrollback.
+The panel intentionally does **not** focus tmux panes, perform task/message CRUD, or mark mailbox items delivered/read. Use tmux for pane navigation, and use tools for collaboration work. `/team` is for local runtime visibility, recovery, and cleanup. Expanded Details use an internal reader so long descriptions and compact history summaries remain readable without flooding terminal scrollback.
 
 Action menus keep selected-item actions separate from maintenance and destructive operations. Sections render as `SELECTED ITEM`, `MAINTENANCE`, and `DANGER ZONE`; the footer shows the selected action description, and destructive confirmation defaults to **No, Cancel operation**.
 
@@ -173,9 +173,9 @@ Messages carry an implicit **wake hint** that controls whether AgentTeam creates
 >
 > Bounded leader attention means one compact native leader wake that should `agentteam_receive`, review, decide, and stop. It must not auto-spawn, auto-create downstream tasks, broadcast, or start worker-to-worker chains.
 >
-> Task-bound sends keep the recipient mailbox as the communication source of truth. The task stores only a hidden communication ref for audit/indexing; internally this uses `sourceKind=communication_ref`, `displayMode=hidden`, and `linkedIds.mailboxMessageId`, while retaining legacy P0 markers for compatibility. `/team` folds these refs by default and may show only a compact ref count; it does not copy the message body, does not count refs as ordinary/latest notes, and does not bump task recency.
+> Task-bound sends keep the recipient mailbox as the communication source of truth. The task stores only compact `TaskMessageRef` audit/index rows (`taskId`, `mailboxMessageId`, sender/recipient/type/thread/summary metadata) and does not copy the message body into task history. Legacy `task.notes` are migrated into TaskReport/TaskEvent/TaskMessageRef history and removed from active state; new task-bound sends produce zero hidden communication-ref notes. `/team` now shows compact TaskReport/TaskEvent/TaskMessageRef summaries and counts instead of latest-note/folded-ref primary UI. Refs do not count as ordinary/latest notes and do not bump task recency.
 >
-> Peer `inform` handoffs are mailbox communication plus hidden task audit refs/diagnostic event refs only; diagnostic refs are compact, do not copy the full body, and do not create ordinary panel/prompt context. They do not create worker delivery requests or authorize downstream work. For researcher→planner chains, the leader should review the researcher report and then create/assign a separate planner task or direct question.
+> Peer `inform` handoffs are mailbox communication plus compact `TaskMessageRef` task audit refs/diagnostic event refs only; diagnostic refs are compact, do not copy the full body, and do not create ordinary panel/prompt context. They do not create worker delivery requests or authorize downstream work. For researcher→planner chains, the leader should review the researcher report and then create/assign a separate planner task or direct question.
 >
 > Task-based routing: when `taskId` is provided and `to` is omitted, leader messages route to the task owner; messages from the task owner route back to `team-lead`. Unowned, missing, or ambiguous tasks return an error instead of falling back to broadcast.
 
@@ -185,11 +185,11 @@ Messages carry an implicit **wake hint** that controls whether AgentTeam creates
 
 Task facts are leader-gated. By default, only `team-lead` factually changes `task.status`, `task.owner`, `task.blockedBy`, title, or description. Planner is advisory by default, not a second leader: it can report findings and recommendations, while the leader decides what to create, assign, block/unblock, or close.
 
-Non-leader task actions are memory/report-oriented:
+Non-leader task actions are report/history-oriented:
 
-- `agentteam_task action=note` appends task-local memory only. It does not notify `team-lead`, create mailbox/projection/attention side effects, or create linked communication notes. If someone needs to know, use `agentteam_send`.
-- `agentteam_task action=report_done` from the task owner appends one primary `report_done` note, creates a leader mailbox item, requests compact leader projection plus bounded leader attention, and leaves the task open until leader review. The leader closes accepted work with `action=close`.
-- `agentteam_task action=report_blocked` from the task owner appends one primary blocked report note, creates a high-priority leader mailbox item, requests compact leader projection plus bounded leader attention, and does not factually mutate `status` or `blockedBy`. Unread blocked reports appear as panel attention; after the report mailbox item is read, long-lived panel attention comes from factual blocked tasks (`status`/`blockedBy`) instead. The leader blocks/unblocks with `action=block blockedBy=[...]` or `action=unblock`.
+- `agentteam_task action=report_done` from the task owner creates a durable TaskReport, creates a compact leader mailbox notification, requests compact leader projection plus bounded leader attention, and leaves the task open until leader review. The leader closes accepted work with `action=close`.
+- `agentteam_task action=report_blocked` from the task owner creates a durable blocked TaskReport, creates a high-priority compact leader mailbox notification, requests compact leader projection plus bounded leader attention, and does not factually mutate `status` or `blockedBy`. Unread blocked reports appear as panel attention; after the report mailbox item is read, long-lived panel attention comes from factual blocked tasks (`status`/`blockedBy`) instead. The leader blocks/unblocks with `action=block blockedBy=[...]` or `action=unblock`.
+- `agentteam_task action=progress` records compact local TaskEvent progress/history only. It does not append legacy task-note rows, notify `team-lead`, create mailbox/projection/attention side effects, or create linked communication refs. If someone needs to know, use `agentteam_send`; use `report_done`/`report_blocked` for durable report artifacts/action requests.
 - `blockedBy` is a hard actionability gate: blocked tasks cannot receive actionable `assignment` sends or worker delivery. Non-action `agentteam_send` communication such as `inform` and `question` remains allowed so the team can converge; done/blocked reports use `agentteam_task`.
 - In worker delivery prompts, same-task assigned task facts and task-bound mailbox messages are merged into one task-centric block so the instruction/question appears once; unscoped or different-task messages still appear separately in Messages.
 
@@ -252,7 +252,7 @@ Runtime state is stored under `~/.pi/agent/agentteam/` (`teams/<team>/team.json`
 | `agentteam_spawn` | Spawn a teammate (omit `task` for idle) |
 | `agentteam_send` | Send typed communication to a specific teammate, an owned task, or explicit broadcast |
 | `agentteam_receive` | Pull unread mailbox messages; this is the full-text read boundary; multi-message human output is compactly grouped while details keep full text |
-| `agentteam_task` | Leader-gated shared tasks plus task-local `note` memory and owner-only `report_done`/`report_blocked` action requests |
+| `agentteam_task` | Leader-gated shared task facts plus TaskReport/TaskEvent/TaskMessageRef history queries; owner-only `report_done`/`report_blocked` create durable report action requests |
 
 ### Command
 
@@ -355,10 +355,10 @@ These checks are release-readiness notes for the current working tree; they do n
 
 - Workers are separate visible `pi` sessions in tmux panes, but tmux is only the visible container/labels/reconcile/cleanup/debug layer. AgentTeam uses one bridge-only delivery policy: bridge requests/projection only, with no automatic fallback to terminal key injection.
 - Durable Outbox plus runtime adapter diagnostics are production delivery diagnostics (`outbox.json`, `outbox-diagnostics.json`, and `runtime.json` sections for bridge lease, delivery request, leader projection, and leader attention state). Internal request/projection/attention lifecycles such as pending, claimed, submitted, started, completed, projected, or failed may appear only in diagnostics/details; inbox read state remains owned by `agentteam_receive`.
-- In diagnostics, the durable bounded-leader-attention Outbox effect kind is `leader_attention_requested`. Legacy active persisted outbox effects using `leader_triage_requested` have no compatibility path; they quarantine as unsupported legacy state instead of being normalized or executed.
+- In diagnostics, the durable bounded-leader-attention Outbox effect kind is `leader_attention_requested`. Task-bound send indexing uses `task_message_ref_append_requested`. Legacy pending `task_note_append_requested` effects are migrated/cleaned before validation when possible; otherwise unsupported legacy state is quarantined. Legacy active persisted outbox effects using `leader_triage_requested` have no compatibility path; they quarantine as unsupported legacy state instead of being normalized or executed.
 - Rollback/migration: pin or reinstall a rollback package version (for example npm `pi-agentteam@0.5.0`) and respawn workers. There is no automatic in-process switch from bridge-only delivery to terminal transport; bridge unavailable appears as public `busy`/`error` worker health with diagnostics. For manual smoke, use a clean `PI_AGENTTEAM_HOME` and respawn old workers so bridge leases exist.
 - `agentteam_task action=create` can include `owner` when the responsible teammate is already clear; this assigns shared state only and does not send/wake by itself
-- `agentteam_task action=note` is task-local memory only; it is not a leader notification channel
+- `agentteam_task action=progress` records compact local TaskEvent progress/history only; it is not a leader notification channel and active team state has no legacy task-note rows
 - `agentteam_send` can omit `to` only when `taskId` safely routes through an owned task; it never falls back to implicit broadcast
 - Passing `task` to `agentteam_spawn` starts work immediately; omitting it creates an idle teammate for later `send`/`task` follow-up
 - State is local to one machine (no remote/distributed support)

@@ -22,6 +22,31 @@ const removedCompatWrapperFiles = [
   'tools/taskPolicy.ts',
   'tools/taskActionability.ts',
 ]
+const removedLegacyTaskNoteFiles = [
+  'core/taskNoteModel.ts',
+  'state/taskNotes.ts',
+]
+const legacyTaskNoteCleanupFiles = new Set([
+  'state/taskHistoryMigration.ts',
+  'state/validation.ts',
+])
+const retiredLegacyTaskNoteTokens = [
+  'TeamTask.notes',
+  'TeamTaskNote',
+  'TaskNoteMetadata',
+  'TaskNoteSourceKind',
+  'TaskNoteDisplayMode',
+  'appendTaskNote',
+  'appendCommunicationRefNote',
+  'appendStructuredTaskNote',
+  'latestVisibleTaskNote',
+  'taskLocalNoteMetadata',
+  'taskReportNoteMetadata',
+  'communicationRefMetadata',
+  'isCommunicationReferenceNote',
+  'inferTaskNoteSourceKind',
+  'task_note_append_requested',
+]
 const removedRuntimeAliasTokens = [
   'parseDeliveryMode',
   'normalizeDeliveryMode',
@@ -109,15 +134,18 @@ const completedPortBoundaryRules = [
     rel: 'app/messageApplication.ts',
     forbiddenImportTargets: ['state/outboxStore.ts', 'state/taskNotes.ts'],
     requiredText: [
-      { token: '../core/taskNoteModel.js', message: 'must build task-note metadata through core taskNoteModel' },
+      { token: "kind: 'task_message_ref_append_requested'", message: 'must index task-bound sends through TaskMessageRef outbox effect' },
       { token: 'deps.outboxStore.enqueue', message: 'must enqueue durable effects through injected outboxStore port' },
     ],
   },
   {
     rel: 'app/taskApplication.ts',
     forbiddenImportTargets: ['state/outboxStore.ts', 'state/taskNotes.ts', 'state/taskStore.ts', 'state/teamStore.ts'],
+    forbiddenText: [
+      { token: 'appendStructuredTaskNote', message: 'must not append active TeamTask.notes from taskApplication' },
+      { token: '../core/taskNoteModel.js', message: 'must not build task-note metadata in active taskApplication workflow' },
+    ],
     requiredText: [
-      { token: '../core/taskNoteModel.js', message: 'must build task-note metadata through core taskNoteModel' },
       { token: 'deps.outboxStore.enqueue', message: 'must enqueue durable effects through injected outboxStore port' },
       { token: 'deps.teamState.updateTeam', message: 'must mutate team state through injected teamState port' },
       { token: 'deps.taskMutations.createTask', message: 'must create tasks through injected task mutation port' },
@@ -187,7 +215,7 @@ function packageFilesViolations(pkg) {
   for (const dir of packageDirectories) {
     if (!files.includes(dir)) violations.push(`package.json: files missing required directory ${dir}`)
   }
-  for (const rel of ['!/commands.ts', '!/tools.ts', ...removedRootFacadeFiles.map(file => `!${file}`), ...removedCompatWrapperFiles.map(file => `!${file}`), '!runtime/teamSideEffects.ts']) {
+  for (const rel of ['!/commands.ts', '!/tools.ts', ...removedRootFacadeFiles.map(file => `!${file}`), ...removedCompatWrapperFiles.map(file => `!${file}`), ...removedLegacyTaskNoteFiles.map(file => `!${file}`), '!runtime/teamSideEffects.ts']) {
     if (!files.includes(rel)) violations.push(`package.json: files missing explicit exclusion ${rel}`)
   }
   for (const rel of explicitPackageTopLevelFiles) {
@@ -271,7 +299,7 @@ const violations = []
 const pkg = readJson('package.json')
 violations.push(...packageFilesViolations(pkg))
 
-for (const rel of [...removedRootFacadeFiles, ...removedCompatWrapperFiles]) {
+for (const rel of [...removedRootFacadeFiles, ...removedCompatWrapperFiles, ...removedLegacyTaskNoteFiles]) {
   if (fs.existsSync(path.join(root, rel))) {
     violations.push(`${rel}: compatibility facade/wrapper should be removed`)
   }
@@ -286,6 +314,10 @@ for (const file of walk(root)) {
   for (const token of removedRuntimeAliasTokens) {
     if ((token === 'leader_triage_requested' || token === 'leader_triage') && rel === 'state/validation.ts') continue
     if (text.includes(token)) violations.push(`${rel}: contains removed compatibility token ${token}`)
+  }
+  for (const token of retiredLegacyTaskNoteTokens) {
+    if (legacyTaskNoteCleanupFiles.has(rel) && (token === 'task_note_append_requested' || token === 'TeamTask.notes')) continue
+    if (text.includes(token)) violations.push(`${rel}: contains retired legacy task-note token ${token}`)
   }
   if (removedRootFacadeImportPattern.test(text)) {
     violations.push(`${rel}: imports removed root facade`)

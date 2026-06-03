@@ -6,7 +6,6 @@ import {
 import { MESSAGE_TYPES, isMessageType, isTaskReportType, type MessageType, type TaskReportType } from '../core/publicModel.js'
 import { defaultThreadIdForTask, normalizePriority } from '../protocol.js'
 import { TEAM_LEAD, type MailboxMessage, type TeamMessageWakeHint, type TeamState } from '../internalTypes.js'
-import { COMMUNICATION_REF_TEXT, communicationRefMetadata } from '../core/taskNoteModel.js'
 import { oneLine } from '../utils.js'
 import { outboxEffectWarningName, outboxHash } from './outbox.js'
 import { resolveMessageRecipients } from './messageRouting.js'
@@ -305,37 +304,31 @@ async function deliverMessageToRecipient(
   state.sentMessages[recipient] = sentMessage
 
   if (params.taskId) {
-    const noteMetadata = communicationRefMetadata({
-      linkedMessageId: sentMessage.id,
-      source: 'agentteam_send',
-      from: sender,
-      to: recipient,
-      taskId: params.taskId,
-      threadId: resolvedThreadId ?? defaultThreadIdForTask(params.taskId),
-      messageType,
-      mirrorOf: options?.mirrorOf,
-      extra: metadata,
-    })
-    const taskNoteEffect = deps.outboxStore.enqueue({
+    const taskMessageRefEffect = deps.outboxStore.enqueue({
       teamName: team.name,
-      kind: 'task_note_append_requested',
-      idempotencyKey: ['send-linked-task-note', team.name, params.taskId, sentMessage.id].join(':'),
+      kind: 'task_message_ref_append_requested',
+      idempotencyKey: ['send-task-message-ref', team.name, params.taskId, sentMessage.id].join(':'),
       payload: {
         teamName: team.name,
         taskId: params.taskId,
-        author: sender,
-        text: COMMUNICATION_REF_TEXT,
-        details: {
-          messageType,
-          threadId: resolvedThreadId ?? defaultThreadIdForTask(params.taskId),
-          linkedMessageId: sentMessage.id,
-          metadata: noteMetadata,
-          hidden: true,
+        mailboxMessageId: sentMessage.id,
+        from: sender,
+        to: recipient,
+        type: messageType,
+        createdAt: sentMessage.createdAt,
+        threadId: resolvedThreadId ?? defaultThreadIdForTask(params.taskId),
+        summary: params.summary,
+        priority,
+        wakeHint,
+        metadata: {
+          source: 'agentteam_send',
+          compact: true,
+          ...(options?.mirrorOf ? { mirrorOf: options.mirrorOf } : {}),
         },
       },
       dependsOn: [mailboxEffect.effectId],
     })
-    await runOutboxForState(state, deps, [taskNoteEffect.effectId])
+    await runOutboxForState(state, deps, [taskMessageRefEffect.effectId])
   }
 
   if (policy.shouldWake) {

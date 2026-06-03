@@ -69,6 +69,19 @@ module.exports = {
     helpers.assertContains(defaultLines[0], 'open 5, blocked 2, done 8')
     helpers.assertContains(defaultLines[0], 'Use action=list all=true or limit=N/status=...')
     assert.deepEqual(res.details.shownTaskIds, ['T011', 'T015', 'T013', 'T008', 'T012', 'T010', 'T009', 'T014', 'T007', 'T006'])
+    assert.deepEqual(defaultLines, [
+      'Showing 10 of 15 tasks (15 total; hidden 5; open 5, blocked 2, done 8; limit 10). Use action=list all=true or limit=N/status=... for more.',
+      'T011 [blocked] blocked T011 @worker-one blockedBy=T001',
+      'T015 [blocked] blocked T015 blockedBy=external',
+      'T013 [open] open T013',
+      'T008 [open] open T008',
+      'T012 [open] open T012 @worker-one',
+      'T010 [open] open T010 @worker-one',
+      'T009 [open] open T009 @worker-one',
+      'T014 [done] done T014 @worker-one',
+      'T007 [done] done T007 @worker-one',
+      'T006 [done] done T006 @worker-one',
+    ], 'default list output should remain unchanged by task-history query actions')
     assert.equal(res.details.totalCount, 15)
     assert.equal(res.details.matchingCount, 15)
     assert.equal(res.details.shownCount, 10)

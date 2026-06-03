@@ -5,10 +5,8 @@
 // core/publicModel.ts and should not be presented as public API/tool schema.
 
 import type { MessageType, TaskReportType, TaskStatus } from './core/publicModel.js'
-import type { TaskNoteDisplayMode, TaskNoteSourceKind } from './core/taskNoteModel.js'
 
 export { TEAM_LEAD } from './core/teamIdentity.js'
-export type { TaskNoteDisplayMode, TaskNoteSourceKind } from './core/taskNoteModel.js'
 
 export const WORKER_FSM_STATUSES = ['offline', 'idle', 'pending_delivery', 'queued', 'running', 'draining', 'error'] as const
 export type WorkerFsmStatus = typeof WORKER_FSM_STATUSES[number]
@@ -51,25 +49,6 @@ export type TeamMessageType = MessageType | TaskReportType
 export type TeamMessagePriority = 'low' | 'normal' | 'high'
 export type TeamMessageWakeHint = 'none' | 'soft' | 'hard'
 
-export type TaskNoteMetadata = Record<string, unknown> & {
-  metadataVersion?: number
-  sourceKind?: TaskNoteSourceKind
-  displayMode?: TaskNoteDisplayMode
-  linkedIds?: Record<string, string>
-}
-
-export type TeamTaskNote = {
-  at: number
-  author: string
-  text: string
-  threadId?: string
-  messageType?: TeamMessageType
-  requestId?: string
-  linkedMessageId?: string
-  metadata?: TaskNoteMetadata
-  hidden?: boolean
-}
-
 export type TeamTask = {
   id: string
   title: string
@@ -77,7 +56,6 @@ export type TeamTask = {
   status: TaskStatus
   owner?: string
   blockedBy: string[]
-  notes: TeamTaskNote[]
   createdAt: number
   updatedAt: number
 }
@@ -91,6 +69,65 @@ export type TeamEvent = {
   metadata?: Record<string, unknown>
 }
 
+export type TaskReportStatusAtReport = Extract<TaskStatus, 'open' | 'blocked'>
+
+export type TaskReport = {
+  id: string
+  taskId: string
+  type: TaskReportType
+  author: string
+  text: string
+  summary: string
+  createdAt: number
+  threadId?: string
+  reportOnly: true
+  reporterIsOwner: boolean
+  reportedBlockedBy?: string[]
+  statusAtReport: TaskReportStatusAtReport
+  ownerAtReport?: string
+  mailboxMessageId?: string
+  metadata?: Record<string, unknown>
+}
+
+export type TaskEventType =
+  | 'created'
+  | 'assigned'
+  | 'blocked'
+  | 'unblocked'
+  | 'closed'
+  | 'owner_removed'
+  | 'progress'
+  | 'report_submitted'
+  | 'migrated'
+
+export type TaskEvent = {
+  id: string
+  taskId: string
+  type: TaskEventType
+  by: string
+  at: number
+  summary: string
+  reportId?: string
+  data?: Record<string, unknown>
+}
+
+export type TaskMessageRef = {
+  id: string
+  taskId: string
+  mailboxMessageId: string
+  from: string
+  to: string
+  type: TeamMessageType
+  createdAt: number
+  threadId?: string
+  summary?: string
+  priority?: TeamMessagePriority
+  wakeHint?: TeamMessageWakeHint
+  reportId?: string
+  diagnostic?: boolean
+  metadata?: Record<string, unknown>
+}
+
 export type TeamState = {
   version: 1
   name: string
@@ -101,7 +138,13 @@ export type TeamState = {
   members: Record<string, TeamMember>
   tasks: Record<string, TeamTask>
   events?: TeamEvent[]
+  taskReports: Record<string, TaskReport>
+  taskEvents: Record<string, TaskEvent>
+  taskMessageRefs: Record<string, TaskMessageRef>
   nextTaskSeq: number
+  nextTaskReportSeq: number
+  nextTaskEventSeq: number
+  nextTaskMessageRefSeq: number
   revision?: number
   memberTombstones?: Record<string, number>
 }

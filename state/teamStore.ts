@@ -12,6 +12,7 @@ import {
   sanitizeName,
 } from './paths.js'
 import { mergeTeamStates, normalizeTeamState } from './merge.js'
+import { migrateTaskNotesToHistory, teamHasLegacyTaskNotes } from './taskHistoryMigration.js'
 import { clearSessionContext } from './sessionBinding.js'
 import { validateOrQuarantineTeam, validatePersistedTeamState } from './validation.js'
 
@@ -50,7 +51,13 @@ export function createInitialTeamState(input: {
     },
     tasks: {},
     events: [],
+    taskReports: {},
+    taskEvents: {},
+    taskMessageRefs: {},
     nextTaskSeq: 1,
+    nextTaskReportSeq: 1,
+    nextTaskEventSeq: 1,
+    nextTaskMessageRefSeq: 1,
     revision: 0,
     memberTombstones: {},
   }
@@ -77,6 +84,12 @@ function teamContentKey(state: TeamState): string {
 
 function cloneTeamState(state: TeamState): TeamState {
   return normalizeTeamState(JSON.parse(JSON.stringify(state)) as TeamState)
+}
+
+function migrateLegacyTaskNotesIfNeeded(state: unknown): TeamState {
+  return teamHasLegacyTaskNotes(state)
+    ? migrateTaskNotesToHistory(state).team
+    : normalizeTeamState(state as TeamState)
 }
 
 function assertWritableTeamState(state: TeamState): void {
@@ -114,20 +127,27 @@ function ensureLeaderMemberShape(merged: TeamState): void {
 
 export function readTeamState(teamName: string): TeamState | null {
   if (validateOrQuarantineTeam(teamName)) return null
-  const state = readJsonFile<TeamState>(getTeamStatePath(teamName))
-  return state ? normalizeTeamState(state) : null
+  const rawState = readJsonFile<unknown>(getTeamStatePath(teamName))
+  if (!rawState) return null
+  const migrated = migrateLegacyTaskNotesIfNeeded(rawState)
+  if (teamHasLegacyTaskNotes(rawState)) {
+    writeTeamState(migrated)
+  }
+  return migrated
 }
 
 export function writeTeamState(state: TeamState): void {
-  if (validateOrQuarantineTeam(state.name)) {
-    throw new Error(`Team ${state.name} was quarantined because persisted state is unsupported by vNext`)
+  const input = migrateLegacyTaskNotesIfNeeded(state)
+  if (validateOrQuarantineTeam(input.name)) {
+    throw new Error(`Team ${input.name} was quarantined because persisted state is unsupported by vNext`)
   }
-  assertWritableTeamState(state)
-  const statePath = getTeamStatePath(state.name)
+  assertWritableTeamState(input)
+  const statePath = getTeamStatePath(input.name)
   withFileLock(statePath, () => {
     const current = readJsonFile<TeamState>(statePath)
-    let merged = normalizeTeamState(state)
-    merged = current ? mergeTeamStates(current, merged) : {
+    let merged = normalizeTeamState(input)
+    const currentState = current ? migrateLegacyTaskNotesIfNeeded(current) : null
+    merged = currentState ? mergeTeamStates(currentState, merged) : {
       ...merged,
       revision: (merged.revision ?? 0) + 1,
     }
@@ -149,7 +169,7 @@ export function updateTeamState(
     const current = readJsonFile<TeamState>(statePath)
     if (!current) return null
 
-    const normalizedCurrent = normalizeTeamState(current)
+    const normalizedCurrent = migrateLegacyTaskNotesIfNeeded(current)
     let next = cloneTeamState(normalizedCurrent)
     const replacement = updater(next)
     if (replacement) next = replacement
@@ -227,11 +247,17 @@ export function removeMember(state: TeamState, memberName: string): TeamState {
       task.owner = undefined
       task.status = 'open'
       task.updatedAt = removedAt
-      task.notes.push({
+      const eventId = `TE${String(state.nextTaskEventSeq).padStart(4, '0')}`
+      state.nextTaskEventSeq += 1
+      state.taskEvents[eventId] = {
+        id: eventId,
+        taskId: task.id,
+        type: 'owner_removed',
+        by: TEAM_LEAD,
         at: removedAt,
-        author: TEAM_LEAD,
-        text: `Owner ${memberName} removed from team; task returned to open`,
-      })
+        summary: `Owner ${memberName} removed from team; task returned to open`,
+        data: { source: 'member_removal', memberName },
+      }
     }
   }
   return state

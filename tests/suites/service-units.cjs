@@ -42,49 +42,22 @@ module.exports = {
     assert.equal(env.modules.deliveryPolicy.isBridgeOnlyDeliveryPolicy({ policy: 'legacy' }), true)
     assert.deepEqual(env.modules.deliveryStore.DELIVERY_REQUEST_STATUSES, ['pending', 'claimed', 'submitted', 'started', 'completed', 'failed', 'expired', 'cancelled'])
     assert.deepEqual(internalTypes.WORKER_FSM_STATUSES, ['offline', 'idle', 'pending_delivery', 'queued', 'running', 'draining', 'error'])
-    assert.deepEqual(modules.state.TASK_NOTE_SOURCE_KINDS, ['task_note', 'task_report', 'communication_ref', 'legacy_communication_ref'], 'task note source kinds should be centralized internally')
-    assert.deepEqual(modules.state.TASK_NOTE_DISPLAY_MODES, ['visible', 'hidden', 'folded'], 'task note display modes should be centralized internally')
-    assert.equal(modules.state.TASK_NOTE_METADATA_VERSION, 1, 'task note metadata model should be versioned internally')
-    const modeledTaskNoteMetadata = modules.state.taskLocalNoteMetadata({ action: 'note' })
-    assert.deepEqual(modeledTaskNoteMetadata, { action: 'note', metadataVersion: 1, sourceKind: 'task_note', displayMode: 'visible' }, 'primary task note metadata should be visible task-local memory')
-    const modeledReportMetadata = modules.state.taskReportNoteMetadata({ reportOnly: true })
-    assert.deepEqual(modeledReportMetadata, { reportOnly: true, metadataVersion: 1, sourceKind: 'task_report', displayMode: 'visible' }, 'primary report metadata should remain visible')
-    const modeledRefMetadata = modules.state.communicationRefMetadata({
-      linkedMessageId: 'mailbox-modeled-ref',
-      from: 'team-lead',
-      to: 'worker-a',
-      taskId: 'T001',
-      threadId: 'task:T001',
-      messageType: 'assignment',
-    })
-    assert.equal(modeledRefMetadata.metadataVersion, 1, 'communication ref metadata should be versioned')
-    assert.equal(modeledRefMetadata.sourceKind, 'communication_ref', 'communication ref metadata should have explicit sourceKind')
-    assert.equal(modeledRefMetadata.displayMode, 'hidden', 'communication ref metadata should have hidden display mode')
-    assert.deepEqual(modeledRefMetadata.linkedIds, { mailboxMessageId: 'mailbox-modeled-ref', taskId: 'T001', threadId: 'task:T001' }, 'communication ref metadata should centralize linked ids')
-    assert.equal(modeledRefMetadata.kind, 'communication_ref', 'P0 communication ref kind should remain compatible')
-    assert.equal(modeledRefMetadata.hidden, true, 'P0 hidden marker should remain compatible')
-    assert.equal(modeledRefMetadata.linkedMailboxMessageId, 'mailbox-modeled-ref', 'P0 linked mailbox id should remain compatible')
-    assert.deepEqual(modules.state.validatePersistedTeamState({
+    assert.equal(modules.state.TASK_NOTE_SOURCE_KINDS, undefined, 'task-note source-kind model should be retired')
+    assert.equal(modules.state.TASK_NOTE_DISPLAY_MODES, undefined, 'task-note display-mode model should be retired')
+    assert.equal(modules.state.TASK_NOTE_METADATA_VERSION, undefined, 'task-note metadata model should be retired')
+    assert.equal(modules.state.taskLocalNoteMetadata, undefined, 'task-local note metadata helper should be retired')
+    assert.equal(modules.state.taskReportNoteMetadata, undefined, 'task-report note metadata helper should be retired')
+    assert.equal(modules.state.communicationRefMetadata, undefined, 'communication-ref note metadata helper should be retired')
+    const legacyTaskNoteReasons = modules.state.validatePersistedTeamState({
       version: 1,
       tasks: {
         T001: {
           status: 'open',
-          notes: [{ at: 1, author: 'worker-a', text: '[communication ref]', metadata: modeledRefMetadata }],
-        },
-      },
-    }), [], 'formal task note metadata should validate in persisted team state')
-    const invalidTaskNoteMetadataReasons = modules.state.validatePersistedTeamState({
-      version: 1,
-      tasks: {
-        T001: {
-          status: 'open',
-          notes: [{ at: 1, author: 'worker-a', text: '[communication ref]', metadata: { sourceKind: 'surprise', displayMode: 'popup', linkedIds: { mailboxMessageId: 7 } } }],
+          notes: [{ at: 1, author: 'worker-a', text: '[legacy note]', metadata: { sourceKind: 'communication_ref' } }],
         },
       },
     })
-    assert.ok(invalidTaskNoteMetadataReasons.some(reason => reason.code === 'unsupported_task_note_source_kind'), 'validation should guard formal sourceKind values')
-    assert.ok(invalidTaskNoteMetadataReasons.some(reason => reason.code === 'unsupported_task_note_display_mode'), 'validation should guard formal displayMode values')
-    assert.ok(invalidTaskNoteMetadataReasons.some(reason => reason.code === 'invalid_task_note_linked_id'), 'validation should guard formal linkedIds values')
+    assert.ok(legacyTaskNoteReasons.some(reason => reason.code === 'legacy_task_notes'), 'validation should reject active legacy task.notes after no-notes cleanup')
     assert.equal(env.modules.types.TEAM_LEAD, 'team-lead')
     assert.deepEqual(env.modules.types.TASK_STATUSES, corePublicModel.TASK_STATUSES, 'types.ts should expose public task statuses')
     assert.deepEqual(env.modules.types.WORKER_HEALTHS, corePublicModel.WORKER_HEALTHS, 'types.ts should expose public worker health')
@@ -123,8 +96,10 @@ module.exports = {
     assert.ok(systemPrompt.includes('Role: implementer'))
     assert.ok(systemPrompt.includes('agentteam_send and agentteam_task'))
     assert.ok(systemPrompt.includes('Public vocabulary: task statuses are open/blocked/done'), 'worker prompt should expose vNext public vocabulary')
-    assert.ok(systemPrompt.includes('call agentteam_receive when you need full mailbox details'), 'worker prompt should keep mailbox read state clean')
-    assert.ok(systemPrompt.includes('notes are task-local memory and do not notify team-lead'), 'worker prompt should define note as local memory')
+    assert.ok(systemPrompt.includes('call agentteam_receive when you need full inbox/mailbox details'), 'worker prompt should keep mailbox read state clean')
+    assert.ok(systemPrompt.includes('Task facts are concise shared state'), 'worker prompt should define task facts as concise state')
+    assert.ok(systemPrompt.includes('durable TaskReport artifacts and owner-to-leader action requests'), 'worker prompt should define report artifacts as completion/blocker path')
+    assert.ok(systemPrompt.includes('Task progress/history is compact local activity only and does not notify team-lead'), 'worker prompt should define progress/history as non-notifying local activity')
     assert.ok(systemPrompt.includes('same-task assigned task facts with task-bound mailbox messages'), 'worker prompt should mention same-task prompt merge')
     assert.ok(systemPrompt.includes('task-id based'), 'worker prompt should prefer task-linked handoffs')
     assert.ok(systemPrompt.includes('omit agentteam_send.to'), 'worker prompt should describe task-based return routing')
@@ -205,7 +180,8 @@ module.exports = {
     assert.ok(!taskServiceSource.includes('enqueueOutboxEffect'), 'task service should not plan durable task side effects')
     const appTaskSource = env.helpers.readSource('app/taskApplication.ts')
     assert.ok(appTaskSource.includes('../core/taskReducer.js'), 'app task boundary should depend on core task reducer')
-    assert.ok(appTaskSource.includes('../core/taskNoteModel.js'), 'app task boundary should depend on core task note metadata model')
+    assert.equal(appTaskSource.includes('../core/taskNoteModel.js'), false, 'active app task boundary should no longer depend on core task note metadata model')
+    assert.equal(appTaskSource.includes('appendStructuredTaskNote'), false, 'active app task boundary should not append legacy task notes')
     assert.ok(appTaskSource.includes('transitionTask'), 'app task boundary should apply reducer transitions')
     assert.ok(!appTaskSource.includes('../state/outboxStore.js'), 'app task boundary should use injected outbox store port')
     assert.ok(!appTaskSource.includes('../state/taskNotes.js'), 'app task boundary should not import state task note metadata helpers')
@@ -227,17 +203,18 @@ module.exports = {
     }
     const appMessageSource = env.helpers.readSource('app/messageApplication.ts')
     assert.ok(appMessageSource.includes('../core/messagePolicy.js'), 'app message boundary should depend on core message policy')
-    assert.ok(appMessageSource.includes('../core/taskNoteModel.js'), 'app message boundary should depend on core task note metadata model')
+    assert.ok(!appMessageSource.includes('../core/taskNoteModel.js'), 'app message boundary should not build new task-bound send refs through task-note metadata model')
     assert.ok(!appMessageSource.includes('../state/outboxStore.js'), 'app message boundary should use injected outbox store port')
     assert.ok(!appMessageSource.includes('../state/taskNotes.js'), 'app message boundary should not import state task note metadata helpers')
     assert.ok(appMessageSource.includes('deps.outboxStore.enqueue'), 'app message boundary should plan durable outbox effect intents through port')
     assert.ok(appMessageSource.includes('executeSendMessageApplication'), 'app message boundary should expose the send use-case')
     assert.ok(appMessageSource.includes('planTaskReportEffects'), 'app message boundary should expose report attention/effect planning for task reports')
-    assert.ok(appMessageSource.includes('communicationRefMetadata'), 'task-bound send should build refs through centralized metadata model')
+    assert.ok(appMessageSource.includes("kind: 'task_message_ref_append_requested'"), 'task-bound send should build refs through TaskMessageRef outbox effect')
+    assert.ok(!appMessageSource.includes('communicationRefMetadata'), 'task-bound send should not build new refs through communicationRefMetadata')
     const effectRunnerSource = env.helpers.readSource('app/effectRunner.ts')
-    assert.ok(effectRunnerSource.includes('isCommunicationReferenceNote'), 'outbox task-note runner should detect communication refs through helper model')
-    const taskNotesSource = env.helpers.readSource('state/taskNotes.ts')
-    assert.ok(taskNotesSource.includes('sourceKind') && taskNotesSource.includes('displayMode') && taskNotesSource.includes('linkedIds'), 'task note metadata model should centralize source/display/link conventions')
+    assert.ok(effectRunnerSource.includes('outboxHandlers'), 'outbox runner should dispatch injected handlers')
+    assert.equal(fs.existsSync(path.join(env.helpers.extRoot, 'core/taskNoteModel.ts')), false, 'task note metadata model should be removed')
+    assert.equal(fs.existsSync(path.join(env.helpers.extRoot, 'state/taskNotes.ts')), false, 'task note state helper should be removed')
 
     assert.equal(messageApplication.canSendMessageType('team-lead', 'assignment'), true)
     assert.equal(messageApplication.canSendMessageType('worker-a', 'assignment'), false)
@@ -533,13 +510,15 @@ module.exports = {
     assert.equal(taskApplication.ensureTaskPrivilege(team, 'team-lead', 'block'), null)
     assert.equal(taskApplication.ensureTaskPrivilege(team, 'team-lead', 'close'), null)
     assert.equal(taskApplication.ensureTaskPrivilege(team, 'plan', 'list'), null)
-    assert.equal(taskApplication.ensureTaskPrivilege(team, 'plan', 'note'), null)
+    assert.equal(taskApplication.ensureTaskPrivilege(team, 'plan', 'progress'), null)
+    assert.ok(taskApplication.ensureTaskPrivilege(team, 'plan', 'note').includes("Task action 'note' is leader-only"), 'removed note action should not be worker-allowed')
     assert.ok(taskApplication.ensureTaskPrivilege(team, 'plan', 'close').includes("Task action 'close' is leader-only"))
     assert.equal(taskApplication.ensureTaskPrivilege(team, 'plan', 'report_blocked'), null)
     assert.ok(taskApplication.ensureTaskPrivilege(team, 'plan', 'create').includes("Task action 'create' is leader-only"))
     assert.ok(taskApplication.ensureTaskPrivilege(team, 'plan', 'assign').includes("Task action 'assign' is leader-only"))
     assert.ok(taskApplication.ensureTaskPrivilege(team, 'plan', 'block').includes("Task action 'block' is leader-only"))
-    assert.equal(taskApplication.ensureTaskPrivilege(team, 'impl', 'note'), null)
+    assert.equal(taskApplication.ensureTaskPrivilege(team, 'impl', 'progress'), null)
+    assert.ok(taskApplication.ensureTaskPrivilege(team, 'impl', 'note').includes("Task action 'note' is leader-only"), 'removed note action should not be worker-allowed')
     assert.ok(taskApplication.ensureTaskPrivilege(team, 'impl', 'close').includes("Task action 'close' is leader-only"))
     assert.equal(taskApplication.ensureTaskPrivilege(team, 'impl', 'report_blocked'), null)
     assert.ok(taskApplication.ensureTaskPrivilege(team, 'impl', 'assign').includes("Task action 'assign' is leader-only"))
@@ -886,11 +865,20 @@ module.exports = {
     const runnerDeps = deps => env.patches.withOutboxHandlers(deps)
     const runOutboxOnceWithDeps = (input, deps) => effectRunner.runOutboxOnce(input, runnerDeps(deps))
     const effectOrder = []
-    const noteEffect = outboxStore.enqueueOutboxEffect({
+    const refEffect = outboxStore.enqueueOutboxEffect({
       teamName: sideEffectsTeam.name,
-      kind: 'task_note_append_requested',
-      idempotencyKey: 'side-effects:note',
-      payload: { teamName: sideEffectsTeam.name, taskId: sideEffectsTask.id, author: 'tester', text: 'first note' },
+      kind: 'task_message_ref_append_requested',
+      idempotencyKey: 'side-effects:ref',
+      payload: {
+        teamName: sideEffectsTeam.name,
+        taskId: sideEffectsTask.id,
+        mailboxMessageId: 'mailbox-side-effects-ref',
+        from: 'tester',
+        to: 'team-lead',
+        type: 'inform',
+        threadId: `task:${sideEffectsTask.id}`,
+        summary: 'compact mailbox ref',
+      },
       now: 10,
     })
     const mailboxEffect = outboxStore.enqueueOutboxEffect({
@@ -900,9 +888,9 @@ module.exports = {
       payload: {
         teamName: sideEffectsTeam.name,
         recipient: 'team-lead',
-        message: { from: 'tester', to: 'team-lead', text: 'mail after note', type: 'inform' },
+        message: { from: 'tester', to: 'team-lead', text: 'mail after ref', type: 'inform' },
       },
-      dependsOn: [noteEffect.effectId],
+      dependsOn: [refEffect.effectId],
       now: 11,
     })
     const eventEffect = outboxStore.enqueueOutboxEffect({
@@ -986,48 +974,66 @@ module.exports = {
       },
     })
     assert.equal(sideEffectRun2.done + sideEffectRun3.done + sideEffectRun4.done + sideEffectRun5.done, 4, 'subsequent outbox passes should drain dependent effects')
-    const hiddenNoteUpdatedAtBefore = env.modules.state.readTeamState(sideEffectsTeam.name).tasks[sideEffectsTask.id].updatedAt
-    const hiddenNoteEffect = outboxStore.enqueueOutboxEffect({
+    const refUpdatedAtBefore = env.modules.state.readTeamState(sideEffectsTeam.name).tasks[sideEffectsTask.id].updatedAt
+    const diagnosticRefEffect = outboxStore.enqueueOutboxEffect({
       teamName: sideEffectsTeam.name,
-      kind: 'task_note_append_requested',
-      idempotencyKey: 'side-effects:hidden-note',
+      kind: 'task_message_ref_append_requested',
+      idempotencyKey: 'side-effects:diagnostic-ref',
       payload: {
         teamName: sideEffectsTeam.name,
         taskId: sideEffectsTask.id,
-        author: 'tester',
-        text: '[communication ref]',
-        details: {
-          hidden: true,
-          linkedMessageId: 'mailbox-side-effects-hidden-ref',
-          metadata: env.modules.state.communicationRefMetadata({ linkedMessageId: 'mailbox-side-effects-hidden-ref' }),
-        },
+        mailboxMessageId: 'mailbox-side-effects-diagnostic-ref',
+        from: 'tester',
+        to: 'team-lead',
+        type: 'inform',
+        threadId: `task:${sideEffectsTask.id}`,
+        summary: 'diagnostic ref',
+        diagnostic: true,
+        metadata: { source: 'side_effects_suite' },
       },
       now: 25,
     })
-    const hiddenNoteRun = await runOutboxOnceWithDeps({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, effectIds: [hiddenNoteEffect.effectId], now: 26 }, {
+    const diagnosticRefRun = await runOutboxOnceWithDeps({ teamName: sideEffectsTeam.name, workerId: 'side-effects-runner', limit: 10, effectIds: [diagnosticRefEffect.effectId], now: 26 }, {
       requestLeaderAttentionIfNeeded: async () => { throw new Error('unused') },
       requestWorkerDelivery: async () => { throw new Error('unused') },
     })
-    assert.equal(hiddenNoteRun.done, 1, 'communication ref task-note effect should execute')
+    assert.equal(diagnosticRefRun.done, 1, 'TaskMessageRef effect should execute')
     const sideEffectsStoredTeam = env.modules.state.readTeamState(sideEffectsTeam.name)
-    assert.equal(sideEffectsStoredTeam.tasks[sideEffectsTask.id].updatedAt, hiddenNoteUpdatedAtBefore, 'communication ref task-note effect should not bump task updatedAt')
-    assert.equal(sideEffectsStoredTeam.tasks[sideEffectsTask.id].notes[0].text, 'first note', 'task_note_append_requested should append task note')
-    assert.equal(sideEffectsStoredTeam.tasks[sideEffectsTask.id].notes[1].hidden, true, 'communication ref task-note effect should preserve hidden flag')
-    assert.equal(env.modules.state.readMailbox(sideEffectsTeam.name, 'team-lead')[0].text, 'mail after note', 'inbox_item_append_requested should append mailbox message')
+    assert.equal(sideEffectsStoredTeam.tasks[sideEffectsTask.id].updatedAt, refUpdatedAtBefore, 'TaskMessageRef effect should not bump task updatedAt')
+    const sideEffectRefs = Object.values(sideEffectsStoredTeam.taskMessageRefs).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+    assert.equal(sideEffectRefs[0].mailboxMessageId, 'mailbox-side-effects-ref', 'task_message_ref_append_requested should append compact message ref')
+    assert.equal(sideEffectRefs[0].summary, 'compact mailbox ref')
+    assert.equal(sideEffectRefs[1].mailboxMessageId, 'mailbox-side-effects-diagnostic-ref', 'diagnostic TaskMessageRef effect should append compact message ref')
+    assert.equal(sideEffectRefs[1].diagnostic, true, 'diagnostic TaskMessageRef flag should be preserved')
+    assert.equal(env.modules.state.readMailbox(sideEffectsTeam.name, 'team-lead')[0].text, 'mail after ref', 'inbox_item_append_requested should append mailbox message')
     assert.equal(sideEffectsStoredTeam.events[0].type, 'test_event', 'append_event_requested should persist event')
     assert.deepEqual(effectOrder, ['leaderAttention', 'workerDelivery:worker-x:do worker delivery'], 'async/request side effects should execute in dependency order')
-    const missingNoteEffect = outboxStore.enqueueOutboxEffect({
+    assert.throws(() => outboxStore.enqueueOutboxEffect({
       teamName: sideEffectsTeam.name,
       kind: 'task_note_append_requested',
-      idempotencyKey: 'side-effects:missing-note',
-      payload: { teamName: sideEffectsTeam.name, taskId: 'T999', author: 'tester', text: 'missing' },
+      idempotencyKey: 'side-effects:unsupported-note',
+      payload: { teamName: sideEffectsTeam.name, taskId: sideEffectsTask.id, author: 'tester', text: 'unsupported' },
+      now: 29,
+    }), /Unsupported outbox effect kind: task_note_append_requested/, 'new task_note_append_requested effects should be rejected')
+    const missingRefEffect = outboxStore.enqueueOutboxEffect({
+      teamName: sideEffectsTeam.name,
+      kind: 'task_message_ref_append_requested',
+      idempotencyKey: 'side-effects:missing-ref',
+      payload: {
+        teamName: sideEffectsTeam.name,
+        taskId: 'T999',
+        mailboxMessageId: 'mailbox-side-effects-missing-ref',
+        from: 'tester',
+        to: 'team-lead',
+        type: 'inform',
+      },
       now: 30,
     })
-    const failingSideEffects = await runOutboxOnceWithDeps({ teamName: sideEffectsTeam.name, workerId: 'side-effects-failure', effectIds: [missingNoteEffect.effectId], now: 31 }, {
+    const failingSideEffects = await runOutboxOnceWithDeps({ teamName: sideEffectsTeam.name, workerId: 'side-effects-failure', effectIds: [missingRefEffect.effectId], now: 31 }, {
       requestLeaderAttentionIfNeeded: async () => { throw new Error('unused') },
       requestWorkerDelivery: async () => { throw new Error('unused') },
     })
-    assert.equal(failingSideEffects.failed, 1, 'effect runner should capture task note errors as retryable failures')
+    assert.equal(failingSideEffects.failed, 1, 'effect runner should capture TaskMessageRef errors as retryable failures')
     assert.ok(failingSideEffects.results[0].error.includes('task not found'))
     assert.equal(outboxStore.getOutboxEffect(sideEffectsTeam.name, workerEffect.effectId).status, 'done')
 
@@ -1672,6 +1678,9 @@ module.exports = {
     assert.ok(dedupeMessagesSection.includes(unscopedMessageText), 'unscoped message should remain in Messages')
     assert.ok(dedupeMessagesSection.includes(differentTaskMessageText), 'different-task message should remain in Messages')
     assert.ok(dedupePrompt.includes('Do the work now'), 'assignment on same task should keep work instruction')
+    assert.ok(dedupePrompt.includes('durable completion report'), 'worker turn prompt should direct completion into report_done TaskReport path')
+    assert.ok(dedupePrompt.includes('Progress/history is compact local activity only and does not notify team-lead'), 'worker turn prompt should not present notes as primary progress')
+    assert.equal(dedupePrompt.includes('task-local notes'), false, 'worker turn prompt should not recommend task-local notes as active workflow')
     const dedupeMailboxAfterPrompt = env.modules.state.readMailbox(dedupePromptTeam.name, 'dedupe-worker')
     for (const message of [sameTaskAssignment, sameTaskQuestion, unscopedPromptMessage, differentTaskPromptMessage]) {
       const stored = dedupeMailboxAfterPrompt.find(item => item.id === message.id)
@@ -2493,6 +2502,7 @@ module.exports = {
     assert.equal(projected[0].content.includes('task=T777'), true, 'mailbox projection should include task id')
     assert.equal(projected[0].content.includes('thread=task:T777'), true, 'mailbox projection should include thread id')
     assert.equal(projected[0].content.toLowerCase().includes('call agentteam_receive'), true, 'mailbox projection should direct leader to receive for full details')
+    assert.equal(projected[0].content.includes('agentteam_task show/history/reports/report'), true, 'mailbox projection should point to task report/history queries for referenced artifacts')
     assert.equal(projected[0].details.text, undefined, 'mailbox projection details should not carry full message body')
     assert.equal(projected[0].details.summary, 'first unread compact summary', 'mailbox projection details may carry compact summary')
     assert.equal(attentionProjected[0].content.includes(firstUnreadFullBody), false, 'attention prompt should not include full message body')
@@ -2502,6 +2512,7 @@ module.exports = {
     assert.equal(attentionProjected[0].options.triggerTurn, true, 'bounded leader attention should trigger a leader turn')
     assert.equal(attentionProjected[0].options.deliverAs, 'followUp', 'bounded leader attention should queue as follow-up, not steer an active turn')
     assert.ok(String(attentionProjected[0].content).includes('Call agentteam_receive({ markRead: true })'), 'attention prompt should preserve receive/read boundary')
+    assert.ok(String(attentionProjected[0].content).includes('agentteam_task show/history/reports/report'), 'attention prompt should point to task report/history queries for referenced artifacts')
     assert.ok(String(attentionProjected[0].content).includes('Do not auto-spawn, auto-create downstream tasks, broadcast, or start worker-to-worker chains'), 'attention prompt should prohibit autopilot')
     storedMailbox = env.modules.state.readMailbox(mailboxTeam.name, 'team-lead')
     const firstUnreadAfterProjection = storedMailbox.find(message => message.id === firstUnread.id)

@@ -141,6 +141,7 @@ function upsertExistingEffect<K extends OutboxEffectKind>(
 }
 
 export function enqueueOutboxEffect<K extends OutboxEffectKind>(input: OutboxEnqueueInput<K>): OutboxEffect<K> {
+  if (!isOutboxEffectKind(input.kind)) throw new Error(`Unsupported outbox effect kind: ${String(input.kind)}`)
   const now = input.now ?? Date.now()
   const idempotencyKey = input.idempotencyKey ?? defaultOutboxIdempotencyKey({
     teamName: input.teamName,

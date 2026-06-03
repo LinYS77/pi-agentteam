@@ -39,6 +39,7 @@ module.exports = {
     const { modules } = env
     const runnerDeps = deps => env.patches.withOutboxHandlers(deps)
     const runOutboxOnceWithDeps = (input, deps) => runner.runOutboxOnce(input, runnerDeps(deps))
+    const legacyNotes = task => Array.isArray(task?.notes) ? task.notes : []
     const maintenanceDeps = deps => ({
       outboxRunner: { runOnce: input => runOutboxOnceWithDeps(input, deps) },
     })
@@ -47,6 +48,7 @@ module.exports = {
     assert.ok(outbox.OUTBOX_EFFECT_KINDS.includes('inbox_item_append_requested'))
     assert.ok(outbox.OUTBOX_EFFECT_KINDS.includes('worker_delivery_requested'))
     assert.ok(outbox.OUTBOX_EFFECT_KINDS.includes('leader_attention_requested'))
+    assert.ok(outbox.OUTBOX_EFFECT_KINDS.includes('task_message_ref_append_requested'), 'task-bound sends should have a durable TaskMessageRef effect kind')
     assert.equal(outbox.OUTBOX_EFFECT_KINDS.includes('leader_triage_requested'), false, 'old leader triage effect kind must not remain in the enum')
     assert.equal(typeof maintenance.runOutboxMaintenanceForTeam, 'function')
     assert.equal(typeof maintenance.outboxDiagnosticsSummary, 'function')
@@ -380,46 +382,31 @@ module.exports = {
     assert.equal(mailboxEffects[0].payload.message.text, 'durable assignment with retry', 'mailbox outbox payload should retain full message body as source of truth')
     assert.equal(workerMailboxMessages[0].text, 'durable assignment with retry', 'recipient mailbox should retain full message body')
     let linkedTaskNoteEffects = messageEffects.filter(effect => effect.kind === 'task_note_append_requested')
-    assert.equal(linkedTaskNoteEffects.length, 1, 'task-bound send should enqueue one durable communication ref effect')
-    assert.equal(linkedTaskNoteEffects[0].status, 'done', 'task-bound send should run communication ref effect after mailbox success')
-    assert.equal(linkedTaskNoteEffects[0].payload.text, '[communication ref]', 'communication ref should not copy the full message body')
-    assert.equal(linkedTaskNoteEffects[0].payload.details.linkedMessageId, workerMailboxMessages[0].id)
-    assert.equal(linkedTaskNoteEffects[0].payload.details.metadata.kind, 'communication_ref')
-    assert.equal(linkedTaskNoteEffects[0].payload.details.metadata.hidden, true)
-    assert.equal(linkedTaskNoteEffects[0].payload.details.metadata.metadataVersion, 1)
-    assert.equal(linkedTaskNoteEffects[0].payload.details.metadata.sourceKind, 'communication_ref')
-    assert.equal(linkedTaskNoteEffects[0].payload.details.metadata.displayMode, 'hidden')
-    assert.deepEqual(linkedTaskNoteEffects[0].payload.details.metadata.linkedIds, {
-      mailboxMessageId: workerMailboxMessages[0].id,
-      taskId: 'T001',
-      threadId: 'task:T001',
-    })
-    assert.equal(linkedTaskNoteEffects[0].payload.details.metadata.from, 'team-lead')
-    assert.equal(linkedTaskNoteEffects[0].payload.details.metadata.to, 'worker-a')
-    assert.equal(linkedTaskNoteEffects[0].payload.details.metadata.taskId, 'T001')
-    assert.equal(linkedTaskNoteEffects[0].payload.details.metadata.messageType, 'assignment')
+    assert.equal(linkedTaskNoteEffects.length, 0, 'new task-bound send should not enqueue hidden communication-ref task-note effects')
+    let taskMessageRefEffects = messageEffects.filter(effect => effect.kind === 'task_message_ref_append_requested')
+    assert.equal(taskMessageRefEffects.length, 1, 'task-bound send should enqueue one durable TaskMessageRef effect')
+    assert.equal(taskMessageRefEffects[0].status, 'done', 'task-bound send should run TaskMessageRef effect after mailbox success')
+    assert.equal(taskMessageRefEffects[0].payload.mailboxMessageId, workerMailboxMessages[0].id)
+    assert.equal(taskMessageRefEffects[0].payload.from, 'team-lead')
+    assert.equal(taskMessageRefEffects[0].payload.to, 'worker-a')
+    assert.equal(taskMessageRefEffects[0].payload.type, 'assignment')
+    assert.equal(taskMessageRefEffects[0].payload.taskId, 'T001')
+    assert.equal(taskMessageRefEffects[0].payload.threadId, 'task:T001')
+    assert.equal(taskMessageRefEffects[0].payload.summary, 'retry assignment')
+    assert.equal(taskMessageRefEffects[0].payload.priority, 'normal')
+    assert.equal(taskMessageRefEffects[0].payload.wakeHint, 'hard')
+    assert.equal(JSON.stringify(taskMessageRefEffects[0].payload).includes('durable assignment with retry'), false, 'TaskMessageRef outbox payload should not copy full message body')
     let messageTask = modules.state.readTeamState(messageTeamName).tasks.T001
     const taskUpdatedAtAfterRef = messageTask.updatedAt
-    assert.equal(taskUpdatedAtAfterRef, messageTask.createdAt, 'communication ref should not bump task updatedAt from creation recency')
-    assert.equal(messageTask.notes.filter(note => note.text === 'Linked message: durable assignment with retry').length, 0, 'task-bound send should not copy full body into a visible linked note')
-    const communicationRefs = messageTask.notes.filter(note => modules.state.isCommunicationReferenceNote(note))
-    assert.equal(communicationRefs.length, 1, 'task-bound send should append one hidden communication ref')
-    assert.equal(communicationRefs[0].text, '[communication ref]')
-    assert.equal(communicationRefs[0].linkedMessageId, workerMailboxMessages[0].id)
-    assert.equal(communicationRefs[0].metadata?.hidden, true)
-    assert.equal(communicationRefs[0].hidden, true)
-    assert.equal(communicationRefs[0].metadata?.kind, 'communication_ref')
-    assert.equal(communicationRefs[0].metadata?.sourceKind, 'communication_ref')
-    assert.equal(communicationRefs[0].metadata?.displayMode, 'hidden')
-    assert.deepEqual(communicationRefs[0].metadata?.linkedIds, {
-      mailboxMessageId: workerMailboxMessages[0].id,
-      taskId: 'T001',
-      threadId: 'task:T001',
-    })
-    assert.equal(communicationRefs[0].metadata?.from, 'team-lead')
-    assert.equal(communicationRefs[0].metadata?.to, 'worker-a')
-    assert.equal(communicationRefs[0].metadata?.messageType, 'assignment')
-    assert.equal(modules.state.latestVisibleTaskNote(messageTask), undefined, 'hidden communication ref should not be latest substantive task note')
+    assert.equal(taskUpdatedAtAfterRef, messageTask.createdAt, 'TaskMessageRef should not bump task updatedAt from creation recency')
+    assert.equal(legacyNotes(messageTask).filter(note => note.text === 'Linked message: durable assignment with retry').length, 0, 'task-bound send should not copy full body into a visible linked note')
+    assert.equal(legacyNotes(messageTask).length, 0, 'new task-bound send should append zero legacy task notes')
+    let messageRefs = Object.values(modules.state.readTeamState(messageTeamName).taskMessageRefs)
+    assert.equal(messageRefs.length, 1, 'task-bound send should append one TaskMessageRef')
+    assert.equal(messageRefs[0].mailboxMessageId, workerMailboxMessages[0].id)
+    assert.equal(messageRefs[0].summary, 'retry assignment')
+    assert.equal(JSON.stringify(messageRefs[0]).includes('durable assignment with retry'), false, 'persisted TaskMessageRef should not copy full message body')
+    assert.equal(legacyNotes(messageTask).length, 0, 'TaskMessageRef should not be latest substantive task note')
     const failedWorkerEffects = messageEffects.filter(effect => effect.kind === 'worker_delivery_requested')
     assert.equal(failedWorkerEffects.length, 1)
     assert.equal(failedWorkerEffects[0].status, 'pending')
@@ -447,40 +434,43 @@ module.exports = {
     assert.equal(mailboxEffects[0].idempotencyKey.includes('durable assignment with retry'), false, 'repeated send should keep full body out of mailbox idempotency key')
     assert.equal(mailboxEffects[0].payload.message.text, 'durable assignment with retry', 'reused mailbox outbox payload should retain full message body')
     linkedTaskNoteEffects = messageEffects.filter(effect => effect.kind === 'task_note_append_requested')
-    assert.equal(linkedTaskNoteEffects.length, 1, 'repeated task-bound send should reuse one communication ref outbox effect')
+    assert.equal(linkedTaskNoteEffects.length, 0, 'repeated task-bound send should still avoid communication-ref task-note effects')
+    taskMessageRefEffects = messageEffects.filter(effect => effect.kind === 'task_message_ref_append_requested')
+    assert.equal(taskMessageRefEffects.length, 1, 'repeated task-bound send should reuse one TaskMessageRef outbox effect')
     messageTask = modules.state.readTeamState(messageTeamName).tasks.T001
-    assert.equal(messageTask.updatedAt, taskUpdatedAtAfterRef, 'repeated communication ref should not bump task recency')
-    assert.equal(messageTask.notes.filter(note => note.text === 'Linked message: durable assignment with retry').length, 0, 'repeated task-bound send should not create visible linked task note')
-    assert.equal(messageTask.notes.filter(note => modules.state.isCommunicationReferenceNote(note)).length, 1, 'repeated task-bound send should not duplicate hidden communication ref')
-    assert.equal(modules.state.latestVisibleTaskNote(messageTask), undefined, 'hidden communication ref should remain excluded from latest substantive task note')
-    const linkedNoteRetry = await runOutboxOnceWithDeps({ teamName: messageTeamName, workerId: 'message-note-rerun', effectIds: [linkedTaskNoteEffects[0].effectId], now: Date.now() + 5_000 }, {
+    assert.equal(messageTask.updatedAt, taskUpdatedAtAfterRef, 'repeated TaskMessageRef should not bump task recency')
+    assert.equal(legacyNotes(messageTask).filter(note => note.text === 'Linked message: durable assignment with retry').length, 0, 'repeated task-bound send should not create visible linked task note')
+    assert.equal(legacyNotes(messageTask).length, 0, 'repeated task-bound send should not create legacy task notes')
+    messageRefs = Object.values(modules.state.readTeamState(messageTeamName).taskMessageRefs)
+    assert.equal(messageRefs.length, 1, 'repeated task-bound send should not duplicate TaskMessageRef')
+    assert.equal(legacyNotes(messageTask).length, 0, 'TaskMessageRef should remain excluded from latest substantive task note')
+    const taskMessageRefRetry = await runOutboxOnceWithDeps({ teamName: messageTeamName, workerId: 'message-ref-rerun', effectIds: [taskMessageRefEffects[0].effectId], now: Date.now() + 5_000 }, {
       requestWorkerDelivery: noopDelivery(),
       requestLeaderAttentionIfNeeded: async () => ({ ok: true, recipient: 'team-lead', wakeHint: 'hard', reason: 'unused', method: 'leader_attention_requested' }),
     })
-    assert.equal(linkedNoteRetry.claimed, 0, 'done communication ref effect should not rerun')
-    assert.equal(modules.state.readTeamState(messageTeamName).tasks.T001.notes.filter(note => modules.state.isCommunicationReferenceNote(note)).length, 1, 'done communication ref effect rerun attempt should not duplicate note')
-    const duplicateNoteEffect = store.enqueueOutboxEffect({
-      teamName: messageTeamName,
-      kind: 'task_note_append_requested',
-      idempotencyKey: 'manual-duplicate-linked-note-after-send',
-      payload: {
+    assert.equal(taskMessageRefRetry.claimed, 0, 'done TaskMessageRef effect should not rerun')
+    assert.equal(Object.values(modules.state.readTeamState(messageTeamName).taskMessageRefs).length, 1, 'done TaskMessageRef effect rerun attempt should not duplicate ref')
+    assert.throws(
+      () => store.enqueueOutboxEffect({
         teamName: messageTeamName,
-        taskId: 'T001',
-        author: 'team-lead',
-        text: 'Linked message: durable assignment with retry',
-        details: { linkedMessageId: linkedTaskNoteEffects[0].payload.details.linkedMessageId, messageType: 'assignment', threadId: 'task:T001' },
-      },
-      now: Date.now() + 6_000,
-    })
-    const duplicateNoteRun = await runOutboxOnceWithDeps({ teamName: messageTeamName, workerId: 'message-note-duplicate', effectIds: [duplicateNoteEffect.effectId], now: Date.now() + 6_100 }, {
-      requestWorkerDelivery: noopDelivery(),
-      requestLeaderAttentionIfNeeded: async () => ({ ok: true, recipient: 'team-lead', wakeHint: 'hard', reason: 'unused', method: 'leader_attention_requested' }),
-    })
-    assert.equal(duplicateNoteRun.done, 1, 'duplicate linked note effect should complete idempotently')
+        kind: 'task_note_append_requested',
+        idempotencyKey: 'manual-legacy-linked-note-after-send',
+        payload: {
+          teamName: messageTeamName,
+          taskId: 'T001',
+          author: 'team-lead',
+          text: 'Linked message: legacy compatibility body should not be visible',
+          details: { linkedMessageId: 'legacy-mailbox-note-compat', messageType: 'assignment', threadId: 'task:T001' },
+        },
+        now: Date.now() + 6_000,
+      }),
+      /Unsupported outbox effect kind/,
+      'new legacy task-note outbox effects should be rejected after no-notes cleanup',
+    )
     messageTask = modules.state.readTeamState(messageTeamName).tasks.T001
-    assert.equal(messageTask.updatedAt, taskUpdatedAtAfterRef, 'duplicate communication ref should not bump task recency')
-    assert.equal(messageTask.notes.filter(note => modules.state.isCommunicationReferenceNote(note)).length, 1, 'duplicate linkedMessageId effect must not duplicate communication ref')
-    assert.equal(messageTask.notes.filter(note => note.text === 'Linked message: durable assignment with retry').length, 0, 'duplicate legacy linked effect must not reintroduce visible full-body note')
+    assert.equal(messageTask.updatedAt, taskUpdatedAtAfterRef, 'rejected legacy task-note effect should not bump task recency')
+    assert.equal(legacyNotes(messageTask).length, 0, 'rejected legacy task-note effect should not append legacy task notes')
+    assert.equal(Object.values(modules.state.readTeamState(messageTeamName).taskMessageRefs).length, 1, 'rejected legacy task-note effect should not duplicate TaskMessageRef')
     const retriedWorkerEffects = messageEffects.filter(effect => effect.kind === 'worker_delivery_requested')
     assert.equal(retriedWorkerEffects.length, 1, 'retry should reuse one worker delivery outbox effect')
     assert.equal(retriedWorkerEffects[0].status, 'pending', 'already requested delivery remains retryable for the outbox pump')
@@ -532,18 +522,23 @@ module.exports = {
     assert.equal(leaderAttentionCalls, 1)
     const leaderReportMessages = modules.state.readMailbox(taskTeamName, 'team-lead').filter(item => item.type === 'report_done')
     assert.equal(leaderReportMessages.length, 1)
-    assert.ok(leaderReportMessages[0].text.includes('report mailbox succeeds but attention fails once'), 'leader mailbox should retain full report body')
+    assert.equal(leaderReportMessages[0].metadata?.reportId, 'TR0001', 'leader mailbox should reference TaskReport id')
+    assert.equal(leaderReportMessages[0].text.includes('report mailbox succeeds but attention fails once'), false, 'leader mailbox should keep compact report notification text')
+    const taskReportAfterMailbox = modules.state.readTeamState(taskTeamName).taskReports.TR0001
+    assert.ok(taskReportAfterMailbox.text.includes('report mailbox succeeds but attention fails once'), 'TaskReport should retain full report body')
+    assert.equal(taskReportAfterMailbox.mailboxMessageId, leaderReportMessages[0].id, 'TaskReport should back-reference delivered leader mailbox message id')
     let reportEffects = modules.state.listOutboxEffects(taskTeamName)
     const reportMailboxEffect = reportEffects.find(effect => effect.payload?.message?.metadata?.outboxSource === 'taskApplication')
     assert.ok(reportMailboxEffect, 'task report mailbox effect should be planned by app task boundary')
     assert.equal(reportMailboxEffect.idempotencyKey.includes('report mailbox succeeds but attention fails once'), false, 'task report mailbox outbox idempotency key should hash, not copy, the full report body')
-    assert.ok(reportMailboxEffect.payload.message.text.includes('report mailbox succeeds but attention fails once'), 'task report mailbox outbox payload should retain full report body as source of truth')
+    assert.equal(reportMailboxEffect.payload.message.metadata?.reportId, 'TR0001', 'task report mailbox outbox payload should reference TaskReport id')
+    assert.equal(reportMailboxEffect.payload.message.text.includes('report mailbox succeeds but attention fails once'), false, 'task report mailbox outbox payload should keep compact notification text')
     const attentionEffect = reportEffects.find(effect => effect.kind === 'leader_attention_requested')
     assert.ok(attentionEffect, 'report should enqueue leader attention outbox effect')
     assert.equal(attentionEffect.status, 'pending')
     assert.equal(attentionEffect.attempts, 1)
     assert.equal(reportEffects.filter(effect => effect.kind === 'task_note_append_requested').length, 0, 'task report should not enqueue linked task-note effect')
-    assert.equal(modules.state.readTeamState(taskTeamName).tasks.T001.notes.filter(note => note.text.startsWith('Linked message:')).length, 0)
+    assert.equal(legacyNotes(modules.state.readTeamState(taskTeamName).tasks.T001).filter(note => note.text.startsWith('Linked message:')).length, 0)
 
     const retryRun = await runOutboxOnceWithDeps({ teamName: taskTeamName, workerId: 'report-retry', effectIds: [attentionEffect.effectId], now: Date.now() + 5_000 }, {
       requestWorkerDelivery: noopDelivery(),
@@ -564,10 +559,11 @@ module.exports = {
     const retriedReportMailboxEffects = reportEffects.filter(effect => effect.payload?.message?.metadata?.outboxSource === 'taskApplication')
     assert.equal(retriedReportMailboxEffects.length, 1, 'attention retry should reuse one durable leader mailbox effect')
     assert.equal(retriedReportMailboxEffects[0].idempotencyKey.includes('report mailbox succeeds but attention fails once'), false, 'report retry should keep full body out of mailbox idempotency key')
-    assert.ok(retriedReportMailboxEffects[0].payload.message.text.includes('report mailbox succeeds but attention fails once'), 'reused report mailbox outbox payload should retain full report body')
+    assert.equal(retriedReportMailboxEffects[0].payload.message.metadata?.reportId, 'TR0001', 'reused report mailbox outbox payload should retain TaskReport reference')
+    assert.equal(retriedReportMailboxEffects[0].payload.message.text.includes('report mailbox succeeds but attention fails once'), false, 'reused report mailbox outbox payload should stay compact')
     assert.equal(reportEffects.filter(effect => effect.kind === 'task_note_append_requested').length, 0, 'attention retry must not create linked task-note effect')
     assert.equal(modules.state.readMailbox(taskTeamName, 'team-lead').filter(item => item.type === 'report_done').length, 1, 'attention retry must not duplicate leader mailbox')
-    assert.equal(modules.state.readTeamState(taskTeamName).tasks.T001.notes.filter(note => note.text.startsWith('Linked message:')).length, 0, 'attention retry must not create linked task note')
+    assert.equal(legacyNotes(modules.state.readTeamState(taskTeamName).tasks.T001).filter(note => note.text.startsWith('Linked message:')).length, 0, 'attention retry must not create linked task note')
     assert.equal(leaderAttentionCalls, 2)
 
     modules.state.deleteTeamState(taskTeam.name)

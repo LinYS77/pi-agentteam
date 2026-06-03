@@ -8,7 +8,7 @@ import type {
   TeamPanelState,
   TeamRuntimeDiagnostics,
 } from './viewModel.js'
-import { buildTeamAttentionSummary, latestVisibleTaskNote, mailboxType, taskReferenceSummary } from './viewModel.js'
+import { buildTeamAttentionSummary, mailboxType, taskHistorySummary } from './viewModel.js'
 import {
   basename,
   drawBox,
@@ -125,6 +125,38 @@ function renderOverviewLine(theme: ExtensionContext['ui']['theme'], data: PanelD
 
 function renderDetailSection(theme: ExtensionContext['ui']['theme'], label: string): string {
   return theme.bold(theme.fg('dim', label))
+}
+
+function renderPanelReportSummary(report: ReturnType<typeof taskHistorySummary>['latestReport']): string {
+  if (!report) return '-'
+  return `${report.id} ${report.type} — ${report.summary || '-'} (by ${short(report.author, 18)})`
+}
+
+function renderPanelActivitySummary(activity: ReturnType<typeof taskHistorySummary>['latestActivity']): string {
+  if (!activity) return '-'
+  if (activity.kind === 'report') return `report ${activity.id} ${activity.type} — ${activity.summary || '-'} (by ${short(activity.by, 18)})`
+  if (activity.kind === 'messageRef') return `messageRef ${activity.id} ${activity.type} — ${activity.summary ?? '(no summary)'} (${short(activity.from, 14)}->${short(activity.to, 14)})`
+  return `event ${activity.id} ${activity.displayType} — ${activity.summary || '-'} (by ${short(activity.by, 18)})`
+}
+
+function renderTaskHistorySummaryFields(
+  theme: ExtensionContext['ui']['theme'],
+  history: ReturnType<typeof taskHistorySummary>,
+  textWidth: number,
+): string[] {
+  const lines = [
+    renderDetailField(theme, 'History', `reports ${history.reports} · events ${history.events} · messageRefs ${history.messageRefs}`, history.reports || history.messageRefs ? 'text' : 'dim'),
+  ]
+  if (history.latestReport) {
+    lines.push(renderDetailField(theme, 'Latest report', short(renderPanelReportSummary(history.latestReport), Math.max(12, textWidth - 16)), 'success'))
+  }
+  if (history.latestActivity) {
+    lines.push(renderDetailField(theme, 'Latest activity', short(renderPanelActivitySummary(history.latestActivity), Math.max(12, textWidth - 16)), 'text'))
+  }
+  if (history.latestReport) {
+    lines.push(renderDetailField(theme, 'Full report', `agentteam_task action=report reportId=${history.latestReport.id}`, 'dim'))
+  }
+  return lines
 }
 
 function renderOutboxDiagnosticsLines(
@@ -405,32 +437,21 @@ function renderDetailLines(
       detailLines.push(renderDetailField(theme, 'Blocked by', selectedTask.blockedBy.join(','), 'error'))
     }
     
-    const latest = latestVisibleTaskNote(selectedTask)
-    const refs = taskReferenceSummary(selectedTask)
+    const history = taskHistorySummary(data.team, selectedTask.id)
     if (state.isDetailExpanded) {
       detailLines.push('')
       detailLines.push(renderDetailSeparator(theme, textWidth))
       detailLines.push(renderDetailSection(theme, 'Content'))
       detailLines.push(...renderDetailBlock(theme, 'Description', selectedTask.description || '(none)', textWidth, 'text'))
-
-      if (latest) {
-        detailLines.push('')
-        detailLines.push(...renderDetailBlock(theme, `Latest note · ${latest.author}`, latest.text, textWidth, 'text'))
-      }
-      if (refs.total > 0) {
-        detailLines.push(renderDetailField(theme, 'References', `${refs.total} folded (${refs.hidden} hidden, ${refs.folded} legacy)`, 'dim'))
-      }
+      detailLines.push('')
+      detailLines.push(renderDetailSection(theme, 'History'))
+      detailLines.push(...renderTaskHistorySummaryFields(theme, history, textWidth))
     } else {
       const desc = (selectedTask.description || '(none)').replace(/\n/g, ' ')
       detailLines.push('')
       detailLines.push(renderDetailSection(theme, 'Content'))
       detailLines.push(renderDetailField(theme, 'Description', short(desc, Math.max(12, textWidth - 16)), 'text'))
-      if (latest) {
-        detailLines.push(renderDetailField(theme, 'Latest note', short(latest.text.replace(/\n/g, ' '), Math.max(12, textWidth - 16)), 'text'))
-      }
-      if (refs.total > 0) {
-        detailLines.push(renderDetailField(theme, 'Refs', `${refs.total} folded`, 'dim'))
-      }
+      detailLines.push(...renderTaskHistorySummaryFields(theme, history, textWidth))
     }
     if (state.isDetailExpanded) {
       detailLines.push('')
@@ -616,7 +637,7 @@ export function renderTeamPanelLines(
   const masterLines = state.focus === 'cockpit'
     ? renderCockpitQueueLines(theme, state, selection, masterContentHeight)
     : state.focus === 'tasks'
-      ? renderTaskLines(theme, state, selection, masterContentHeight)
+      ? renderTaskLines(theme, data, state, selection, masterContentHeight)
       : state.focus === 'mailbox'
         ? renderMailboxLines(theme, state, selection, masterContentHeight)
         : renderMembersLines(theme, data, state, masterContentHeight)

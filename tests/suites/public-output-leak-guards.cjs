@@ -47,7 +47,7 @@ module.exports = {
 
     const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8')
     const diagnosticParagraph = 'Internal request/projection/attention lifecycles such as pending, claimed, submitted, started, completed, projected, or failed may appear only in diagnostics/details;'
-    const diagnosticEffectParagraph = 'In diagnostics, the durable bounded-leader-attention Outbox effect kind is `leader_attention_requested`. Legacy active persisted outbox effects using `leader_triage_requested` have no compatibility path; they quarantine as unsupported legacy state instead of being normalized or executed.'
+    const diagnosticEffectParagraph = 'In diagnostics, the durable bounded-leader-attention Outbox effect kind is `leader_attention_requested`. Task-bound send indexing uses `task_message_ref_append_requested`. Legacy pending `task_note_append_requested` effects are migrated/cleaned before validation when possible; otherwise unsupported legacy state is quarantined. Legacy active persisted outbox effects using `leader_triage_requested` have no compatibility path; they quarantine as unsupported legacy state instead of being normalized or executed.'
     assert.ok(readme.includes(diagnosticParagraph), 'README should explicitly scope lifecycle vocabulary to diagnostics/details')
     assert.ok(readme.includes(diagnosticEffectParagraph), 'README should explicitly scope internal leader attention effect names to diagnostics')
     assertNoForbiddenTokens('README public docs outside diagnostics paragraph', readme.replace(diagnosticParagraph, '').replace(diagnosticEffectParagraph, ''))

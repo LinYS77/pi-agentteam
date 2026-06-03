@@ -5,6 +5,7 @@ module.exports = {
   async run(env) {
     const { pi, modules, helpers, sentPrompts, notifications } = env
     const tool = name => pi.__tools.get(name)
+    const legacyNotes = task => Array.isArray(task?.notes) ? task.notes : []
 
     const leaderCtx = helpers.createCtx('/tmp/guard-suite-project', '/tmp/guard-suite-leader.jsonl', notifications)
 
@@ -179,15 +180,18 @@ module.exports = {
     helpers.assertContains(res.content[0].text, 'Reported done for T002 to team-lead')
     assert.equal(res.details.reportOnly, true)
 
-    const plannerCompleteTask = modules.state.readTeamState('guard-suite-team').tasks['T002']
+    const plannerCompleteTeam = modules.state.readTeamState('guard-suite-team')
+    const plannerCompleteTask = plannerCompleteTeam.tasks['T002']
     assert.equal(plannerCompleteTask.status, 'open', 'planner close should not mutate task status')
-    const plannerCompletionNote = plannerCompleteTask.notes.find(note =>
-      note.author === 'planner-guard' &&
-      note.text.includes('planner done planning breakdown') &&
-      note.metadata?.reportOnly === true,
+    assert.equal(legacyNotes(plannerCompleteTask).length, 0, 'planner done report should not append legacy task notes')
+    const plannerCompletionReport = Object.values(plannerCompleteTeam.taskReports).find(report =>
+      report.taskId === 'T002' &&
+      report.author === 'planner-guard' &&
+      report.text.includes('planner done planning breakdown') &&
+      report.reportOnly === true,
     )
-    assert.ok(plannerCompletionNote, 'planner done report should preserve planner note content as report-only')
-    assert.equal(plannerCompleteTask.notes.filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by planner-guard')).length, 0, 'planner done report should not append linked mailbox task note')
+    assert.ok(plannerCompletionReport, 'planner done report should preserve planner content as TaskReport')
+    assert.equal(legacyNotes(plannerCompleteTask).filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by planner-guard')).length, 0, 'planner done report should not append linked mailbox task note')
 
     res = await tool('agentteam_send').execute('guard-planner-long-send-allowed', {
       to: 'team-lead',
@@ -260,14 +264,16 @@ module.exports = {
     const guardTeamAfterComplete = modules.state.readTeamState('guard-suite-team')
     const t003 = guardTeamAfterComplete.tasks['T003']
     assert.equal(t003.status, 'open', 'implementer done report reports should not mutate task status')
-    const doneReportTemplateNotes = t003.notes.filter(note =>
-      note.author === 'implementer-guard' &&
-      note.text.includes('Files changed:') &&
-      note.text.includes('Checks run:') &&
-      note.metadata?.reportOnly === true,
+    assert.equal(legacyNotes(t003).length, 0, 'implementer done reports should not append legacy task notes')
+    const doneReportTemplateReports = Object.values(guardTeamAfterComplete.taskReports).filter(report =>
+      report.taskId === 'T003' &&
+      report.author === 'implementer-guard' &&
+      report.text.includes('Files changed:') &&
+      report.text.includes('Checks run:') &&
+      report.reportOnly === true,
     )
-    assert.equal(doneReportTemplateNotes.length, 2, 'each implementer report-only done report should append a done report report note')
-    assert.equal(t003.notes.filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by implementer-guard')).length, 0, 'implementer done reports should not append linked mailbox task notes')
+    assert.equal(doneReportTemplateReports.length, 2, 'each implementer report-only done report should append a TaskReport')
+    assert.equal(legacyNotes(t003).filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by implementer-guard')).length, 0, 'implementer done reports should not append linked mailbox task notes')
 
     res = await tool('agentteam_task').execute('guard-task-close-impl-leader-accept', {
       action: 'close',
@@ -370,11 +376,14 @@ module.exports = {
     assert.equal(sentPrompts.length, 0, 'leader attention request should not inject text into pane')
     assert.equal(pi.__messages.length, nativeBefore, 'task report side effect should only enqueue attention/projection status; visible projection comes from mailbox sync')
     const leaderMailbox = modules.state.readMailbox('guard-suite-team', 'team-lead')
-    const leaderAttentionMessage = leaderMailbox.find(item => item.text.includes('T001 done by researcher'))
-    assert.ok(leaderAttentionMessage, 'leader attention message should be present in mailbox')
+    const leaderAttentionMessage = leaderMailbox.find(item => item.type === 'report_done' && item.taskId === 'T001' && item.metadata?.reportId)
+    assert.ok(leaderAttentionMessage, 'leader attention message should be present in mailbox with TaskReport reference')
+    assert.equal(leaderAttentionMessage?.text.includes('T001 done by researcher'), false, 'leader report mailbox notification should omit full report body')
+    assert.equal(leaderAttentionMessage?.summary?.includes('T001 done by researcher'), true, 'leader report mailbox summary may keep compact report summary')
+    assert.equal(modules.state.readTeamState('guard-suite-team').taskReports[leaderAttentionMessage.metadata.reportId].mailboxMessageId, leaderAttentionMessage.id, 'TaskReport should back-reference delivered leader mailbox id')
     assert.equal(leaderAttentionMessage?.deliveredAt, undefined, 'projection request should not mark message delivered')
     assert.equal(leaderAttentionMessage?.readAt, undefined, 'projection request should not mark message read')
-    assert.equal(modules.state.readTeamState('guard-suite-team').tasks['T001'].notes.filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by researcher-guard')).length, 0, 'task report side effect should not append linked mailbox task note')
+    assert.equal(legacyNotes(modules.state.readTeamState('guard-suite-team').tasks['T001']).filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by researcher-guard')).length, 0, 'task report side effect should not append linked mailbox task note')
     const teamAfterLeaderAttention = modules.state.readTeamState('guard-suite-team')
     assert.equal(teamAfterLeaderAttention.members['team-lead'].lastWakeReason, 'leader attention requested report_done')
     assert.equal(pi.__messages.filter(message => message.customType === 'agentteam-leader-attention').length, existingAttentionMessageCount, 'task report side effect should not send native turn before mailbox sync in worker context')
@@ -420,6 +429,9 @@ module.exports = {
       limit: 50,
     }, null, () => {}, leaderCtx)
     assert.ok(res.details.returnedCount > 0, 'receive should return unread projected/requested messages')
+    helpers.assertContains(res.content[0].text, `Hydrated report ${leaderAttentionMessage.metadata.reportId}`)
+    helpers.assertContains(res.content[0].text, 'T001 done by researcher')
+    assert.equal(res.details.hydratedReports[leaderAttentionMessage.metadata.reportId].text, 'T001 done by researcher')
     const leaderMailboxAfterReceive = modules.state.readMailbox('guard-suite-team', 'team-lead')
     const receivedLeaderAttentionMessage = leaderMailboxAfterReceive.find(item => item.id === leaderAttentionMessage?.id)
     assert.ok(receivedLeaderAttentionMessage?.deliveredAt, 'receive markRead should stamp deliveredAt')

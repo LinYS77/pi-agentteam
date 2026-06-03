@@ -2,7 +2,7 @@ import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { displayMessageType } from '../protocol.js'
 import { unreadMailboxMessages } from '../messageLifecycle.js'
 import { oneLine } from '../utils.js'
-import type { MailboxMessage } from '../internalTypes.js'
+import type { MailboxMessage, TaskReport } from '../internalTypes.js'
 import type { MessageReceiveApplicationDeps } from './types.js'
 
 const PREVIEW_MAX = 120
@@ -21,7 +21,34 @@ export type ReceiveMessagesApplicationResult = {
     returnedCount?: number
     markRead?: boolean
     messages?: MailboxMessage[]
+    hydratedReports?: Record<string, HydratedTaskReport>
+    hydrationWarnings?: HydrationWarning[]
   }
+}
+
+type HydratedTaskReport = {
+  id: string
+  taskId: string
+  type: TaskReport['type']
+  author: string
+  text: string
+  summary: string
+  createdAt: number
+  statusAtReport: TaskReport['statusAtReport']
+  ownerAtReport?: string
+  reportedBlockedBy?: string[]
+}
+
+type HydrationWarning = {
+  messageId: string
+  reportId: string
+  reason: 'task_report_not_found'
+}
+
+type HydratedMailboxMessage = {
+  message: MailboxMessage
+  report?: HydratedTaskReport
+  warning?: HydrationWarning
 }
 
 function clip(text: string, max = PREVIEW_MAX): string {
@@ -30,8 +57,28 @@ function clip(text: string, max = PREVIEW_MAX): string {
   return `${compact.slice(0, Math.max(0, max - 1)).trimEnd()}…`
 }
 
-function messagePreview(item: MailboxMessage): string {
-  return clip(item.summary || item.text)
+function metadataReportId(item: MailboxMessage): string | undefined {
+  const value = item.metadata?.reportId
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function compactHydratedReport(report: TaskReport): HydratedTaskReport {
+  return {
+    id: report.id,
+    taskId: report.taskId,
+    type: report.type,
+    author: report.author,
+    text: report.text,
+    summary: report.summary,
+    createdAt: report.createdAt,
+    statusAtReport: report.statusAtReport,
+    ownerAtReport: report.ownerAtReport,
+    reportedBlockedBy: report.reportedBlockedBy,
+  }
+}
+
+function messagePreview(item: MailboxMessage, report?: HydratedTaskReport): string {
+  return clip(report?.summary || item.summary || item.text)
 }
 
 function messageGroupLabel(item: MailboxMessage): string {
@@ -45,31 +92,46 @@ function messageGroupKey(item: MailboxMessage): string {
   return `${item.taskId || ''}\u0000${item.threadId || ''}`
 }
 
-function formatCompactMessageItem(item: MailboxMessage): string {
-  const type = displayMessageType(item.type as string)
-  const task = item.taskId ? ` task=${clip(item.taskId, 60)}` : ''
-  const thread = item.threadId ? ` thread=${clip(item.threadId, 80)}` : ''
-  const priority = item.priority ? ` priority=${item.priority}` : ''
-  const wakeHint = item.wakeHint ? ` wakeHint=${item.wakeHint}` : ''
-  const summary = item.summary ? ` summary=${clip(item.summary)}` : ''
-  return `  - id=${item.id} [${type}] from=${clip(item.from, 80)}${task}${thread}${priority}${wakeHint}${summary} preview=${messagePreview(item)}`
+function formatReportHydration(report: HydratedTaskReport): string {
+  const blockedBy = report.reportedBlockedBy?.length ? `; blockedBy=${report.reportedBlockedBy.join(', ')}` : ''
+  return `\n  Hydrated report ${report.id} (${report.type}; statusAtReport=${report.statusAtReport}${blockedBy})\n  Report text:\n${report.text}`
 }
 
-function formatFullMessageItem(item: MailboxMessage): string {
-  const type = displayMessageType(item.type as string)
-  const task = item.taskId ? ` task=${item.taskId}` : ''
-  const thread = item.threadId ? ` thread=${item.threadId}` : ''
-  return `- [${type}] from ${item.from}${task}${thread}: ${item.text}`
+function formatCompactMessageItem(item: HydratedMailboxMessage): string {
+  const { message, report, warning } = item
+  const type = displayMessageType(message.type as string)
+  const task = message.taskId ? ` task=${clip(message.taskId, 60)}` : ''
+  const thread = message.threadId ? ` thread=${clip(message.threadId, 80)}` : ''
+  const priority = message.priority ? ` priority=${message.priority}` : ''
+  const wakeHint = message.wakeHint ? ` wakeHint=${message.wakeHint}` : ''
+  const reportId = metadataReportId(message)
+  const reportTag = reportId ? ` reportId=${clip(reportId, 60)}` : ''
+  const summary = message.summary ? ` summary=${clip(message.summary)}` : ''
+  const warningText = warning ? ` hydrationWarning=${warning.reason}` : ''
+  const hydration = report ? formatReportHydration(report) : ''
+  return `  - id=${message.id} [${type}] from=${clip(message.from, 80)}${task}${thread}${priority}${wakeHint}${reportTag}${summary}${warningText} preview=${messagePreview(message, report)}${hydration}`
 }
 
-function formatGroupedMessages(returned: MailboxMessage[]): string[] {
-  const groups: Array<{ label: string, messages: MailboxMessage[] }> = []
-  const byKey = new Map<string, { label: string, messages: MailboxMessage[] }>()
+function formatFullMessageItem(item: HydratedMailboxMessage): string {
+  const { message, report, warning } = item
+  const type = displayMessageType(message.type as string)
+  const task = message.taskId ? ` task=${message.taskId}` : ''
+  const thread = message.threadId ? ` thread=${message.threadId}` : ''
+  const reportId = metadataReportId(message)
+  const reportTag = reportId ? ` reportId=${reportId}` : ''
+  const warningText = warning ? ` (warning: ${warning.reason})` : ''
+  const body = report ? `${message.text}${formatReportHydration(report)}` : message.text
+  return `- [${type}] from ${message.from}${task}${thread}${reportTag}${warningText}: ${body}`
+}
+
+function formatGroupedMessages(returned: HydratedMailboxMessage[]): string[] {
+  const groups: Array<{ label: string, messages: HydratedMailboxMessage[] }> = []
+  const byKey = new Map<string, { label: string, messages: HydratedMailboxMessage[] }>()
   for (const item of returned) {
-    const key = messageGroupKey(item)
+    const key = messageGroupKey(item.message)
     let group = byKey.get(key)
     if (!group) {
-      group = { label: messageGroupLabel(item), messages: [] }
+      group = { label: messageGroupLabel(item.message), messages: [] }
       byKey.set(key, group)
       groups.push(group)
     }
@@ -77,12 +139,12 @@ function formatGroupedMessages(returned: MailboxMessage[]): string[] {
   }
 
   const lines = [
-    'Grouped by task/thread. Human output is compact; details.messages contains the full returned mailbox messages.',
+    'Grouped by task/thread. Human output is compact; details.messages contains the full returned mailbox messages; details.hydratedReports contains hydrated task-report bodies when referenced.',
   ]
   for (const group of groups) {
     const latest = group.messages[group.messages.length - 1]!
     const countLabel = group.messages.length === 1 ? '1 message' : `${group.messages.length} messages`
-    lines.push(`- ${group.label} (${countLabel}; latest preview=${messagePreview(latest)})`)
+    lines.push(`- ${group.label} (${countLabel}; latest preview=${messagePreview(latest.message, latest.report)})`)
     for (const item of group.messages) {
       lines.push(formatCompactMessageItem(item))
     }
@@ -122,6 +184,22 @@ export function executeReceiveMessagesApplication(
     deps.mailboxRepository.markRead(team.name, recipient, returnedIds)
   }
 
+  const hydratedReports: Record<string, HydratedTaskReport> = {}
+  const hydrationWarnings: HydrationWarning[] = []
+  const hydratedReturned: HydratedMailboxMessage[] = returned.map(message => {
+    const reportId = metadataReportId(message)
+    if (!reportId) return { message }
+    const report = deps.taskHistory.findTaskReport(team, reportId)
+    if (!report) {
+      const warning: HydrationWarning = { messageId: message.id, reportId, reason: 'task_report_not_found' }
+      hydrationWarnings.push(warning)
+      return { message, warning }
+    }
+    const hydrated = compactHydratedReport(report)
+    hydratedReports[report.id] = hydrated
+    return { message, report: hydrated }
+  })
+
   const fromSet = new Set(returned.map(item => item.from))
   const fromPreview = [...fromSet].slice(0, 3).join(', ')
   const receipt =
@@ -132,8 +210,8 @@ export function executeReceiveMessagesApplication(
         : `Received ${returned.length} messages from ${fromPreview}${fromSet.size > 3 ? ', ...' : ''}`
 
   const detailLines = returned.length <= 1
-    ? returned.map(formatFullMessageItem)
-    : formatGroupedMessages(returned)
+    ? hydratedReturned.map(formatFullMessageItem)
+    : formatGroupedMessages(hydratedReturned)
 
   return {
     text: returned.length > 0
@@ -145,6 +223,8 @@ export function executeReceiveMessagesApplication(
       returnedCount: returned.length,
       markRead,
       messages: returned,
+      ...(Object.keys(hydratedReports).length > 0 ? { hydratedReports } : {}),
+      ...(hydrationWarnings.length > 0 ? { hydrationWarnings } : {}),
     },
   }
 }

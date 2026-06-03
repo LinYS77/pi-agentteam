@@ -1,9 +1,6 @@
 import type { OutboxEffect, OutboxEffectKind } from './outbox.js'
 import type { EffectHandlerResult, OutboxEffectHandlers, OutboxStorePort } from './ports.js'
 
-// Concrete task-note handlers still detect communication refs through
-// isCommunicationReferenceNote; this runner only dispatches injected handlers.
-
 export type OutboxEffectRunnerDeps = {
   outboxStore: Pick<OutboxStorePort, 'claim' | 'markDone' | 'markFailed'>
   outboxHandlers: OutboxEffectHandlers

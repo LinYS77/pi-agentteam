@@ -1,7 +1,6 @@
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { peekUnreadMailbox } from '../../state/mailboxStore.js'
 import { ensureAttachedSessionContext } from '../../state/sessionBinding.js'
-import { appendTaskNote } from '../../state/taskStore.js'
 import { deleteTeamState, readTeamState, updateTeamState } from '../../state/teamStore.js'
 import { getCurrentMemberName, getCurrentTeamName, getSessionFile } from '../../session.js'
 import {
@@ -12,7 +11,6 @@ export { isInsideTmux as isLeaderInsideTmux } from '../../tmux/core.js'
 import { decideMessagePolicy } from '../../core/messagePolicy.js'
 import { isMessageType, isTaskReportType } from '../../core/publicModel.js'
 import {
-  defaultThreadIdForTask,
   parsePersistedMessageType,
   normalizePriority,
 } from '../../protocol.js'
@@ -22,7 +20,6 @@ import type {
   TeamMessageType,
   TeamMessageWakeHint,
   TeamState,
-  TeamTask,
 } from '../../internalTypes.js'
 import {
   assertValidOwner,
@@ -84,29 +81,6 @@ export function ensureTeamForSession(ctx: ExtensionContext): TeamState | null {
 
 export function currentActor(ctx: ExtensionContext): string {
   return getCurrentMemberName(ctx) ?? TEAM_LEAD
-}
-
-export function appendStructuredTaskNote(
-  task: TeamTask,
-  author: string,
-  text: string,
-  details?: {
-    threadId?: string
-    messageType?: TeamMessageType
-    requestId?: string
-    linkedMessageId?: string
-    metadata?: Record<string, unknown>
-    hidden?: boolean
-  },
-): void {
-  appendTaskNote(task, author, text, {
-    threadId: details?.threadId ?? defaultThreadIdForTask(task.id),
-    messageType: details?.messageType,
-    requestId: details?.requestId,
-    linkedMessageId: details?.linkedMessageId,
-    metadata: details?.metadata,
-    hidden: details?.hidden,
-  })
 }
 
 export function attachCurrentSessionIfNeeded(ctx: ExtensionContext): AttachedSessionContext {

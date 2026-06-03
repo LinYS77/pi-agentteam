@@ -53,28 +53,52 @@ module.exports = {
     task.owner = 'researcher-very-long-member-name-alpha'
     task.status = 'open'
     task.updatedAt = Date.now()
-    modules.state.appendTaskNote(task, 'researcher-very-long-member-name-alpha', 'substantive render note')
-    const substantiveTaskUpdatedAt = task.updatedAt
-    const hiddenRenderRef = modules.state.appendCommunicationRefNote(task, {
-      author: 'team-lead',
-      linkedMessageId: 'mailbox-hidden-render-ref',
-      messageType: 'assignment',
+    const renderReportFullBody = 'Full report body should stay out of /team default history summaries'
+    const renderReport = modules.state.appendTaskReport(team, {
+      taskId: task.id,
+      type: 'report_done',
+      author: 'researcher-very-long-member-name-alpha',
+      text: renderReportFullBody,
+      summary: 'Compact report summary for panel',
+      createdAt: Date.now() + 10,
       threadId: `task:${task.id}`,
-      metadata: { from: 'team-lead', to: 'researcher-very-long-member-name-alpha', taskId: task.id },
+      reporterIsOwner: true,
+      statusAtReport: 'open',
+      ownerAtReport: 'researcher-very-long-member-name-alpha',
     })
-    assert.equal(task.updatedAt, substantiveTaskUpdatedAt, 'hidden communication ref should not bump task recency')
-    assert.equal(modules.state.inferTaskNoteSourceKind(hiddenRenderRef), 'communication_ref', 'hidden render ref should use formal communication_ref source kind')
-    assert.equal(modules.state.inferTaskNoteDisplayMode(hiddenRenderRef), 'hidden', 'hidden render ref should use formal hidden display mode')
-    const legacyRenderRef = modules.state.appendTaskNote(task, 'team-lead', 'Linked message: legacy render handoff should be hidden', {
-      linkedMessageId: 'mailbox-legacy-render-ref',
-      messageType: 'inform',
+    renderReport.mailboxMessageId = 'mailbox-report-panel-ref'
+    modules.state.appendTaskEvent(team, {
+      taskId: task.id,
+      type: 'created',
+      by: 'team-lead',
+      at: Date.now() + 1,
+      summary: 'Task created for panel history',
+    })
+    modules.state.appendTaskEvent(team, {
+      taskId: task.id,
+      type: 'report_submitted',
+      by: 'researcher-very-long-member-name-alpha',
+      at: Date.now() + 20,
+      summary: 'Report submitted compact activity',
+      reportId: renderReport.id,
+    })
+    modules.state.appendTaskMessageRef(team, {
+      taskId: task.id,
+      mailboxMessageId: 'mailbox-panel-task-ref',
+      from: 'team-lead',
+      to: 'researcher-very-long-member-name-alpha',
+      type: 'assignment',
+      createdAt: Date.now() + 30,
       threadId: `task:${task.id}`,
+      summary: 'Compact panel handoff summary',
     })
-    assert.equal(task.updatedAt, substantiveTaskUpdatedAt, 'legacy linked communication ref should not bump task recency')
-    assert.equal(modules.state.inferTaskNoteSourceKind(legacyRenderRef), 'legacy_communication_ref', 'legacy linked note should infer folded legacy communication ref source kind without migration')
-    assert.equal(modules.state.inferTaskNoteDisplayMode(legacyRenderRef), 'folded', 'legacy linked note should infer folded display mode without migration')
-    assert.equal(modules.state.latestVisibleTaskNote(task)?.text, 'substantive render note', 'latest visible task note should ignore hidden and legacy communication refs')
-    assert.deepEqual(modules.viewModel.taskReferenceSummary(task), { total: 2, hidden: 1, folded: 1 }, 'panel view model should compactly summarize folded communication refs')
+    const panelHistory = modules.viewModel.taskHistorySummary(team, task.id)
+    assert.equal(panelHistory.reports, 1, 'panel view model should count TaskReport artifacts')
+    assert.equal(panelHistory.events, 2, 'panel view model should count TaskEvent artifacts')
+    assert.equal(panelHistory.messageRefs, 1, 'panel view model should count TaskMessageRef artifacts')
+    assert.equal(panelHistory.latestReport.id, renderReport.id, 'panel view model should expose compact latest report')
+    assert.equal(panelHistory.latestActivity.kind, 'messageRef', 'panel view model should expose compact latest activity without mailbox body')
+    assert.equal(JSON.stringify(panelHistory).includes(renderReportFullBody), false, 'panel history summary must not expose full report body')
     const blockedTask = modules.state.createTask(team, {
       title: 'Blocked task should be visible in attention summary',
       description: 'Blocked task for attention rendering',
@@ -119,7 +143,8 @@ module.exports = {
       priority: 'high',
       taskId: blockedTask.id,
       summary: 'Blocked on missing decision',
-      text: 'Blocked on missing decision',
+      text: 'Blocked on missing decision with compact mailbox body only',
+      metadata: { reportId: renderReport.id },
     })
     modules.state.pushMailboxMessage(team.name, 'team-lead', {
       from: 'researcher-very-long-member-name-alpha',
@@ -128,6 +153,7 @@ module.exports = {
       taskId: task.id,
       summary: 'Unread research result',
       text: 'Unread research result',
+      metadata: { reportId: renderReport.id },
     })
 
     const data = modules.panelDataSource.loadPanelData('render-suite')
@@ -282,10 +308,16 @@ module.exports = {
     assert.equal(attachedTopBorderCount, 2, 'wide attached layout should render exactly master and detail boxes')
     assert.ok(attachedLines.some(line => line.includes('Status')), 'overview/detail hierarchy should show a section label')
     assert.ok(attachedLines.some(line => line.includes('Content')), 'task detail hierarchy should show a content section label')
-    assert.ok(attachedLines.some(line => line.includes('Latest note') && line.includes('substantive render note')), 'task details should show latest substantive note')
-    assert.ok(attachedLines.some(line => line.includes('Refs') && line.includes('2 folded')), 'collapsed task details should show compact folded ref count')
-    assert.equal(attachedLines.some(line => line.includes('legacy render handoff')), false, 'task details should hide legacy communication refs from latest note')
-    assert.equal(attachedLines.some(line => line.includes('mailbox-hidden-render-ref')), false, 'task details should not leak hidden communication ref ids by default')
+    assert.ok(attachedLines.some(line => line.includes('History') && line.includes('reports 1') && line.includes('events 2') && line.includes('messageRefs 1')), 'task details should show compact task-history counts')
+    assert.ok(attachedLines.some(line => line.includes('Latest report') && line.includes(renderReport.id)), 'task details should show latest compact report id')
+    assert.ok(attachedLines.some(line => line.includes('Compact report summary')), 'task details should show latest compact report summary')
+    assert.ok(attachedLines.some(line => line.includes('Latest activity') && line.includes('messageRef')), 'task details should show latest compact activity kind')
+    assert.ok(attachedLines.some(line => line.includes('Compact panel handoff summary')), 'task details should show compact TaskMessageRef summary')
+    assert.ok(attachedLines.some(line => line.includes('Full report') && line.includes(`reportId=${renderReport.id}`)), 'task details should point to explicit report action for full report text')
+    assert.equal(attachedLines.some(line => line.includes('Legacy note refs')), false, 'task details should not render legacy task-note diagnostics')
+    assert.equal(attachedLines.some(line => line.includes('Latest note')), false, 'task details should not use latest task note as primary history')
+    assert.equal(attachedLines.some(line => line.includes('Refs') && !line.includes('messageRefs')), false, 'task details should not use old folded ref count as primary signal')
+    assert.equal(attachedLines.some(line => line.includes(renderReportFullBody)), false, 'task details should not leak full TaskReport text by default')
 
     const narrowAttachedLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 96, height: 40, data, state, selection })
     const narrowTitleIndex = narrowAttachedLines.findIndex(line => line.includes('✦'))
@@ -327,8 +359,9 @@ module.exports = {
     state.mailboxSelectedIndex = 0
     selection = modules.viewModel.buildPanelSelectionView(data, state)
     const mailboxLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data, state, selection })
-    assert.ok(mailboxLines.some(line => line.includes('Blocked on missing decision')), 'blocked unread mailbox row should render in active mailbox master list')
+    assert.ok(mailboxLines.some(line => line.includes('Blocked on missing decision')), 'blocked unread mailbox row should render compact summary in active mailbox master list')
     assert.ok(mailboxLines.some(line => line.includes('unread blocked')), 'mailbox rendering should keep unread blocked report attention markers')
+    assert.equal(mailboxLines.some(line => line.includes(renderReportFullBody)), false, 'mailbox cockpit should not hydrate/leak full TaskReport text')
     const readBlockedMailbox = modules.state.readMailbox('render-suite', 'team-lead')
     const readBlockedMailboxItem = readBlockedMailbox.find(item => item.id === blockedMailbox.id)
     readBlockedMailboxItem.readAt = Date.now()
@@ -671,19 +704,15 @@ module.exports = {
     const expandedSelection = modules.viewModel.buildPanelSelectionView(data, expandedState)
     const expandedLines = modules.layout.renderTeamPanelLines(theme, { width: 96, data, state: expandedState, selection: expandedSelection })
     assert.ok(expandedLines.some(line => line.includes('Long description for rendering')), 'expanded details should show full task description')
-    assert.ok(expandedLines.some(line => line.includes('References') && line.includes('2 folded')), 'expanded task details should show compact folded reference diagnostics')
-    assert.equal(expandedLines.some(line => line.includes('legacy render handoff')), false, 'expanded task details should hide folded legacy ref body')
+    assert.ok(expandedLines.some(line => line.includes('History') && line.includes('reports 1') && line.includes('messageRefs 1')), 'expanded task details should show compact history counts')
+    assert.equal(expandedLines.some(line => line.includes('Legacy note refs')), false, 'expanded task details should not show legacy note refs')
+    assert.equal(expandedLines.some(line => line.includes(renderReportFullBody)), false, 'expanded task details should not show full report body')
     assert.equal(expandedLines.slice(0, expandedLines.findIndex(line => line.includes('╭'))).some(line => line.includes('q close')), false, 'expanded details should not show close help in header')
 
     const longTask = modules.state.createTask(team, {
       title: 'Long detail overflow regression',
       description: Array.from({ length: 40 }, (_, i) => `description line ${i + 1} with 中文连续内容测试abcdef`).join('\n'),
     })
-    modules.state.appendTaskNote(
-      longTask,
-      'researcher-very-long-member-name-alpha',
-      Array.from({ length: 40 }, (_, i) => `note line ${i + 1} with long-token-${'x'.repeat(80)}`).join('\n'),
-    )
     modules.state.writeTeamState(team)
     const longData = modules.panelDataSource.loadPanelData('render-suite')
     const longState = modules.viewModel.createInitialPanelState()
@@ -698,12 +727,13 @@ module.exports = {
     assert.ok(longLines.some(line => line.includes('/')), 'expanded reader should show scroll range')
     assert.ok(longLines.some(line => line.includes('↑↓ scroll') && line.includes('e list') && line.includes('q close')), 'detail-focused footer should show detail scrolling context')
     assert.ok(longLines.some(line => line.includes('description line 1')), 'expanded reader should show the first page of full details')
-    assert.equal(longLines.some(line => line.includes('note line 40')), false, 'first page should not render the end of long notes')
+    assert.equal(longLines.some(line => line.includes('note line 40')), false, 'first page should not render legacy note body')
 
     longState.detailScrollOffset = 1000
     const longScrolledLines = modules.layout.renderTeamPanelLines(theme, { width: 96, height: 32, data: longData, state: longState, selection: longSelection })
     assert.ok(longScrolledLines.length <= 32, `scrolled expanded reader should stay within terminal height, got ${longScrolledLines.length}`)
-    assert.ok(longScrolledLines.some(line => line.includes('note line 40')), 'expanded reader should allow scrolling to the end of long notes')
+    assert.ok(longScrolledLines.some(line => line.includes('History') && line.includes('reports 0')), 'expanded reader should allow scrolling through history summary without legacy note body')
+    assert.equal(longScrolledLines.some(line => line.includes('note line 40')), false, 'expanded reader should no longer expose legacy note body as primary task detail')
 
     for (const width of [56, 72, 96, 128, 160, 220]) {
       for (const renderCase of [

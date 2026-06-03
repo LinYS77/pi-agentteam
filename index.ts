@@ -7,7 +7,6 @@ import { registerToolGuardHooks } from './hooks/toolGuard.js'
 import { registerAgentTeamCommands } from './api/commands.js'
 import { registerAgentTeamTools } from './api/tools.js'
 import {
-  appendStructuredTaskNote,
   assertValidOwner,
   classifySpawnTask,
   currentActor,
@@ -30,7 +29,7 @@ import {
 import { createOutboxRunner } from './app/effectRunner.js'
 import { createFileBackedOutboxEffectHandlers } from './adapters/runtime/outboxEffectHandlers.js'
 import { fileBackedOutboxStorePort } from './adapters/runtime/outboxStorePort.js'
-import { fileBackedTaskMutationPort, fileBackedTeamStatePort } from './adapters/runtime/appStatePorts.js'
+import { fileBackedTaskHistoryQueryPort, fileBackedTaskMutationPort, fileBackedTeamStatePort } from './adapters/runtime/appStatePorts.js'
 import { fileBackedMailboxRepositoryPort } from './adapters/runtime/mailboxPorts.js'
 import { registerBeforeAgentStartPolicy } from './policy.js'
 import { registerAgentTeamRenderers } from './renderers.js'
@@ -105,10 +104,10 @@ export default function agentTeamExtension(pi: ExtensionAPI): void {
     outboxHandlers,
     teamState: fileBackedTeamStatePort,
     taskMutations: fileBackedTaskMutationPort,
+    taskHistory: fileBackedTaskHistoryQueryPort,
     mailboxRepository: fileBackedMailboxRepositoryPort,
     requestWorkerDelivery,
     requestLeaderAttentionIfNeeded,
-    appendStructuredTaskNote,
     invalidateStatus: runtime.invalidateStatus,
   })
 }

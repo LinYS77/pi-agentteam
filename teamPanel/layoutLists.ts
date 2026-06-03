@@ -1,6 +1,6 @@
 import { isMailboxMessageUnread } from '../messageLifecycle.js'
 import type { PanelActionMenu, PanelData, PanelSelectionView, TeamPanelState } from './viewModel.js'
-import { getPanelActiveSelectedIndex, hasPaneLostAttention, hasUnreadBlockedReportAttention, mailboxType, taskReferenceSummary } from './viewModel.js'
+import { getPanelActiveSelectedIndex, hasPaneLostAttention, hasUnreadBlockedReportAttention, mailboxType, taskHistorySummary } from './viewModel.js'
 import {
   compactAttentionSummaryParts,
   foldCompactAttentionParts,
@@ -86,6 +86,7 @@ export function renderMembersLines(
 
 export function renderTaskLines(
   theme: PanelTheme,
+  data: Extract<PanelData, { mode: 'attached' }>,
   state: TeamPanelState,
   selection: PanelSelectionView,
   maxContentLines?: number,
@@ -99,7 +100,7 @@ export function renderTaskLines(
     return lines
   }
 
-  lines.push(theme.fg('dim', `   ${padCell('Task', 8)}  Status          ${padCell('Title', 30)}  Owner`))
+  lines.push(theme.fg('dim', `   ${padCell('Task', 8)}  Status          ${padCell('Title', 30)}  Owner / History`))
 
   if (tasksWindow.offset > 0) {
     lines.push(theme.fg('dim', `… ${tasksWindow.offset} above`))
@@ -114,11 +115,13 @@ export function renderTaskLines(
     const idCol = padCell(isSelected ? theme.bold(theme.fg('accent', task.id)) : theme.fg('dim', task.id), 8)
     const ownerCol = theme.fg('dim', `@${short(task.owner ?? '-', 10)}`)
     const titleCol = padCell(isSelected ? theme.fg('text', short(task.title, 30)) : theme.fg('text', short(task.title, 30)), 30)
-    const refs = taskReferenceSummary(task)
+    const history = taskHistorySummary(data.team, task.id)
     const attention = [
       task.status === 'blocked' ? theme.fg('error', 'blocked') : '',
       task.status !== 'done' && !task.owner ? theme.fg('warning', 'unowned') : '',
-      refs.total > 0 ? theme.fg('dim', `refs ${refs.total}`) : '',
+      history.reports > 0 ? theme.fg('success', `reports ${history.reports}`) : '',
+      history.events > 0 ? theme.fg('dim', `events ${history.events}`) : '',
+      history.messageRefs > 0 ? theme.fg('dim', `msgs ${history.messageRefs}`) : '',
     ].filter(Boolean).join(theme.fg('dim', ' · '))
     const attentionStr = attention ? `  ${attention}` : ''
 

@@ -22,6 +22,7 @@ module.exports = {
     const assertDeliveryRequestsUnchanged = (memberName, before, message) => {
       assert.deepEqual(deliveryRequestsForMember(memberName), before, message)
     }
+    const legacyNotes = task => Array.isArray(task?.notes) ? task.notes : []
 
     const configPath = modules.state.getConfigPath()
     modules.state.ensureDir(path.dirname(configPath))
@@ -523,6 +524,9 @@ module.exports = {
       description: 'Explore project and report findings',
     }, null, () => {}, leaderCtx)
     helpers.assertContains(res.content[0].text, 'Created T001')
+    team = modules.state.readTeamState('full-suite-team')
+    assert.equal(legacyNotes(team.tasks['T001']).length, 0, 'task create should not append active task notes')
+    assert.ok(Object.values(team.taskEvents).some(event => event.taskId === 'T001' && event.type === 'created' && event.summary === 'Task created'), 'task create should write created event')
 
     res = await tool('agentteam_send').execute('send-unowned-no-to-denied', {
       message: 'This should not route without an owner',
@@ -541,6 +545,8 @@ module.exports = {
 
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.members['research-one'].status, 'idle', 'assign should block shared state only and not wake worker')
+    assert.equal(legacyNotes(team.tasks['T001']).length, 0, 'task assign should not append active task notes')
+    assert.ok(Object.values(team.taskEvents).some(event => event.taskId === 'T001' && event.type === 'assigned' && event.data?.newOwner === 'research-one'), 'task assign should write assigned event')
     const t001RecencyAfterSubstantiveAssign = team.tasks['T001'].updatedAt
 
     const promptsBeforeOwnedCreate = env.sentPrompts.length
@@ -572,10 +578,10 @@ module.exports = {
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.tasks['T002'].owner, 'plan-one')
     assert.equal(team.tasks['T002'].status, 'open')
-    assert.ok(
-      team.tasks['T002'].notes.some(note => note.text === 'Assigned to plan-one on create'),
-      'create with owner should record assignment note',
-    )
+    assert.equal(legacyNotes(team.tasks['T002']).length, 0, 'create with owner should not append active task notes')
+    const t002EventsAfterCreate = Object.values(team.taskEvents).filter(event => event.taskId === 'T002')
+    assert.ok(t002EventsAfterCreate.some(event => event.type === 'created'), 'owned create should dual-write created event')
+    assert.ok(t002EventsAfterCreate.some(event => event.type === 'assigned' && event.data?.newOwner === 'plan-one' && event.data?.onCreate === true), 'owned create should dual-write assigned event')
 
     const blockedCreateResearchRequestsBefore = deliveryRequestsForMember('research-one')
     res = await tool('agentteam_task').execute('task-create-owned-blockable-denied-blocked-by', {
@@ -618,6 +624,8 @@ module.exports = {
     assert.equal(team.tasks['T003'].owner, 'research-one')
     assert.equal(team.tasks['T003'].status, 'blocked')
     assert.deepEqual(team.tasks['T003'].blockedBy, ['missing input'])
+    assert.equal(legacyNotes(team.tasks['T003']).length, 0, 'task block should not append active task notes')
+    assert.ok(Object.values(team.taskEvents).some(event => event.taskId === 'T003' && event.type === 'blocked' && event.data?.blockedBy?.[0] === 'missing input'), 'task block should write blocked event with blockers')
     assertDeliveryRequestsUnchanged(
       'research-one',
       blockedCreateResearchRequestsBefore,
@@ -737,6 +745,9 @@ module.exports = {
     assert.equal(res.details.task.status, coreAssignedT004.task.status, 'production assign status should match core reducer')
     assert.equal(res.details.task.owner, coreAssignedT004.task.owner, 'production assign owner should match core reducer')
     team = modules.state.readTeamState('full-suite-team')
+    assert.equal(legacyNotes(team.tasks['T004']).length, 0, 'task unblock/assign should not append active task notes')
+    assert.ok(Object.values(team.taskEvents).some(event => event.taskId === 'T004' && event.type === 'unblocked'), 'task unblock should write unblocked event')
+    assert.ok(Object.values(team.taskEvents).some(event => event.taskId === 'T004' && event.type === 'assigned' && event.data?.newOwner === 'research-one'), 'task assign after unblock should write assigned event')
     assert.equal(
       modules.viewModel.buildTeamAttentionSummary(team, modules.state.readMailbox('full-suite-team', 'team-lead')).blockedTasks,
       1,
@@ -864,34 +875,26 @@ module.exports = {
     assert.equal(team.tasks['T001'].owner, 'research-one')
     assert.equal(team.tasks['T001'].status, 'open')
     const taskT001UpdatedAtAfterAssignmentRef = team.tasks['T001'].updatedAt
-    assert.equal(taskT001UpdatedAtAfterAssignmentRef, t001RecencyAfterSubstantiveAssign, 'hidden assignment ref should not bump task recency')
-    assert.equal(team.tasks['T001'].notes.filter(note => note.text.startsWith('Linked message:')).length, 0, 'task-bound assignment should not create visible full-body linked note')
-    let t001CommunicationRefs = team.tasks['T001'].notes.filter(note => modules.state.isCommunicationReferenceNote(note))
-    assert.equal(t001CommunicationRefs.length, 1, 'task-bound assignment should create one hidden communication ref')
-    assert.equal(t001CommunicationRefs[0].linkedMessageId, assignmentForResearch.id)
-    assert.equal(t001CommunicationRefs[0].metadata?.kind, 'communication_ref')
-    assert.equal(t001CommunicationRefs[0].metadata?.hidden, true)
-    assert.equal(t001CommunicationRefs[0].metadata?.metadataVersion, 1)
-    assert.equal(t001CommunicationRefs[0].metadata?.sourceKind, 'communication_ref')
-    assert.equal(t001CommunicationRefs[0].metadata?.displayMode, 'hidden')
-    assert.deepEqual(t001CommunicationRefs[0].metadata?.linkedIds, {
-      mailboxMessageId: assignmentForResearch.id,
-      taskId: 'T001',
-      threadId: 'task:T001',
-    })
-    assert.deepEqual(modules.state.taskNoteLinkedIds(t001CommunicationRefs[0]), {
-      mailboxMessageId: assignmentForResearch.id,
-      taskId: 'T001',
-      threadId: 'task:T001',
-    })
-    assert.equal(modules.state.inferTaskNoteSourceKind(t001CommunicationRefs[0]), 'communication_ref')
-    assert.equal(modules.state.inferTaskNoteDisplayMode(t001CommunicationRefs[0]), 'hidden')
-    assert.equal(t001CommunicationRefs[0].hidden, true)
-    assert.equal(t001CommunicationRefs[0].metadata?.from, 'team-lead')
-    assert.equal(t001CommunicationRefs[0].metadata?.to, 'research-one')
-    assert.equal(t001CommunicationRefs[0].metadata?.messageType, 'assignment')
-    assert.equal(t001CommunicationRefs[0].metadata?.taskId, 'T001')
-    assert.equal(modules.state.latestVisibleTaskNote(team.tasks['T001']).text, 'Assigned to research-one', 'hidden assignment ref should not become latest substantive note')
+    assert.equal(taskT001UpdatedAtAfterAssignmentRef, t001RecencyAfterSubstantiveAssign, 'task message ref should not bump task recency')
+    assert.equal(legacyNotes(team.tasks['T001']).filter(note => note.text.startsWith('Linked message:')).length, 0, 'task-bound assignment should not create visible full-body linked note')
+    assert.equal(legacyNotes(team.tasks['T001']).length, 0, 'new task-bound assignment should not create legacy task notes')
+    let t001MessageRefs = Object.values(team.taskMessageRefs).filter(ref => ref.taskId === 'T001')
+    assert.equal(t001MessageRefs.length, 1, 'task-bound assignment should create one TaskMessageRef')
+    const assignmentMessageRef = t001MessageRefs.find(ref => ref.mailboxMessageId === assignmentForResearch.id)
+    assert.ok(assignmentMessageRef, 'task-bound assignment TaskMessageRef should point at recipient mailbox message')
+    assert.equal(assignmentMessageRef.from, 'team-lead')
+    assert.equal(assignmentMessageRef.to, 'research-one')
+    assert.equal(assignmentMessageRef.type, 'assignment')
+    assert.equal(assignmentMessageRef.taskId, 'T001')
+    assert.equal(assignmentMessageRef.threadId, 'task:T001')
+    assert.equal(assignmentMessageRef.summary, 'Assigned T001')
+    assert.equal(assignmentMessageRef.priority, 'normal')
+    assert.equal(assignmentMessageRef.wakeHint, 'hard')
+    assert.equal(assignmentMessageRef.metadata?.source, 'agentteam_send')
+    assert.equal(assignmentMessageRef.metadata?.compact, true)
+    assert.equal(JSON.stringify(assignmentMessageRef).includes('You were assigned shared task'), false, 'TaskMessageRef must not copy full assignment body')
+    assert.ok(assignmentForResearch.text.includes('You were assigned shared task T001'), 'recipient mailbox should retain full assignment body')
+    assert.equal(legacyNotes(team.tasks['T001']).length, 0, 'TaskMessageRef should not create latest substantive note')
 
     res = await tool('agentteam_send').execute('send-1', {
       to: 'plan-one',
@@ -904,16 +907,20 @@ module.exports = {
     assert.equal(res.details.wakeByRecipient[0].policyIntent, 'none')
     assert.equal(res.details.wakeByRecipient[0].policyReason, 'inform is context-only and does not wake')
     team = modules.state.readTeamState('full-suite-team')
-    assert.equal(team.tasks['T001'].updatedAt, taskT001UpdatedAtAfterAssignmentRef, 'hidden leader inform ref should not bump task recency')
-    t001CommunicationRefs = team.tasks['T001'].notes.filter(note => modules.state.isCommunicationReferenceNote(note))
-    assert.equal(t001CommunicationRefs.length, 2, 'leader inform should add a hidden communication ref alongside assignment ref')
+    assert.equal(team.tasks['T001'].updatedAt, taskT001UpdatedAtAfterAssignmentRef, 'leader inform TaskMessageRef should not bump task recency')
+    assert.equal(legacyNotes(team.tasks['T001']).length, 0, 'leader inform should not add legacy task notes')
     const leaderInformMailbox = modules.state.readMailbox('full-suite-team', 'plan-one').find(item => item.text.includes('Research done'))
-    const leaderInformRef = t001CommunicationRefs.find(note => note.linkedMessageId === leaderInformMailbox?.id)
-    assert.ok(leaderInformRef, 'leader inform ref should point at recipient mailbox message')
-    assert.equal(leaderInformRef.hidden, true)
-    assert.equal(leaderInformRef.metadata?.from, 'team-lead')
-    assert.equal(leaderInformRef.metadata?.to, 'plan-one')
-    assert.equal(modules.state.latestVisibleTaskNote(team.tasks['T001']).text, 'Assigned to research-one', 'hidden leader inform ref should not become latest substantive note')
+    t001MessageRefs = Object.values(team.taskMessageRefs).filter(ref => ref.taskId === 'T001')
+    assert.equal(t001MessageRefs.length, 2, 'leader inform should add a TaskMessageRef alongside assignment ref')
+    const leaderInformRef = t001MessageRefs.find(ref => ref.mailboxMessageId === leaderInformMailbox?.id)
+    assert.ok(leaderInformRef, 'leader inform TaskMessageRef should point at recipient mailbox message')
+    assert.equal(leaderInformRef.from, 'team-lead')
+    assert.equal(leaderInformRef.to, 'plan-one')
+    assert.equal(leaderInformRef.type, 'inform')
+    assert.equal(leaderInformRef.threadId, 'task:T001')
+    assert.equal(leaderInformRef.summary, undefined)
+    assert.equal(JSON.stringify(leaderInformRef).includes('Research done'), false, 'leader inform TaskMessageRef must not copy full message body')
+    assert.equal(legacyNotes(team.tasks['T001']).length, 0, 'leader inform TaskMessageRef should not create latest substantive note')
 
     const planSession = team.members['plan-one'].sessionFile
     const planCtx = helpers.createCtx(leaderCtx.cwd, planSession, env.notifications)
@@ -954,22 +961,22 @@ module.exports = {
     assert.equal(peerInformRequests.length, 0, 'peer inform should not create a durable bridge request by default')
     assertDeliveryRequestsUnchanged('plan-one', peerInformRequestsBefore, 'peer inform should not create or refresh any delivery request for recipient')
     team = modules.state.readTeamState('full-suite-team')
-    assert.equal(team.tasks['T001'].updatedAt, peerInformTaskUpdatedAtBefore, 'hidden peer inform ref should not bump task recency')
-    assert.equal(team.tasks['T001'].notes.filter(note => note.text === 'Linked message: peer handoff with report summary').length, 0, 'peer inform should not copy full body into visible task note')
-    t001CommunicationRefs = team.tasks['T001'].notes.filter(note => modules.state.isCommunicationReferenceNote(note))
-    assert.equal(t001CommunicationRefs.length, 3, 'peer inform should add a hidden communication ref alongside assignment and leader inform refs')
-    const peerInformRef = t001CommunicationRefs.find(note => note.linkedMessageId === peerInform.id)
-    assert.ok(peerInformRef, 'peer inform ref should point at recipient mailbox message')
-    assert.equal(peerInformRef.text, '[communication ref]')
-    assert.equal(peerInformRef.metadata?.kind, 'communication_ref')
-    assert.equal(peerInformRef.metadata?.hidden, true)
-    assert.equal(peerInformRef.metadata?.sourceKind, 'communication_ref')
-    assert.equal(peerInformRef.metadata?.displayMode, 'hidden')
-    assert.equal(peerInformRef.hidden, true)
-    assert.equal(peerInformRef.metadata?.from, 'research-one')
-    assert.equal(peerInformRef.metadata?.to, 'plan-one')
-    assert.equal(peerInformRef.metadata?.messageType, 'inform')
-    assert.equal(modules.state.latestVisibleTaskNote(team.tasks['T001']).text, 'Assigned to research-one', 'hidden peer inform ref should not become latest substantive note')
+    assert.equal(team.tasks['T001'].updatedAt, peerInformTaskUpdatedAtBefore, 'peer inform TaskMessageRef should not bump task recency')
+    assert.equal(legacyNotes(team.tasks['T001']).filter(note => note.text === 'Linked message: peer handoff with report summary').length, 0, 'peer inform should not copy full body into visible task note')
+    assert.equal(legacyNotes(team.tasks['T001']).length, 0, 'peer inform should not add legacy task notes')
+    t001MessageRefs = Object.values(team.taskMessageRefs).filter(ref => ref.taskId === 'T001')
+    assert.equal(t001MessageRefs.length, 3, 'peer inform should add a TaskMessageRef alongside assignment and leader inform refs')
+    const peerInformRef = t001MessageRefs.find(ref => ref.mailboxMessageId === peerInform.id)
+    assert.ok(peerInformRef, 'peer inform TaskMessageRef should point at recipient mailbox message')
+    assert.equal(peerInformRef.from, 'research-one')
+    assert.equal(peerInformRef.to, 'plan-one')
+    assert.equal(peerInformRef.type, 'inform')
+    assert.equal(peerInformRef.threadId, 'task:T001')
+    assert.equal(peerInformRef.summary, undefined)
+    assert.equal(peerInformRef.wakeHint, 'none')
+    assert.equal(peerInformRef.metadata?.source, 'agentteam_send')
+    assert.equal(JSON.stringify(peerInformRef).includes('peer handoff with report summary'), false, 'peer inform TaskMessageRef must not copy full message body')
+    assert.equal(legacyNotes(team.tasks['T001']).length, 0, 'peer inform TaskMessageRef should not create latest substantive note')
     const peerInformEvents = (team.events ?? []).filter(event => event.by === 'research-one' && event.metadata?.sourceKind === 'worker_peer_message_ref')
     assert.equal(peerInformEvents.length, 1, 'peer inform should keep one compact diagnostic event ref')
     const peerInformEvent = peerInformEvents[0]
@@ -988,6 +995,11 @@ module.exports = {
     assert.ok(peerInformEvent.text.includes('diagnostic peer message ref'), 'diagnostic peer event should be clearly diagnostic')
     assert.ok(peerInformEvent.text.includes('type=inform'), 'diagnostic peer event should keep type identity')
     assert.ok(peerInformEvent.text.includes('to=plan-one'), 'diagnostic peer event should keep recipient identity')
+    const peerInformRefForQuery = team.taskMessageRefs[peerInformRef.id]
+    peerInformRefForQuery.summary = 'compact peer handoff summary'
+    peerInformRefForQuery.diagnostic = true
+    peerInformRefForQuery.metadata = { ...(peerInformRefForQuery.metadata ?? {}), source: 'agentteam_send', diagnosticFixture: true }
+    modules.state.writeTeamState(team)
     const peerInformOutboxEffects = modules.state.listOutboxEffects('full-suite-team')
       .filter(effect => effect.kind === 'append_event_requested' && effect.payload?.event?.type === 'diagnostic_peer_message_ref' && effect.payload?.event?.by === 'research-one')
     assert.equal(peerInformOutboxEffects.length, 1, 'peer diagnostic event should keep one append_event_requested outbox effect')
@@ -1018,45 +1030,56 @@ module.exports = {
     assert.equal(peerInformPanelLines.join('\n').includes('diagnostic_peer_message_ref'), false, 'default panel should not expose diagnostic peer event type')
     assert.equal(peerInformPanelLines.join('\n').includes('diagnostic peer message ref'), false, 'default panel should not expose diagnostic peer event text')
 
-    const ordinaryNoteLeaderMailboxBefore = modules.state.readMailbox('full-suite-team', 'team-lead').length
-    const ordinaryNoteLeaderProjectionBefore = Object.keys(modules.state.readLeaderProjectionStore('full-suite-team').projections).length
-    const ordinaryNoteOutboxBefore = modules.state.listOutboxEffects('full-suite-team').length
-    const ordinaryNoteLeaderRequestsBefore = deliveryRequestsForMember('team-lead')
-    const ordinaryNoteTaskNotesBefore = modules.state.readTeamState('full-suite-team').tasks['T001'].notes.length
-    const ordinaryNoteEffects = []
+    const progressLeaderMailboxBefore = modules.state.readMailbox('full-suite-team', 'team-lead').length
+    const progressLeaderProjectionBefore = Object.keys(modules.state.readLeaderProjectionStore('full-suite-team').projections).length
+    const progressOutboxBefore = modules.state.listOutboxEffects('full-suite-team').length
+    const progressLeaderRequestsBefore = deliveryRequestsForMember('team-lead')
+    const progressTaskNotesBefore = legacyNotes(modules.state.readTeamState('full-suite-team').tasks['T001']).length
+    const progressEventsBefore = Object.keys(modules.state.readTeamState('full-suite-team').taskEvents).length
+    const progressEffects = []
     const taskService = helpers.requireDist('tools/taskService.js')
     const taskApplication = helpers.requireDist('app/taskApplication.js')
     assert.equal(typeof taskApplication.executeTaskApplication, 'function', 'task app boundary should expose the task use-case')
     res = await taskService.executeTaskAction({
-      action: 'note',
+      action: 'progress',
       taskId: 'T001',
-      note: 'ordinary note should inform only',
+      note: 'ordinary progress should inform only',
     }, researchCtx, env.patches.withOutboxHandlers({
       ...env.patches.deps,
       requestLeaderAttentionIfNeeded: async () => {
-        ordinaryNoteEffects.push('leaderAttention')
+        progressEffects.push('leaderAttention')
         return { ok: true, recipient: 'team-lead', wakeHint: 'hard', reason: 'projected', method: 'leader_attention_requested' }
       },
       requestWorkerDelivery: async () => {
-        ordinaryNoteEffects.push('workerDelivery')
+        progressEffects.push('workerDelivery')
         return { ok: true, recipient: 'team-lead', wakeHint: 'hard', reason: 'worker delivery requested', method: 'bridge_requested' }
       },
       invalidateStatus: () => {
-        ordinaryNoteEffects.push('invalidateStatus')
+        progressEffects.push('invalidateStatus')
       },
     }))
-    helpers.assertContains(res.content[0].text, 'Noted on T001')
-    assert.equal(res.details.leaderMailboxDelivered, undefined, 'ordinary worker note must not inform leader mailbox')
-    assert.deepEqual(ordinaryNoteEffects, ['invalidateStatus'], 'ordinary note must only invalidate UI status')
-    const ordinaryNoteLeaderMailbox = modules.state.readMailbox('full-suite-team', 'team-lead')
-    assert.equal(ordinaryNoteLeaderMailbox.length, ordinaryNoteLeaderMailboxBefore, 'ordinary note should not create a leader mailbox message')
-    assertDeliveryRequestsUnchanged('team-lead', ordinaryNoteLeaderRequestsBefore, 'ordinary note must not create leader delivery requests')
-    assert.equal(Object.keys(modules.state.readLeaderProjectionStore('full-suite-team').projections).length, ordinaryNoteLeaderProjectionBefore, 'ordinary note must not create leader projection state')
-    assert.equal(modules.state.listOutboxEffects('full-suite-team').length, ordinaryNoteOutboxBefore, 'ordinary note must not enqueue outbox side effects')
+    helpers.assertContains(res.content[0].text, 'Recorded progress on T001')
+    assert.equal(res.details.leaderMailboxDelivered, undefined, 'worker progress must not inform leader mailbox')
+    assert.deepEqual(progressEffects, ['invalidateStatus'], 'progress must only invalidate UI status')
+    const progressLeaderMailbox = modules.state.readMailbox('full-suite-team', 'team-lead')
+    assert.equal(progressLeaderMailbox.length, progressLeaderMailboxBefore, 'progress should not create a leader mailbox message')
+    assertDeliveryRequestsUnchanged('team-lead', progressLeaderRequestsBefore, 'progress must not create leader delivery requests')
+    assert.equal(Object.keys(modules.state.readLeaderProjectionStore('full-suite-team').projections).length, progressLeaderProjectionBefore, 'progress must not create leader projection state')
+    assert.equal(modules.state.listOutboxEffects('full-suite-team').length, progressOutboxBefore, 'progress must not enqueue outbox side effects')
     team = modules.state.readTeamState('full-suite-team')
-    assert.equal(team.tasks['T001'].notes.length, ordinaryNoteTaskNotesBefore + 1, 'ordinary note should append exactly one task-local note')
-    assert.equal(team.tasks['T001'].notes.at(-1).text, 'ordinary note should inform only')
-    assert.equal(team.tasks['T001'].notes.filter(note => note.text.startsWith('Linked message:') && note.text.includes('ordinary note should inform only')).length, 0, 'ordinary note should not append a linked mailbox note')
+    assert.equal(legacyNotes(team.tasks['T001']).length, progressTaskNotesBefore, 'progress should not append TeamTask.notes')
+    assert.equal(Object.keys(team.taskEvents).length, progressEventsBefore + 1, 'progress should append one TaskEvent')
+    assert.ok(Object.values(team.taskEvents).some(event => event.taskId === 'T001' && event.type === 'progress' && event.summary === 'ordinary progress should inform only' && event.data?.source === 'agentteam_task_progress'), 'progress should write TaskEvent only')
+
+    const unsupportedNoteEventsBefore = Object.keys(team.taskEvents).length
+    res = await taskService.executeTaskAction({
+      action: 'note',
+      taskId: 'T001',
+      note: 'removed note action should be rejected',
+    }, researchCtx, env.patches.withOutboxHandlers(env.patches.deps))
+    assert.equal(res.details.denied, true, 'removed note action should be denied for workers')
+    assert.equal(legacyNotes(modules.state.readTeamState('full-suite-team').tasks['T001']).length, progressTaskNotesBefore, 'removed note action should not append legacy task notes')
+    assert.equal(Object.keys(modules.state.readTeamState('full-suite-team').taskEvents).length, unsupportedNoteEventsBefore, 'removed note action should not append TaskEvent')
 
     const unsupportedSendLeaderMailboxBefore = modules.state.readMailbox('full-suite-team', 'team-lead').length
     const unsupportedSendEventsBefore = modules.state.readTeamState('full-suite-team').events?.length ?? 0
@@ -1097,10 +1120,157 @@ module.exports = {
     assert.equal(team.tasks['T001'].status, 'open', 'worker done report should be report-only and not mutate task status')
     assert.equal(team.tasks['T001'].owner, 'research-one', 'worker done report report should not mutate owner')
     assert.deepEqual(team.tasks['T001'].blockedBy, [], 'worker done report report should not mutate blockers')
-    assert.ok(team.tasks['T001'].notes.some(note => note.messageType === 'report_done' && note.metadata?.reportOnly === true), 'worker done report report should append report-only task note')
-    assert.equal(team.tasks['T001'].notes.filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by research-one')).length, 0, 'worker done report should not append linked mailbox task note')
+    assert.equal(legacyNotes(team.tasks['T001']).length, progressTaskNotesBefore, 'worker report_done should not append TeamTask.notes')
+    assert.equal(legacyNotes(team.tasks['T001']).some(note => note.messageType === 'report_done' && note.metadata?.reportOnly === true), false, 'worker report_done should not append report-only task note')
+    assert.equal(legacyNotes(team.tasks['T001']).filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by research-one')).length, 0, 'worker done report should not append linked mailbox task note')
+    const t001DoneReports = Object.values(team.taskReports).filter(report => report.taskId === 'T001' && report.type === 'report_done' && report.author === 'research-one')
+    assert.equal(t001DoneReports.length, 1, 'worker report_done should dual-write one TaskReport')
+    assert.equal(t001DoneReports[0].text, 'Done')
+    assert.equal(t001DoneReports[0].reportOnly, true)
+    assert.equal(t001DoneReports[0].reporterIsOwner, true)
+    assert.equal(t001DoneReports[0].statusAtReport, 'open')
+    assert.equal(t001DoneReports[0].ownerAtReport, 'research-one')
+    assert.ok(t001DoneReports[0].mailboxMessageId?.startsWith('mailbox-outbox-'), 'TaskReport should back-reference delivered leader mailbox id')
+    assert.ok(Object.values(team.taskEvents).some(event => event.taskId === 'T001' && event.type === 'report_submitted' && event.reportId === t001DoneReports[0].id), 'worker report_done should dual-write report_submitted event')
+
+    res = await tool('agentteam_task').execute('query-show-worker', {
+      action: 'show',
+      taskId: 'T001',
+    }, null, () => {}, researchCtx)
+    helpers.assertContains(res.content[0].text, 'T001 [open] Inspect project')
+    helpers.assertContains(res.content[0].text, 'History counts: reports 1, events')
+    helpers.assertContains(res.content[0].text, `Latest report: ${t001DoneReports[0].id} report_done by research-one — Done`)
+    helpers.assertContains(res.content[0].text, 'messageRefs 3')
+    assert.equal(res.content[0].text.includes('peer handoff with report summary'), false, 'show must not copy full peer message body')
+    assert.equal(res.content[0].text.includes('report_done: Done'), false, 'show must expose report summary but not a full report-body line')
+    assert.equal(res.details.latestReport.text, undefined, 'show latestReport details must not include full report body')
+    assert.equal(res.details.counts.reports, 1)
+    assert.equal(res.details.counts.messageRefs, 3)
+
+    res = await tool('agentteam_task').execute('query-reports-worker', {
+      action: 'reports',
+      taskId: 'T001',
+    }, null, () => {}, researchCtx)
+    helpers.assertContains(res.content[0].text, `Reports for T001: 1 report`)
+    helpers.assertContains(res.content[0].text, `${t001DoneReports[0].id} report_done by research-one`)
+    helpers.assertContains(res.content[0].text, 'Done')
+    assert.equal(res.content[0].text.includes('Report text:'), false, 'reports must not include full report body section')
+    assert.equal(res.content[0].text.includes('peer handoff with report summary'), false, 'reports must not include ordinary message bodies')
+    assert.equal(res.details.reports[0].text, undefined, 'reports details must not include full report body')
+
+    res = await tool('agentteam_task').execute('query-report-worker', {
+      action: 'report',
+      reportId: t001DoneReports[0].id,
+      taskId: 'T001',
+    }, null, () => {}, researchCtx)
+    helpers.assertContains(res.content[0].text, `${t001DoneReports[0].id} report_done for T001 by research-one`)
+    helpers.assertContains(res.content[0].text, 'Report text:\nDone')
+    assert.equal(res.details.text, 'Done')
+    assert.equal(res.details.report.text, undefined, 'report metadata should stay compact even when full text is returned separately')
+
+    res = await tool('agentteam_task').execute('query-history-worker-limit', {
+      action: 'history',
+      taskId: 'T001',
+      limit: 10,
+    }, null, () => {}, researchCtx)
+    helpers.assertContains(res.content[0].text, 'History for T001: showing 8 of')
+    helpers.assertContains(res.content[0].text, 'limit 10; messageRefs included')
+    helpers.assertContains(res.content[0].text, 'messageRef')
+    helpers.assertContains(res.content[0].text, 'compact peer handoff summary')
+    helpers.assertContains(res.content[0].text, `${t001DoneReports[0].id} report_done by research-one: Done`)
+    assert.equal(res.content[0].text.includes('Report text:'), false, 'history must not include full report body section')
+    assert.equal(res.content[0].text.includes('peer handoff with report summary'), false, 'history must not include full ordinary message body')
+    assert.equal(JSON.stringify(res.details.rows).includes('peer handoff with report summary'), false, 'history details must not include full ordinary message body')
+    assert.equal(res.details.filter.limit, 10)
+    assert.equal(res.details.filter.includeMessages, true)
+
+    res = await tool('agentteam_task').execute('query-history-worker-bounded', {
+      action: 'history',
+      taskId: 'T001',
+      limit: 3,
+    }, null, () => {}, researchCtx)
+    helpers.assertContains(res.content[0].text, 'History for T001: showing 3 of 8 rows')
+    assert.equal(res.details.shownCount, 3)
+    assert.equal(res.details.hiddenCount, 5)
+    assert.equal(res.details.filter.limit, 3)
+
+    await assert.rejects(
+      () => tool('agentteam_task').execute('query-history-missing-task', {
+        action: 'history',
+        taskId: 'T999',
+      }, null, () => {}, researchCtx),
+      /Task T999 not found/,
+    )
+    await assert.rejects(
+      () => tool('agentteam_task').execute('query-report-missing', {
+        action: 'report',
+        reportId: 'TR9999',
+      }, null, () => {}, researchCtx),
+      /Task report TR9999 not found/,
+    )
+    await assert.rejects(
+      () => tool('agentteam_task').execute('query-report-wrong-task', {
+        action: 'report',
+        reportId: t001DoneReports[0].id,
+        taskId: 'T002',
+      }, null, () => {}, researchCtx),
+      new RegExp(`Task report ${t001DoneReports[0].id} is for task T001, not T002`),
+    )
+
     leadMailbox = modules.state.readMailbox('full-suite-team', 'team-lead')
-    assert.ok(leadMailbox.some(m => m.type === 'report_done' && m.text.includes('done report by research-one')), 'worker done report should notify leader')
+    const t001DoneMailbox = leadMailbox.find(m => m.type === 'report_done' && m.metadata?.reportId === t001DoneReports[0].id)
+    assert.ok(t001DoneMailbox, 'worker done report should notify leader with TaskReport reference')
+    assert.ok(t001DoneMailbox.text.includes('done report by research-one'), 'compact report mailbox should keep notification identity')
+    assert.equal(t001DoneMailbox.text.includes('Done'), false, 'compact report mailbox should not duplicate full report body')
+    assert.equal(t001DoneMailbox.summary.includes('Done'), true, 'compact report mailbox may include report summary')
+    assert.equal(t001DoneMailbox.deliveredAt, undefined, 'new compact report mailbox should start undelivered')
+    assert.equal(t001DoneMailbox.readAt, undefined, 'new compact report mailbox should start unread')
+
+    res = await tool('agentteam_receive').execute('query-report-receive-hydrated-unread', {
+      markRead: false,
+      limit: 50,
+    }, null, () => {}, leaderCtx)
+    helpers.assertContains(res.content[0].text, `Hydrated report ${t001DoneReports[0].id}`)
+    helpers.assertContains(res.content[0].text, 'Report text:\nDone')
+    assert.equal(res.details.hydratedReports[t001DoneReports[0].id].text, 'Done')
+    assert.ok(res.details.messages.some(message => message.id === t001DoneMailbox.id && message.text === t001DoneMailbox.text), 'details.messages should preserve compact mailbox row')
+    team = modules.state.readTeamState('full-suite-team')
+    assert.equal(team.taskReports[t001DoneReports[0].id].mailboxMessageId, t001DoneMailbox.id, 'TaskReport should retain delivered leader mailbox message id')
+    let t001DoneMailboxAfterUnreadReceive = modules.state.readMailbox('full-suite-team', 'team-lead').find(m => m.id === t001DoneMailbox.id)
+    assert.ok(t001DoneMailboxAfterUnreadReceive.deliveredAt, 'receive markRead=false should stamp deliveredAt')
+    assert.equal(t001DoneMailboxAfterUnreadReceive.readAt, undefined, 'receive markRead=false should not stamp readAt')
+
+    res = await tool('agentteam_receive').execute('query-report-receive-hydrated-read', {
+      markRead: true,
+      limit: 50,
+    }, null, () => {}, leaderCtx)
+    helpers.assertContains(res.content[0].text, `Hydrated report ${t001DoneReports[0].id}`)
+    helpers.assertContains(res.content[0].text, 'Report text:\nDone')
+    assert.equal(res.details.hydratedReports[t001DoneReports[0].id].text, 'Done')
+    t001DoneMailboxAfterUnreadReceive = modules.state.readMailbox('full-suite-team', 'team-lead').find(m => m.id === t001DoneMailbox.id)
+    assert.ok(t001DoneMailboxAfterUnreadReceive.deliveredAt, 'receive markRead=true should retain deliveredAt')
+    assert.ok(t001DoneMailboxAfterUnreadReceive.readAt, 'receive markRead=true should stamp readAt')
+
+    modules.state.pushMailboxMessage('full-suite-team', 'team-lead', {
+      id: 'legacy-report-mailbox-full-text',
+      from: 'legacy-worker',
+      to: 'team-lead',
+      text: 'legacy stored report full text body',
+      summary: 'legacy report summary',
+      type: 'report_done',
+      taskId: 'T001',
+      threadId: 'task:T001',
+      priority: 'normal',
+      wakeHint: 'hard',
+      metadata: { reportOnly: true },
+      createdAt: Date.now() + 1,
+    })
+    res = await tool('agentteam_receive').execute('query-report-receive-legacy-fallback', {
+      markRead: true,
+      limit: 50,
+    }, null, () => {}, leaderCtx)
+    helpers.assertContains(res.content[0].text, 'legacy stored report full text body')
+    assert.equal(res.details.hydratedReports, undefined, 'legacy report mailbox without reportId should not claim hydration')
 
     res = await tool('agentteam_task').execute('task-close-owned-create', {
       action: 'report_done',
@@ -1111,7 +1281,8 @@ module.exports = {
     assert.equal(res.details.reportOnly, true)
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.tasks['T002'].status, 'open', 'planner done report should be report-only and not mutate task status')
-    assert.equal(team.tasks['T002'].notes.filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by plan-one')).length, 0, 'planner done report should not append linked mailbox task note')
+    assert.equal(legacyNotes(team.tasks['T002']).length, 0, 'planner report_done should not append TeamTask.notes')
+    assert.equal(legacyNotes(team.tasks['T002']).filter(note => note.text.startsWith('Linked message:') && note.text.includes('done report by plan-one')).length, 0, 'planner done report should not append linked mailbox task note')
 
     res = await tool('agentteam_task').execute('planner-create-denied', {
       action: 'create',
@@ -1154,8 +1325,16 @@ module.exports = {
     assert.equal(team.tasks['T002'].status, coreBlockedReportT002.task.status, 'production report_blocked status should match core reducer')
     assert.equal(team.tasks['T002'].status, 'open', 'report_blocked should not mutate task status')
     assert.deepEqual(team.tasks['T002'].blockedBy, [], 'report_blocked should not mutate task blockedBy')
-    assert.ok(team.tasks['T002'].notes.some(note => note.messageType === 'report_blocked' && note.metadata?.reportOnly === true), 'report_blocked should append blocked report-only note')
-    assert.equal(team.tasks['T002'].notes.filter(note => note.text.startsWith('Linked message:') && note.text.includes('blocked report by plan-one')).length, 0, 'report_blocked should not append linked mailbox task note')
+    assert.equal(legacyNotes(team.tasks['T002']).length, 0, 'report_blocked should not append TeamTask.notes')
+    assert.equal(legacyNotes(team.tasks['T002']).some(note => note.messageType === 'report_blocked' && note.metadata?.reportOnly === true), false, 'report_blocked should not append blocked report-only note')
+    assert.equal(legacyNotes(team.tasks['T002']).filter(note => note.text.startsWith('Linked message:') && note.text.includes('blocked report by plan-one')).length, 0, 'report_blocked should not append linked mailbox task note')
+    const t002BlockedReports = Object.values(team.taskReports).filter(report => report.taskId === 'T002' && report.type === 'report_blocked' && report.author === 'plan-one')
+    assert.equal(t002BlockedReports.length, 1, 'report_blocked should dual-write one TaskReport')
+    assert.equal(t002BlockedReports[0].text, 'Need leader decision\nBlocked by: leader decision')
+    assert.deepEqual(t002BlockedReports[0].reportedBlockedBy, ['leader decision'])
+    assert.equal(t002BlockedReports[0].reporterIsOwner, true)
+    assert.equal(t002BlockedReports[0].ownerAtReport, 'plan-one')
+    assert.ok(Object.values(team.taskEvents).some(event => event.taskId === 'T002' && event.type === 'report_submitted' && event.reportId === t002BlockedReports[0].id), 'report_blocked should dual-write report_submitted event')
     leadMailbox = modules.state.readMailbox('full-suite-team', 'team-lead')
     const blockedReport = leadMailbox.find(m => m.type === 'report_blocked' && m.text.includes('blocked report by plan-one'))
     assert.ok(blockedReport, 'report_blocked should notify leader')
@@ -1164,10 +1343,14 @@ module.exports = {
     assert.equal(blockedReport.metadata?.policyIntent, 'leader_attention')
     assert.equal(blockedReport.metadata?.reportOnly, true)
     assert.equal(blockedReport.metadata?.reporterIsOwner, true)
+    assert.equal(blockedReport.metadata?.reportId, t002BlockedReports[0].id, 'blocked report mailbox should reference TaskReport id')
+    assert.equal(blockedReport.text.includes('Need leader decision'), false, 'blocked report mailbox should not duplicate full report body')
 
     const nonOwnerBlockedMailboxBefore = modules.state.readMailbox('full-suite-team', 'team-lead').length
     const nonOwnerBlockedProjectionBefore = Object.keys(modules.state.readLeaderProjectionStore('full-suite-team').projections).length
     const nonOwnerBlockedTeamLeadRequestsBefore = deliveryRequestsForMember('team-lead')
+    const nonOwnerBlockedReportsBefore = Object.keys(modules.state.readTeamState('full-suite-team').taskReports).length
+    const nonOwnerBlockedReportEventsBefore = Object.values(modules.state.readTeamState('full-suite-team').taskEvents).filter(event => event.type === 'report_submitted').length
     res = await tool('agentteam_task').execute('non-owner-report-blocked', {
       action: 'report_blocked',
       taskId: 'T002',
@@ -1183,17 +1366,21 @@ module.exports = {
     assert.equal(team.tasks['T002'].status, 'open', 'non-owner report_blocked should not mutate task status')
     assert.equal(team.tasks['T002'].owner, 'plan-one', 'non-owner report_blocked should not mutate owner')
     assert.deepEqual(team.tasks['T002'].blockedBy, [], 'non-owner report_blocked should not mutate blockedBy')
-    assert.equal(team.tasks['T002'].notes.some(note => note.author === 'research-one' && note.messageType === 'report_blocked'), false, 'non-owner report_blocked must not append task note')
+    assert.equal(legacyNotes(team.tasks['T002']).some(note => note.author === 'research-one' && note.messageType === 'report_blocked'), false, 'non-owner report_blocked must not append task note')
+    assert.equal(Object.keys(team.taskReports).length, nonOwnerBlockedReportsBefore, 'non-owner report_blocked must not append TaskReport')
+    assert.equal(Object.values(team.taskEvents).filter(event => event.type === 'report_submitted').length, nonOwnerBlockedReportEventsBefore, 'non-owner report_blocked must not append report_submitted event')
     leadMailbox = modules.state.readMailbox('full-suite-team', 'team-lead')
     assert.equal(leadMailbox.length, nonOwnerBlockedMailboxBefore, 'non-owner report_blocked must not notify leader')
     assert.equal(leadMailbox.some(m => m.type === 'report_blocked' && m.text.includes('blocked report by research-one')), false, 'non-owner report_blocked must not notify leader')
     assert.equal(Object.keys(modules.state.readLeaderProjectionStore('full-suite-team').projections).length, nonOwnerBlockedProjectionBefore, 'non-owner report_blocked must not create leader projection state')
     assertDeliveryRequestsUnchanged('team-lead', nonOwnerBlockedTeamLeadRequestsBefore, 'non-owner report_blocked must not create leader delivery')
 
-    const nonOwnerDoneNotesBefore = team.tasks['T002'].notes.length
+    const nonOwnerDoneNotesBefore = legacyNotes(team.tasks['T002']).length
     const nonOwnerDoneMailboxBefore = modules.state.readMailbox('full-suite-team', 'team-lead').length
     const nonOwnerDoneProjectionBefore = Object.keys(modules.state.readLeaderProjectionStore('full-suite-team').projections).length
     const nonOwnerDoneTeamLeadRequestsBefore = deliveryRequestsForMember('team-lead')
+    const nonOwnerDoneReportsBefore = Object.keys(team.taskReports).length
+    const nonOwnerDoneReportEventsBefore = Object.values(team.taskEvents).filter(event => event.type === 'report_submitted').length
     const nonOwnerDoneEffects = []
     res = await taskService.executeTaskAction({
       action: 'report_done',
@@ -1221,7 +1408,9 @@ module.exports = {
     assert.equal(res.details.denied, true)
     assert.equal(res.details.reason, 'task_reporter_not_owner')
     team = modules.state.readTeamState('full-suite-team')
-    assert.equal(team.tasks['T002'].notes.length, nonOwnerDoneNotesBefore, 'non-owner report_done must not append task note')
+    assert.equal(legacyNotes(team.tasks['T002']).length, nonOwnerDoneNotesBefore, 'non-owner report_done must not append task note')
+    assert.equal(Object.keys(team.taskReports).length, nonOwnerDoneReportsBefore, 'non-owner report_done must not append TaskReport')
+    assert.equal(Object.values(team.taskEvents).filter(event => event.type === 'report_submitted').length, nonOwnerDoneReportEventsBefore, 'non-owner report_done must not append report_submitted event')
     assert.equal(modules.state.readMailbox('full-suite-team', 'team-lead').length, nonOwnerDoneMailboxBefore, 'non-owner report_done must not notify leader')
     assert.equal(Object.keys(modules.state.readLeaderProjectionStore('full-suite-team').projections).length, nonOwnerDoneProjectionBefore, 'non-owner report_done must not create leader projection state')
     assertDeliveryRequestsUnchanged('team-lead', nonOwnerDoneTeamLeadRequestsBefore, 'non-owner report_done must not create leader delivery')
@@ -1238,6 +1427,7 @@ module.exports = {
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.tasks['T002'].status, 'blocked', 'leader block should factually block task')
     assert.deepEqual(team.tasks['T002'].blockedBy, ['leader decision'])
+    assert.ok(Object.values(team.taskEvents).some(event => event.taskId === 'T002' && event.type === 'blocked' && event.data?.blockedBy?.[0] === 'leader decision'), 'leader factual block should dual-write blocked event')
 
     assertDeliveryRequestsUnchanged('plan-one', factualBlockPlanRequestsBefore, 'leader factual block should not create or refresh worker delivery')
 
@@ -1279,6 +1469,7 @@ module.exports = {
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.tasks['T002'].status, 'open', 'leader unblock should factually unblock task')
     assert.deepEqual(team.tasks['T002'].blockedBy, [])
+    assert.ok(Object.values(team.taskEvents).some(event => event.taskId === 'T002' && event.type === 'unblocked'), 'leader unblock should dual-write unblocked event')
 
     res = await tool('agentteam_task').execute('leader-close-blocked-allowed', {
       action: 'close',
@@ -1289,6 +1480,7 @@ module.exports = {
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.tasks['T003'].status, 'done')
     assert.deepEqual(team.tasks['T003'].blockedBy, [])
+    assert.ok(Object.values(team.taskEvents).some(event => event.taskId === 'T003' && event.type === 'closed'), 'leader close should dual-write closed event')
 
     res = await taskService.executeTaskAction({
       action: 'report_done',
@@ -1299,6 +1491,7 @@ module.exports = {
       requestLeaderAttentionIfNeeded: async (_team, message) => {
         assert.equal(message.type, 'report_done')
         assert.equal(message.wakeHint, 'hard')
+        assert.equal(String(message.text).includes('Done but projection fails'), false, 'leader attention should remain compact and omit full report body')
         throw new Error('simulated projection failure')
       },
     }))
@@ -1308,8 +1501,11 @@ module.exports = {
     assert.equal(res.details.warning, 'side_effect_failed')
     assert.ok(res.details.sideEffectWarnings.some(item => item.kind === 'requestLeaderAttention' && item.error.includes('simulated projection failure')))
 
-    const doneReportNotesBeforeMailboxFailure = modules.state.readTeamState('full-suite-team').tasks['T002'].notes.length
-    const doneReportLinkedNotesBeforeMailboxFailure = modules.state.readTeamState('full-suite-team').tasks['T002'].notes.filter(note => note.text.startsWith('Linked message:')).length
+    const doneReportTeamBeforeMailboxFailure = modules.state.readTeamState('full-suite-team')
+    const doneReportNotesBeforeMailboxFailure = legacyNotes(doneReportTeamBeforeMailboxFailure.tasks['T002']).length
+    const doneReportLinkedNotesBeforeMailboxFailure = legacyNotes(doneReportTeamBeforeMailboxFailure.tasks['T002']).filter(note => note.text.startsWith('Linked message:')).length
+    const doneReportArtifactsBeforeMailboxFailure = Object.keys(doneReportTeamBeforeMailboxFailure.taskReports).length
+    const doneReportEventsBeforeMailboxFailure = Object.values(doneReportTeamBeforeMailboxFailure.taskEvents).filter(event => event.type === 'report_submitted').length
     const doneReportMailboxFailureOrder = []
     res = await taskService.executeTaskAction({
       action: 'report_done',
@@ -1340,11 +1536,16 @@ module.exports = {
     assert.deepEqual(doneReportMailboxFailureOrder.sort(), ['invalidateStatus', 'pushMailbox'], 'leader mailbox failure should not request leader attention/projection without a stored mailbox message')
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.tasks['T002'].status, 'open', 'mailbox failure should not mutate report-only task status')
-    assert.equal(team.tasks['T002'].notes.length, doneReportNotesBeforeMailboxFailure + 1, 'mailbox failure should still append the done report report note')
-    assert.equal(team.tasks['T002'].notes.filter(note => note.text.startsWith('Linked message:')).length, doneReportLinkedNotesBeforeMailboxFailure, 'mailbox failure should not append a linked mailbox note')
+    assert.equal(legacyNotes(team.tasks['T002']).length, doneReportNotesBeforeMailboxFailure, 'mailbox failure should not append TeamTask.notes')
+    assert.equal(legacyNotes(team.tasks['T002']).filter(note => note.text.startsWith('Linked message:')).length, doneReportLinkedNotesBeforeMailboxFailure, 'mailbox failure should not append a linked mailbox note')
+    assert.equal(Object.keys(team.taskReports).length, doneReportArtifactsBeforeMailboxFailure + 1, 'mailbox failure should still append TaskReport artifact')
+    assert.ok(Object.values(team.taskReports).some(report => report.text === 'Done but mailbox fails' && report.mailboxMessageId === undefined), 'mailbox failure TaskReport should not reference a missing mailbox message')
+    assert.equal(Object.values(team.taskEvents).filter(event => event.type === 'report_submitted').length, doneReportEventsBeforeMailboxFailure + 1, 'mailbox failure should still append report_submitted event')
 
-    const blockedNotesBeforeMailboxFailure = team.tasks['T002'].notes.length
-    const blockedLinkedNotesBeforeMailboxFailure = team.tasks['T002'].notes.filter(note => note.text.startsWith('Linked message:')).length
+    const blockedNotesBeforeMailboxFailure = legacyNotes(team.tasks['T002']).length
+    const blockedLinkedNotesBeforeMailboxFailure = legacyNotes(team.tasks['T002']).filter(note => note.text.startsWith('Linked message:')).length
+    const blockedReportArtifactsBeforeMailboxFailure = Object.keys(team.taskReports).length
+    const blockedReportEventsBeforeMailboxFailure = Object.values(team.taskEvents).filter(event => event.type === 'report_submitted').length
     const blockedMailboxFailureOrder = []
     res = await taskService.executeTaskAction({
       action: 'report_blocked',
@@ -1376,8 +1577,11 @@ module.exports = {
     assert.deepEqual(blockedMailboxFailureOrder.sort(), ['invalidateStatus', 'pushMailbox'], 'blocked report mailbox failure should not request leader attention/projection without a stored mailbox message')
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.tasks['T002'].status, 'open', 'blocked report mailbox failure should not mutate task status')
-    assert.equal(team.tasks['T002'].notes.length, blockedNotesBeforeMailboxFailure + 1, 'blocked report mailbox failure should still append the report note')
-    assert.equal(team.tasks['T002'].notes.filter(note => note.text.startsWith('Linked message:')).length, blockedLinkedNotesBeforeMailboxFailure, 'blocked report mailbox failure should not append a linked mailbox note')
+    assert.equal(legacyNotes(team.tasks['T002']).length, blockedNotesBeforeMailboxFailure, 'blocked report mailbox failure should not append TeamTask.notes')
+    assert.equal(legacyNotes(team.tasks['T002']).filter(note => note.text.startsWith('Linked message:')).length, blockedLinkedNotesBeforeMailboxFailure, 'blocked report mailbox failure should not append a linked mailbox note')
+    assert.equal(Object.keys(team.taskReports).length, blockedReportArtifactsBeforeMailboxFailure + 1, 'blocked report mailbox failure should still append TaskReport artifact')
+    assert.ok(Object.values(team.taskReports).some(report => report.text === 'Blocked but mailbox fails\nBlocked by: leader decision' && report.mailboxMessageId === undefined), 'blocked mailbox failure TaskReport should not reference a missing mailbox message')
+    assert.equal(Object.values(team.taskEvents).filter(event => event.type === 'report_submitted').length, blockedReportEventsBeforeMailboxFailure + 1, 'blocked report mailbox failure should still append report_submitted event')
 
     res = await tool('agentteam_task').execute('leader-close-worker-reported', {
       action: 'close',
@@ -1387,6 +1591,7 @@ module.exports = {
     helpers.assertContains(res.content[0].text, 'Closed T001')
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.tasks['T001'].status, 'done', 'leader close should mutate status')
+    assert.ok(Object.values(team.taskEvents).some(event => event.taskId === 'T001' && event.type === 'closed'), 'leader close accepted report should dual-write closed event')
     const coreClosedT001 = coreReducer.transitionTask(
       { ...team.tasks['T001'], status: 'open', updatedAt: team.tasks['T001'].updatedAt - 1 },
       { type: 'close', at: team.tasks['T001'].updatedAt },
@@ -1397,7 +1602,7 @@ module.exports = {
     assert.deepEqual(team.tasks['T001'].blockedBy, [], 'leader close should clear blockers')
 
     const doneTaskBeforeReports = modules.state.readTeamState('full-suite-team').tasks['T001']
-    const doneTaskNoteCountBeforeReports = doneTaskBeforeReports.notes.length
+    const doneTaskNoteCountBeforeReports = legacyNotes(doneTaskBeforeReports).length
     const doneReportMailboxBefore = modules.state.readMailbox('full-suite-team', 'team-lead').length
     const doneReportProjectionBefore = Object.keys(modules.state.readLeaderProjectionStore('full-suite-team').projections).length
     const doneReportTeamLeadRequestsBefore = deliveryRequestsForMember('team-lead')
@@ -1459,13 +1664,13 @@ module.exports = {
 
     team = modules.state.readTeamState('full-suite-team')
     assert.equal(team.tasks['T001'].status, 'done', 'denied reports on done task should not mutate status')
-    assert.equal(team.tasks['T001'].notes.length, doneTaskNoteCountBeforeReports, 'denied reports on done task should not append task notes')
+    assert.equal(legacyNotes(team.tasks['T001']).length, doneTaskNoteCountBeforeReports, 'denied reports on done task should not append task notes')
     assert.equal(modules.state.readMailbox('full-suite-team', 'team-lead').length, doneReportMailboxBefore, 'denied reports on done task should not notify leader')
     assert.equal(Object.keys(modules.state.readLeaderProjectionStore('full-suite-team').projections).length, doneReportProjectionBefore, 'denied reports on done task should not create projection state')
     assertDeliveryRequestsUnchanged('team-lead', doneReportTeamLeadRequestsBefore, 'denied reports on done task should not create leader delivery')
     assert.deepEqual(doneReportEffects, ['invalidateStatus', 'invalidateStatus'], 'denied reports on done task should only invalidate UI status')
 
-    const doneCloseNotesBefore = team.tasks['T001'].notes.length
+    const doneCloseNotesBefore = legacyNotes(team.tasks['T001']).length
     const doneCloseMailboxBefore = modules.state.readMailbox('full-suite-team', 'team-lead').length
     const doneCloseEffects = []
     res = await taskService.executeTaskAction({
@@ -1495,7 +1700,7 @@ module.exports = {
     assert.equal(res.details.status, 'done')
     helpers.assertContains(res.content[0].text, 'Cannot close T001: expected open or blocked, got done')
     team = modules.state.readTeamState('full-suite-team')
-    assert.equal(team.tasks['T001'].notes.length, doneCloseNotesBefore, 'denied close on done task should not append task notes')
+    assert.equal(legacyNotes(team.tasks['T001']).length, doneCloseNotesBefore, 'denied close on done task should not append task notes')
     assert.equal(modules.state.readMailbox('full-suite-team', 'team-lead').length, doneCloseMailboxBefore, 'denied close on done task should not notify leader')
     assert.deepEqual(doneCloseEffects, ['invalidateStatus'], 'denied close on done task should only invalidate UI status')
 
@@ -1556,10 +1761,12 @@ module.exports = {
     })
     newerSnapshot.tasks[mergeTask.id].status = 'blocked'
     newerSnapshot.tasks[mergeTask.id].updatedAt = Date.now() + 10
-    newerSnapshot.tasks[mergeTask.id].notes.push({
+    modules.state.appendTaskEvent(newerSnapshot, {
+      taskId: mergeTask.id,
+      type: 'blocked',
+      by: 'worker-one',
       at: Date.now() + 10,
-      author: 'worker-one',
-      text: 'newer task block',
+      summary: 'newer task block',
     })
     modules.state.writeTeamState(newerSnapshot)
 
@@ -1572,8 +1779,8 @@ module.exports = {
     assert.equal(mergedFreshness.members['worker-one'].lastWakeReason, 'newer writer block')
     assert.equal(mergedFreshness.tasks[mergeTask.id].status, 'blocked')
     assert.ok(
-      mergedFreshness.tasks[mergeTask.id].notes.some(note => note.text === 'newer task block'),
-      'newer task note should survive stale writer merge',
+      Object.values(mergedFreshness.taskEvents).some(event => event.taskId === mergeTask.id && event.summary === 'newer task block'),
+      'newer task event should survive stale writer merge',
     )
     assert.equal(mergedFreshness.description, 'stale writer changed description only')
 
@@ -1749,50 +1956,51 @@ module.exports = {
     assert.equal(txStatusChanged.members['transaction-worker'].lastWakeReason, 'transaction finished')
 
     const concurrentTeam = modules.state.createInitialTeamState({
-      teamName: 'concurrent-note-suite',
-      leaderSessionFile: '/tmp/concurrent-note-leader.jsonl',
+      teamName: 'concurrent-progress-suite',
+      leaderSessionFile: '/tmp/concurrent-progress-leader.jsonl',
       leaderCwd: '/tmp',
     })
     modules.state.upsertMember(concurrentTeam, {
-      name: 'note-worker-a',
+      name: 'progress-worker-a',
       role: 'researcher',
       cwd: '/tmp',
-      sessionFile: '/tmp/concurrent-note-worker-a.jsonl',
+      sessionFile: '/tmp/concurrent-progress-worker-a.jsonl',
       status: 'idle',
     })
     modules.state.upsertMember(concurrentTeam, {
-      name: 'note-worker-b',
+      name: 'progress-worker-b',
       role: 'researcher',
       cwd: '/tmp',
-      sessionFile: '/tmp/concurrent-note-worker-b.jsonl',
+      sessionFile: '/tmp/concurrent-progress-worker-b.jsonl',
       status: 'idle',
     })
     const concurrentTask = modules.state.createTask(concurrentTeam, {
-      title: 'Concurrent notes',
-      description: 'ensure transaction blocks preserve both notes',
+      title: 'Concurrent progress',
+      description: 'ensure transaction blocks preserve both progress events',
     })
     modules.state.writeTeamState(concurrentTeam)
 
-    const noteWorkerACtx = helpers.createCtx('/tmp', '/tmp/concurrent-note-worker-a.jsonl', env.notifications)
-    const noteWorkerBCtx = helpers.createCtx('/tmp', '/tmp/concurrent-note-worker-b.jsonl', env.notifications)
+    const progressWorkerACtx = helpers.createCtx('/tmp', '/tmp/concurrent-progress-worker-a.jsonl', env.notifications)
+    const progressWorkerBCtx = helpers.createCtx('/tmp', '/tmp/concurrent-progress-worker-b.jsonl', env.notifications)
     await Promise.all([
-      tool('agentteam_task').execute('concurrent-note-a', {
-        action: 'note',
+      tool('agentteam_task').execute('concurrent-progress-a', {
+        action: 'progress',
         taskId: concurrentTask.id,
-        note: 'note-from-a',
-      }, null, () => {}, noteWorkerACtx),
-      tool('agentteam_task').execute('concurrent-note-b', {
-        action: 'note',
+        note: 'progress-from-a',
+      }, null, () => {}, progressWorkerACtx),
+      tool('agentteam_task').execute('concurrent-progress-b', {
+        action: 'progress',
         taskId: concurrentTask.id,
-        note: 'note-from-b',
-      }, null, () => {}, noteWorkerBCtx),
+        note: 'progress-from-b',
+      }, null, () => {}, progressWorkerBCtx),
     ])
-    const concurrentAfter = modules.state.readTeamState('concurrent-note-suite')
-    const concurrentNotes = concurrentAfter.tasks[concurrentTask.id].notes.map(note => note.text)
-    assert.ok(concurrentNotes.includes('note-from-a'), 'transaction task note block should preserve note from worker A')
-    assert.ok(concurrentNotes.includes('note-from-b'), 'transaction task note block should preserve note from worker B')
+    const concurrentAfter = modules.state.readTeamState('concurrent-progress-suite')
+    assert.equal(legacyNotes(concurrentAfter.tasks[concurrentTask.id]).length, 0, 'concurrent progress should not append TeamTask.notes')
+    const concurrentProgress = Object.values(concurrentAfter.taskEvents).filter(event => event.taskId === concurrentTask.id && event.type === 'progress').map(event => event.summary)
+    assert.ok(concurrentProgress.includes('progress-from-a'), 'transaction progress event block should preserve progress from worker A')
+    assert.ok(concurrentProgress.includes('progress-from-b'), 'transaction progress event block should preserve progress from worker B')
 
-    modules.state.deleteTeamState('concurrent-note-suite')
+    modules.state.deleteTeamState('concurrent-progress-suite')
     modules.state.deleteTeamState('status-key-suite')
     modules.state.deleteTeamState('storage-cache-suite')
     modules.state.deleteTeamState('reconcile-invalidate-suite')

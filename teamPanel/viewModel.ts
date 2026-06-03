@@ -1,11 +1,13 @@
 import { isMailboxMessageUnread } from '../messageLifecycle.js'
 import { displayMessageType, mailboxUrgencyRank } from '../protocol.js'
-import { inferTaskNoteDisplayMode, isCommunicationReferenceNote, latestVisibleTaskNote, visibleTaskNotes } from '../state/taskNotes.js'
 import { TEAM_LEAD } from '../internalTypes.js'
 import type { OutboxDiagnosticsSummary } from '../app/outboxDiagnostics.js'
 import type { QuarantinedTeamSummary } from '../state/validation.js'
 import type {
   MailboxMessage,
+  TaskEvent,
+  TaskMessageRef,
+  TaskReport,
   TeamMember,
   TeamMessageType,
   TeamState,
@@ -78,10 +80,61 @@ export type TeamAttentionSummary = {
   paneLostMembers: number
 }
 
-export type TaskReferenceSummary = {
-  total: number
-  hidden: number
-  folded: number
+export type PanelTaskReportSummary = {
+  id: string
+  taskId: string
+  type: TaskReport['type']
+  author: string
+  summary: string
+  createdAt: number
+  statusAtReport: TaskReport['statusAtReport']
+  ownerAtReport?: string
+  reportedBlockedBy: string[]
+  mailboxMessageId?: string
+}
+
+export type PanelTaskActivitySummary =
+  | {
+    kind: 'report'
+    id: string
+    taskId: string
+    type: TaskReport['type']
+    at: number
+    by: string
+    summary: string
+  }
+  | {
+    kind: 'event'
+    id: string
+    taskId: string
+    type: TaskEvent['type']
+    displayType: string
+    at: number
+    by: string
+    summary: string
+    reportId?: string
+  }
+  | {
+    kind: 'messageRef'
+    id: string
+    taskId: string
+    mailboxMessageId: string
+    type: TaskMessageRef['type']
+    at: number
+    from: string
+    to: string
+    summary?: string
+    reportId?: string
+    diagnostic?: boolean
+  }
+
+export type PanelTaskHistorySummary = {
+  taskId: string
+  reports: number
+  events: number
+  messageRefs: number
+  latestReport?: PanelTaskReportSummary
+  latestActivity?: PanelTaskActivitySummary
 }
 
 export type TeamRuntimeDiagnostics = {
@@ -194,17 +247,112 @@ export function mailboxType(item: LeaderMailboxItem): TeamMessageType {
   return displayMessageType(item.type as string)
 }
 
-export { isCommunicationReferenceNote, latestVisibleTaskNote, visibleTaskNotes }
+function historyItemTime(item: TaskReport | TaskEvent | TaskMessageRef): number {
+  return 'createdAt' in item ? item.createdAt : item.at
+}
 
-export function taskReferenceSummary(task: Pick<TeamTask, 'notes'>): TaskReferenceSummary {
-  return task.notes.reduce<TaskReferenceSummary>((summary, note) => {
-    if (!isCommunicationReferenceNote(note)) return summary
-    const displayMode = inferTaskNoteDisplayMode(note)
-    summary.total += 1
-    if (displayMode === 'hidden') summary.hidden += 1
-    else summary.folded += 1
-    return summary
-  }, { total: 0, hidden: 0, folded: 0 })
+function newestHistoryItem<T extends TaskReport | TaskEvent | TaskMessageRef>(items: T[]): T | undefined {
+  return items
+    .slice()
+    .sort((a, b) => historyItemTime(b) - historyItemTime(a) || b.id.localeCompare(a.id))[0]
+}
+
+function historyReportsForTask(team: TeamState, taskId: string): TaskReport[] {
+  return Object.values(team.taskReports ?? {})
+    .filter(report => report.taskId === taskId)
+    .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+}
+
+function historyEventsForTask(team: TeamState, taskId: string): TaskEvent[] {
+  return Object.values(team.taskEvents ?? {})
+    .filter(event => event.taskId === taskId)
+    .sort((a, b) => a.at - b.at || a.id.localeCompare(b.id))
+}
+
+function historyMessageRefsForTask(team: TeamState, taskId: string): TaskMessageRef[] {
+  return Object.values(team.taskMessageRefs ?? {})
+    .filter(ref => ref.taskId === taskId)
+    .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+}
+
+function displayTaskEventType(type: TaskEvent['type']): string {
+  return type === 'report_submitted' ? 'report' : type
+}
+
+function compactPanelReport(report: TaskReport): PanelTaskReportSummary {
+  return {
+    id: report.id,
+    taskId: report.taskId,
+    type: report.type,
+    author: report.author,
+    summary: report.summary,
+    createdAt: report.createdAt,
+    statusAtReport: report.statusAtReport,
+    ownerAtReport: report.ownerAtReport,
+    reportedBlockedBy: report.reportedBlockedBy ?? [],
+    mailboxMessageId: report.mailboxMessageId,
+  }
+}
+
+function compactPanelActivity(item: TaskReport | TaskEvent | TaskMessageRef | undefined): PanelTaskActivitySummary | undefined {
+  if (!item) return undefined
+  if ('author' in item) {
+    return {
+      kind: 'report',
+      id: item.id,
+      taskId: item.taskId,
+      type: item.type,
+      at: item.createdAt,
+      by: item.author,
+      summary: item.summary,
+    }
+  }
+  if ('mailboxMessageId' in item) {
+    return {
+      kind: 'messageRef',
+      id: item.id,
+      taskId: item.taskId,
+      mailboxMessageId: item.mailboxMessageId,
+      type: item.type,
+      at: item.createdAt,
+      from: item.from,
+      to: item.to,
+      summary: item.summary,
+      reportId: item.reportId,
+      diagnostic: item.diagnostic,
+    }
+  }
+  return {
+    kind: 'event',
+    id: item.id,
+    taskId: item.taskId,
+    type: item.type,
+    displayType: displayTaskEventType(item.type),
+    at: item.at,
+    by: item.by,
+    summary: item.summary,
+    reportId: item.reportId,
+  }
+}
+
+export function taskHistorySummary(team: TeamState, taskId: string): PanelTaskHistorySummary {
+  const reports = historyReportsForTask(team, taskId)
+  const events = historyEventsForTask(team, taskId)
+  const messageRefs = historyMessageRefsForTask(team, taskId)
+  const latestReport = newestHistoryItem(reports)
+  const latestActivity = newestHistoryItem<TaskReport | TaskEvent | TaskMessageRef>([
+    ...reports,
+    ...events,
+    ...messageRefs,
+  ])
+  return {
+    taskId,
+    reports: reports.length,
+    events: events.length,
+    messageRefs: messageRefs.length,
+    latestReport: latestReport ? compactPanelReport(latestReport) : undefined,
+    latestActivity: compactPanelActivity(latestActivity),
+  }
 }
 
 export function hasUnreadBlockedReportAttention(item: LeaderMailboxItem): boolean {

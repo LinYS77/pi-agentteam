@@ -27,8 +27,8 @@ export function outboxEffectWarningName(kind: string): string {
       return 'requestWorkerDelivery'
     case 'leader_attention_requested':
       return 'requestLeaderAttention'
-    case 'task_note_append_requested':
-      return 'appendTaskNote'
+    case 'task_message_ref_append_requested':
+      return 'appendTaskMessageRef'
     case 'append_event_requested':
       return 'appendEvent'
     default:

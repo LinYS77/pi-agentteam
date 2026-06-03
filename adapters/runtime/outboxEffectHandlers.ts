@@ -1,7 +1,7 @@
 import type { TeamMessageType, TeamState } from '../../internalTypes.js'
 import { pushMailboxMessage, readMailbox } from '../../state/mailboxStore.js'
-import { appendTaskNote, appendTeamEvent } from '../../state/taskStore.js'
-import { appendCommunicationRefNote, isCommunicationReferenceNote } from '../../state/taskNotes.js'
+import { appendTeamEvent } from '../../state/taskStore.js'
+import { appendTaskMessageRef } from '../../state/taskHistory.js'
 import { readTeamState, updateTeamState } from '../../state/teamStore.js'
 import { validatePersistedMailbox } from '../../state/validation.js'
 import type { DeliveryResult } from '../../app/deliveryTypes.js'
@@ -32,6 +32,7 @@ export type FileBackedOutboxEffectHandlerDeps = {
     threadId?: string
   }) => Promise<DeliveryResult>
   appendTeamEvent?: typeof appendTeamEvent
+  appendTaskMessageRef?: typeof appendTaskMessageRef
   readTeamState?: typeof readTeamState
   now?: () => number
 }
@@ -103,50 +104,31 @@ export function createFileBackedOutboxEffectHandlers(
       return deliveryResult(await deps.requestLeaderAttentionIfNeeded(team, payload.message))
     },
 
-    task_note_append_requested: effect => {
+    task_message_ref_append_requested: effect => {
       const payload = effect.payload
+      const append = deps.appendTaskMessageRef ?? appendTaskMessageRef
+      let refId: string | undefined
       const updated = updateTeamState(payload.teamName, latest => {
-        const task = latest.tasks[payload.taskId]
-        if (!task) throw new Error(`task not found: ${payload.taskId}`)
-        const linkedMessageId = payload.details?.linkedMessageId
-        const communicationRef = isCommunicationReferenceNote({
-          at: 0,
-          author: payload.author,
-          text: payload.text,
-          threadId: payload.details?.threadId,
-          messageType: payload.details?.messageType,
-          linkedMessageId,
-          metadata: payload.details?.metadata,
-          hidden: payload.details?.hidden,
+        if (!latest.tasks[payload.taskId]) throw new Error(`task not found: ${payload.taskId}`)
+        const ref = append(latest, {
+          taskId: payload.taskId,
+          mailboxMessageId: payload.mailboxMessageId,
+          from: payload.from,
+          to: payload.to,
+          type: payload.type,
+          createdAt: payload.createdAt,
+          threadId: payload.threadId,
+          summary: payload.summary,
+          priority: payload.priority,
+          wakeHint: payload.wakeHint,
+          reportId: payload.reportId,
+          diagnostic: payload.diagnostic,
+          metadata: payload.metadata,
         })
-        const duplicate = linkedMessageId
-          ? task.notes.some(note => note.linkedMessageId === linkedMessageId)
-          : task.notes.some(note => note.author === payload.author && note.text === payload.text)
-        if (duplicate) return
-        if (communicationRef && linkedMessageId) {
-          appendCommunicationRefNote(task, {
-            author: payload.author,
-            linkedMessageId,
-            messageType: payload.details?.messageType,
-            threadId: payload.details?.threadId,
-            metadata: payload.details?.metadata,
-          })
-          return
-        }
-        if (payload.details?.hidden) {
-          appendTaskNote(task, payload.author, payload.text, {
-            ...payload.details,
-            metadata: {
-              ...(payload.details.metadata ?? {}),
-              hidden: true,
-            },
-          })
-          return
-        }
-        appendTaskNote(task, payload.author, payload.text, payload.details)
+        refId = ref.id
       })
-      if (!updated) throw new Error(`Team ${payload.teamName} not found for outbox task note append`)
-      return success({ taskId: payload.taskId })
+      if (!updated) throw new Error(`Team ${payload.teamName} not found for outbox task message ref append`)
+      return success({ taskId: payload.taskId, mailboxMessageId: payload.mailboxMessageId, refId })
     },
 
     append_event_requested: effect => {

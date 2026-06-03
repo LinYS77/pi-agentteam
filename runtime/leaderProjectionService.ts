@@ -88,7 +88,7 @@ function compactLeaderMailboxProjectionContent(item: LeaderMailboxProjectionItem
       `priority=${compactField(item.priority)}`,
       `wakeHint=${compactField(item.wakeHint)}`,
     ].join(' '),
-    'Full message body is in the persistent mailbox. Call agentteam_receive({ markRead: true }) for full details.',
+    'Full directed body/report notification is in the persistent mailbox. Call agentteam_receive({ markRead: true }) for full details; use agentteam_task show/history/reports/report for referenced task artifacts.',
   ].join('\n')
 }
 

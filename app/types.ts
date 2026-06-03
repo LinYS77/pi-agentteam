@@ -1,22 +1,8 @@
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
-import type { TeamState, TeamTask, TeamMessageType } from '../internalTypes.js'
+import type { TeamState, TeamMessageType } from '../internalTypes.js'
 import type { DeliveryResult } from './deliveryTypes.js'
 import type { OutboxEffectRunnerDeps } from './effectRunner.js'
-import type { MailboxRepositoryPort, OutboxStorePort, TaskMutationPort, TeamStatePort } from './ports.js'
-
-export type AppendStructuredTaskNote = (
-  task: TeamTask,
-  author: string,
-  text: string,
-  details?: {
-    threadId?: string
-    messageType?: TeamMessageType
-    requestId?: string
-    linkedMessageId?: string
-    metadata?: Record<string, unknown>
-    hidden?: boolean
-  },
-) => void
+import type { MailboxRepositoryPort, OutboxStorePort, TaskHistoryQueryPort, TaskMutationPort, TeamStatePort } from './ports.js'
 
 export type DeliveryRequestDeps = {
   requestWorkerDelivery: (
@@ -55,6 +41,7 @@ export type MessageApplicationDeps = Omit<OutboxEffectRunnerDeps, 'outboxStore'>
 
 export type MessageReceiveApplicationDeps = {
   mailboxRepository: MessageReceiveMailboxRepository
+  taskHistory: Pick<TaskHistoryQueryPort, 'findTaskReport'>
   ensureTeamForSession: (ctx: ExtensionContext) => TeamState | null
   currentActor: (ctx: ExtensionContext) => string
 }
@@ -62,11 +49,11 @@ export type MessageReceiveApplicationDeps = {
 export type TaskApplicationDeps = Omit<OutboxEffectRunnerDeps, 'outboxStore'> & {
   outboxStore: TaskApplicationOutboxStore
   teamState: Pick<TeamStatePort, 'updateTeam'>
-  taskMutations: Pick<TaskMutationPort, 'createTask'>
+  taskMutations: Pick<TaskMutationPort, 'createTask' | 'appendTaskEvent' | 'appendTaskReport' | 'updateTaskReport'>
+  taskHistory: TaskHistoryQueryPort
   normalizeOwnerName: (name: string) => string
   assertValidOwner: (team: TeamState, owner: string) => void
   ensureTeamForSession: (ctx: ExtensionContext) => TeamState | null
   currentActor: (ctx: ExtensionContext) => string
-  appendStructuredTaskNote: AppendStructuredTaskNote
   invalidateStatus: (ctx: ExtensionContext) => void
 }

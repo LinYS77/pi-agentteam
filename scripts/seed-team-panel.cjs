@@ -114,19 +114,108 @@ function makeTask(id, patch = {}) {
     status: 'open',
     owner: undefined,
     blockedBy: [],
-    notes: [],
     createdAt: minutesAgo(120),
     updatedAt: minutesAgo(60),
     ...patch,
   }
 }
 
-function note(author, text, minutes) {
-  return {
-    at: minutesAgo(minutes),
-    author,
-    text,
+function compactSummary(text) {
+  const singleLine = String(text).replace(/\s+/g, ' ').trim()
+  return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine
+}
+
+function nextHistoryId(team, kind) {
+  const field = kind === 'report' ? 'nextTaskReportSeq' : kind === 'messageRef' ? 'nextTaskMessageRefSeq' : 'nextTaskEventSeq'
+  const prefix = kind === 'report' ? 'TR' : kind === 'messageRef' ? 'TMR' : 'TE'
+  const seq = Number.isFinite(team[field]) && team[field] >= 1 ? Math.floor(team[field]) : 1
+  team[field] = seq + 1
+  return `${prefix}${String(seq).padStart(4, '0')}`
+}
+
+function addTaskEvent(team, input) {
+  const event = {
+    id: nextHistoryId(team, 'event'),
+    taskId: input.taskId,
+    type: input.type,
+    by: input.by,
+    at: input.at ?? minutesAgo(input.minutes ?? 0),
+    summary: compactSummary(input.summary),
+    reportId: input.reportId,
+    data: input.data,
   }
+  team.taskEvents[event.id] = event
+  return event
+}
+
+function addProgressEvent(team, taskId, by, summary, minutes) {
+  return addTaskEvent(team, {
+    taskId,
+    type: 'progress',
+    by,
+    minutes,
+    summary,
+    data: { source: 'seed_team_panel_current_fixture' },
+  })
+}
+
+function taskStatusAtReport(task, type) {
+  if (task.status === 'open' || task.status === 'blocked') return task.status
+  return type === 'report_blocked' ? 'blocked' : 'open'
+}
+
+function addTaskReport(team, input) {
+  const task = team.tasks[input.taskId]
+  const createdAt = input.at ?? minutesAgo(input.minutes ?? 0)
+  const report = {
+    id: nextHistoryId(team, 'report'),
+    taskId: input.taskId,
+    type: input.type,
+    author: input.author,
+    text: input.text,
+    summary: input.summary ?? compactSummary(input.text),
+    createdAt,
+    threadId: input.threadId ?? `task:${input.taskId}`,
+    reportOnly: true,
+    reporterIsOwner: input.reporterIsOwner ?? input.author === task?.owner,
+    reportedBlockedBy: input.reportedBlockedBy,
+    statusAtReport: input.statusAtReport ?? taskStatusAtReport(task ?? { status: 'open' }, input.type),
+    ownerAtReport: input.ownerAtReport ?? task?.owner,
+    mailboxMessageId: input.mailboxMessageId,
+    metadata: { source: 'seed_team_panel_current_fixture' },
+  }
+  team.taskReports[report.id] = report
+  addTaskEvent(team, {
+    taskId: input.taskId,
+    type: 'report_submitted',
+    by: input.author,
+    at: createdAt,
+    summary: report.summary,
+    reportId: report.id,
+    data: { source: 'seed_team_panel_current_fixture', reportType: input.type },
+  })
+  return report
+}
+
+function addTaskMessageRef(team, input) {
+  const ref = {
+    id: nextHistoryId(team, 'messageRef'),
+    taskId: input.taskId,
+    mailboxMessageId: input.mailboxMessageId,
+    from: input.from,
+    to: input.to ?? 'team-lead',
+    type: input.type,
+    createdAt: input.createdAt ?? minutesAgo(input.minutes ?? 0),
+    threadId: input.threadId ?? `task:${input.taskId}`,
+    summary: input.summary,
+    priority: input.priority,
+    wakeHint: input.wakeHint,
+    reportId: input.reportId,
+    diagnostic: input.diagnostic,
+    metadata: { source: 'seed_team_panel_current_fixture' },
+  }
+  team.taskMessageRefs[ref.id] = ref
+  return ref
 }
 
 function message(id, patch = {}) {
@@ -209,7 +298,13 @@ function makeBaseTeam(root, name, description, revision = 1) {
     },
     tasks: {},
     events: [],
+    taskReports: {},
+    taskEvents: {},
+    taskMessageRefs: {},
     nextTaskSeq: 1,
+    nextTaskReportSeq: 1,
+    nextTaskEventSeq: 1,
+    nextTaskMessageRefSeq: 1,
     revision,
     memberTombstones: {},
   }
@@ -266,10 +361,6 @@ function seedAlpha(root) {
     description: longDetailText('Task T001 description'),
     status: 'open',
     owner: 'researcher-alpha',
-    notes: [
-      note('researcher-alpha', 'Found relevant files: teamPanel/layout.ts, teamPanel/viewModel.ts, tests/suites/panel-renderer.cjs.', 20),
-      note('researcher-alpha', longDetailText('Latest note'), 3),
-    ],
     createdAt: minutesAgo(140),
     updatedAt: minutesAgo(3),
   }))
@@ -279,7 +370,6 @@ function seedAlpha(root) {
     status: 'blocked',
     owner: 'planner-alpha',
     blockedBy: ['leader decision on visual density', 'confirm narrow terminal behavior'],
-    notes: [note('planner-alpha', 'Options: compact symbols, words, or details-only. Recommendation: compact rows, words in Details.', 18)],
     createdAt: minutesAgo(130),
     updatedAt: minutesAgo(18),
   }))
@@ -288,7 +378,6 @@ function seedAlpha(root) {
     description: 'This intentionally has no owner so /team can show unowned active task attention.',
     status: 'open',
     owner: undefined,
-    notes: [note('team-lead', 'Owner was removed in a previous test; task returned to pending.', 35)],
     createdAt: minutesAgo(125),
     updatedAt: minutesAgo(35),
   }))
@@ -297,7 +386,6 @@ function seedAlpha(root) {
     description: 'A done task for task breakdown testing.',
     status: 'done',
     owner: 'implementer-alpha',
-    notes: [note('implementer-alpha', 'Files changed: teamPanel/layout.ts. Checks run: npm test. Result: passed.', 55)],
     createdAt: minutesAgo(120),
     updatedAt: minutesAgo(55),
   }))
@@ -306,7 +394,6 @@ function seedAlpha(root) {
     description: 'A pending owned task so the task list has enough rows for scrolling indicators.',
     status: 'open',
     owner: 'qa-alpha',
-    notes: [note('qa-alpha', 'Waiting for leader to decide whether this should be assigned.', 42)],
     createdAt: minutesAgo(100),
     updatedAt: minutesAgo(42),
   }))
@@ -315,7 +402,6 @@ function seedAlpha(root) {
     description: 'Owned by error member to verify member health details and task counts.',
     status: 'open',
     owner: 'writer-alpha',
-    notes: [note('writer-alpha', 'Could not wake pane; needs leader cleanup or respawn decision.', 39)],
     createdAt: minutesAgo(90),
     updatedAt: minutesAgo(39),
   }))
@@ -324,7 +410,6 @@ function seedAlpha(root) {
     description: 'Extra task to make the task list taller than the visible window.',
     status: 'open',
     owner: 'observer-alpha',
-    notes: [note('observer-alpha', 'No action yet.', 70)],
     createdAt: minutesAgo(80),
     updatedAt: minutesAgo(70),
   }))
@@ -333,10 +418,67 @@ function seedAlpha(root) {
     description: 'Additional done task for global done count.',
     status: 'done',
     owner: 'reviewer-alpha-long-name',
-    notes: [note('reviewer-alpha-long-name', 'Visual density snapshot accepted.', 65)],
     createdAt: minutesAgo(75),
     updatedAt: minutesAgo(65),
   }))
+
+  addProgressEvent(team, 'T001', 'researcher-alpha', 'Found relevant files: teamPanel/layout.ts, teamPanel/viewModel.ts, tests/suites/panel-renderer.cjs.', 20)
+  addProgressEvent(team, 'T001', 'researcher-alpha', longDetailText('Latest progress'), 3)
+  addProgressEvent(team, 'T002', 'planner-alpha', 'Options: compact symbols, words, or details-only. Recommendation: compact rows, words in Details.', 18)
+  addTaskEvent(team, {
+    taskId: 'T003',
+    type: 'owner_removed',
+    by: 'team-lead',
+    minutes: 35,
+    summary: 'Owner removed in a previous test; task returned to open.',
+    data: { source: 'seed_team_panel_current_fixture', memberName: 'removed-seed-worker' },
+  })
+  const alphaBlockedReport = addTaskReport(team, {
+    taskId: 'T002',
+    type: 'report_blocked',
+    author: 'planner-alpha',
+    text: longDetailText('Blocked report'),
+    summary: 'Blocked on compact marker decision',
+    minutes: 12,
+    mailboxMessageId: 'seed-alpha-m1',
+    reportedBlockedBy: ['leader decision on visual density', 'confirm narrow terminal behavior'],
+  })
+  const alphaDoneReport = addTaskReport(team, {
+    taskId: 'T004',
+    type: 'report_done',
+    author: 'implementer-alpha',
+    text: 'Files changed: teamPanel/layout.ts. Checks run: npm test. Validation result: passed.',
+    summary: 'Render regression passed',
+    minutes: 8,
+    mailboxMessageId: 'seed-alpha-m3',
+  })
+  const alphaWriterBlockedReport = addTaskReport(team, {
+    taskId: 'T006',
+    type: 'report_blocked',
+    author: 'writer-alpha',
+    text: 'The writer pane failed to wake. Use this message to verify blocked mail attention and action menu wording.',
+    summary: 'Wake failure needs cleanup decision',
+    minutes: 7,
+    mailboxMessageId: 'seed-alpha-m4',
+    reportedBlockedBy: ['wake failed'],
+  })
+  addProgressEvent(team, 'T005', 'qa-alpha', 'Waiting for leader to decide whether this should be assigned.', 42)
+  addProgressEvent(team, 'T007', 'observer-alpha', 'No action yet.', 70)
+  const alphaReadDoneReport = addTaskReport(team, {
+    taskId: 'T008',
+    type: 'report_done',
+    author: 'reviewer-alpha-long-name',
+    text: 'Visual density snapshot accepted.',
+    summary: 'Already read done report',
+    minutes: 50,
+    mailboxMessageId: 'seed-alpha-m6',
+  })
+  addTaskMessageRef(team, { taskId: 'T002', mailboxMessageId: 'seed-alpha-m1', from: 'planner-alpha', type: 'report_blocked', minutes: 12, summary: 'Blocked on compact marker decision', priority: 'high', reportId: alphaBlockedReport.id })
+  addTaskMessageRef(team, { taskId: 'T001', mailboxMessageId: 'seed-alpha-m2', from: 'researcher-alpha', type: 'question', minutes: 9, summary: 'Need leader decision on Details reader behavior', priority: 'high' })
+  addTaskMessageRef(team, { taskId: 'T004', mailboxMessageId: 'seed-alpha-m3', from: 'implementer-alpha', type: 'report_done', minutes: 8, summary: 'Render regression passed', reportId: alphaDoneReport.id })
+  addTaskMessageRef(team, { taskId: 'T006', mailboxMessageId: 'seed-alpha-m4', from: 'writer-alpha', type: 'report_blocked', minutes: 7, summary: 'Wake failure needs cleanup decision', reportId: alphaWriterBlockedReport.id })
+  addTaskMessageRef(team, { taskId: 'T005', mailboxMessageId: 'seed-alpha-m5', from: 'qa-alpha', type: 'inform', minutes: 6, summary: 'Inform unread low priority', priority: 'low' })
+  addTaskMessageRef(team, { taskId: 'T008', mailboxMessageId: 'seed-alpha-m6', from: 'reviewer-alpha-long-name', type: 'report_done', minutes: 50, summary: 'Already read done report', reportId: alphaReadDoneReport.id })
 
   writeTeam(root, team)
   writeMailbox(root, team.name, 'team-lead', [
@@ -358,7 +500,7 @@ function seedAlpha(root) {
       taskId: 'T001',
       threadId: 'task:T001',
       summary: 'Need leader decision on Details reader behavior',
-      text: 'Should long notes prefer internal /team reader over terminal scrollback? This should stay unread and visible.',
+      text: 'Should long report/progress details prefer internal /team reader over terminal scrollback? This should stay unread and visible.',
       createdAt: minutesAgo(9),
     }),
     message('seed-alpha-m3', {
@@ -408,7 +550,7 @@ function seedAlpha(root) {
       from: 'observer-alpha',
       type: 'inform',
       priority: 'normal',
-      summary: 'Old read observer note',
+      summary: 'Old read observer update',
       text: 'Read Inform used to verify read/unread visual contrast.',
       createdAt: minutesAgo(70),
       deliveredAt: minutesAgo(70),
@@ -447,7 +589,6 @@ function seedBeta(root) {
     status: 'blocked',
     owner: 'planner-beta',
     blockedBy: ['worker exited'],
-    notes: [note('planner-beta', 'Cannot continue because the worker pane is gone.', 170)],
     createdAt: minutesAgo(260),
     updatedAt: minutesAgo(170),
   }))
@@ -467,6 +608,19 @@ function seedBeta(root) {
     createdAt: minutesAgo(245),
     updatedAt: minutesAgo(155),
   }))
+
+  const betaBlockedReport = addTaskReport(team, {
+    taskId: 'T001',
+    type: 'report_blocked',
+    author: 'planner-beta',
+    text: 'Cannot continue because the worker pane is gone.',
+    summary: 'Old team blocked because worker exited',
+    minutes: 150,
+    mailboxMessageId: 'seed-beta-m1',
+    reportedBlockedBy: ['worker exited'],
+  })
+  addTaskMessageRef(team, { taskId: 'T001', mailboxMessageId: 'seed-beta-m1', from: 'planner-beta', type: 'report_blocked', minutes: 150, summary: 'Old team blocked because worker exited', priority: 'high', reportId: betaBlockedReport.id })
+  addTaskMessageRef(team, { taskId: 'T002', mailboxMessageId: 'seed-beta-m2', from: 'qa-beta', type: 'question', minutes: 120, summary: 'Should this old team be recovered?' })
 
   writeTeam(root, team)
   writeMailbox(root, team.name, 'team-lead', [
@@ -509,10 +663,19 @@ function seedGamma(root) {
     description: 'A quiet done task so /team can show Attention OK for one team.',
     status: 'done',
     owner: 'implementer-gamma',
-    notes: [note('implementer-gamma', 'All checks passed.', 3)],
     createdAt: minutesAgo(20),
     updatedAt: minutesAgo(3),
   }))
+  const gammaDoneReport = addTaskReport(team, {
+    taskId: 'T001',
+    type: 'report_done',
+    author: 'implementer-gamma',
+    text: 'All checks passed.',
+    summary: 'Already read done report',
+    minutes: 2,
+    mailboxMessageId: 'seed-gamma-m1',
+  })
+  addTaskMessageRef(team, { taskId: 'T001', mailboxMessageId: 'seed-gamma-m1', from: 'implementer-gamma', type: 'report_done', minutes: 2, summary: 'Already read done report', reportId: gammaDoneReport.id })
   writeTeam(root, team)
   writeMailbox(root, team.name, 'team-lead', [
     message('seed-gamma-m1', {

@@ -2,8 +2,10 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { isOutboxEffectKind } from '../core/outboxModel.js'
 import { isMessageType, isTaskReportType, isTaskStatus } from '../core/publicModel.js'
-import { isTaskNoteDisplayMode, isTaskNoteSourceKind } from '../core/taskNoteModel.js'
+import { TEAM_LEAD, type TaskEventType, type TeamMessagePriority, type TeamMessageType, type TeamMessageWakeHint, type TeamState } from '../internalTypes.js'
 import { readJsonFile, writeJsonFile } from './fsStore.js'
+import { appendTaskMessageRef, compactTaskHistorySummary, formatTaskEventId } from './taskHistory.js'
+import { migrateTaskNotesToHistory, teamHasLegacyTaskNotes } from './taskHistoryMigration.js'
 import {
   getAgentTeamRoot,
   getQuarantineRoot,
@@ -14,7 +16,18 @@ export const QUARANTINE_KIND = 'vnext-unsupported'
 
 const LEGACY_TASK_STATUSES = Object.freeze(['pending', 'in_progress', 'completed'] as const)
 const LEGACY_MESSAGE_TYPES = Object.freeze(['fyi', 'completion_report', 'blocked'] as const)
-const LEGACY_OUTBOX_EFFECT_KINDS = Object.freeze(['leader_triage_requested'] as const)
+const LEGACY_OUTBOX_EFFECT_KINDS = Object.freeze(['leader_triage_requested', 'task_note_append_requested'] as const)
+const TASK_EVENT_TYPES = Object.freeze([
+  'created',
+  'assigned',
+  'blocked',
+  'unblocked',
+  'closed',
+  'owner_removed',
+  'progress',
+  'report_submitted',
+  'migrated',
+] as const satisfies readonly TaskEventType[])
 
 const OLD_LAYOUT_MARKER_KEYS = Object.freeze([
   'layout',
@@ -78,6 +91,26 @@ function teamDirExists(teamName: string): boolean {
   return fs.existsSync(dir) && fs.statSync(dir).isDirectory()
 }
 
+function numberValue(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function messageTypeValue(value: unknown): TeamMessageType | undefined {
+  return isMessageType(value) || isTaskReportType(value) ? value : undefined
+}
+
+function priorityValue(value: unknown): TeamMessagePriority | undefined {
+  return value === 'low' || value === 'normal' || value === 'high' ? value : undefined
+}
+
+function wakeHintValue(value: unknown): TeamMessageWakeHint | undefined {
+  return value === 'none' || value === 'soft' || value === 'hard' ? value : undefined
+}
+
 function reason(input: Omit<StateValidationReason, 'message'> & { message?: string }): StateValidationReason {
   return {
     ...input,
@@ -122,67 +155,34 @@ function pushInvalidTaskStatus(
   }))
 }
 
-function pushInvalidTaskNoteMetadata(
+function pushInvalidReportStatusAtReport(
   reasons: StateValidationReason[],
-  input: { file: string; path: string; metadata: unknown },
+  input: { file: string; path: string; field: string; value: unknown },
 ): void {
-  if (input.metadata === undefined) return
-  if (!isObjectRecord(input.metadata)) {
-    reasons.push(reason({
-      code: 'invalid_task_note_metadata',
-      file: input.file,
-      path: input.path,
-      field: 'metadata',
-      value: input.metadata,
-      message: 'Task note metadata must be an object when present',
-    }))
-    return
-  }
-  const sourceKind = input.metadata.sourceKind
-  if (sourceKind !== undefined && !isTaskNoteSourceKind(sourceKind)) {
-    reasons.push(reason({
-      code: 'unsupported_task_note_source_kind',
-      file: input.file,
-      path: `${input.path}.sourceKind`,
-      field: 'sourceKind',
-      value: sourceKind,
-      message: `Unsupported task note sourceKind ${valueString(sourceKind)} in persisted state`,
-    }))
-  }
-  const displayMode = input.metadata.displayMode
-  if (displayMode !== undefined && !isTaskNoteDisplayMode(displayMode)) {
-    reasons.push(reason({
-      code: 'unsupported_task_note_display_mode',
-      file: input.file,
-      path: `${input.path}.displayMode`,
-      field: 'displayMode',
-      value: displayMode,
-      message: `Unsupported task note displayMode ${valueString(displayMode)} in persisted state`,
-    }))
-  }
-  const linkedIds = input.metadata.linkedIds
-  if (linkedIds !== undefined && !isObjectRecord(linkedIds)) {
-    reasons.push(reason({
-      code: 'invalid_task_note_linked_ids',
-      file: input.file,
-      path: `${input.path}.linkedIds`,
-      field: 'linkedIds',
-      value: linkedIds,
-      message: 'Task note metadata.linkedIds must be an object when present',
-    }))
-  } else if (isObjectRecord(linkedIds)) {
-    for (const [key, value] of Object.entries(linkedIds)) {
-      if (typeof value === 'string') continue
-      reasons.push(reason({
-        code: 'invalid_task_note_linked_id',
-        file: input.file,
-        path: `${input.path}.linkedIds.${key}`,
-        field: key,
-        value,
-        message: 'Task note metadata.linkedIds values must be strings',
-      }))
-    }
-  }
+  if (input.value === 'open' || input.value === 'blocked') return
+  reasons.push(reason({
+    code: 'unsupported_task_report_status_at_report',
+    file: input.file,
+    path: input.path,
+    field: input.field,
+    value: input.value,
+    message: `Unsupported task report statusAtReport ${valueString(input.value)} in persisted state`,
+  }))
+}
+
+function pushInvalidTaskEventType(
+  reasons: StateValidationReason[],
+  input: { file: string; path: string; field: string; value: unknown },
+): void {
+  if (typeof input.value === 'string' && (TASK_EVENT_TYPES as readonly string[]).includes(input.value)) return
+  reasons.push(reason({
+    code: 'unsupported_task_event_type',
+    file: input.file,
+    path: input.path,
+    field: input.field,
+    value: input.value,
+    message: `Unsupported task event type ${valueString(input.value)} in persisted state`,
+  }))
 }
 
 function inspectOldLayoutMarkers(
@@ -224,27 +224,16 @@ export function validatePersistedTeamState(raw: unknown, file = 'team.json'): St
       }
       pushInvalidTaskStatus(reasons, { file, path: `${taskPath}.status`, field: 'status', value: task.status })
       inspectOldLayoutMarkers(reasons, task, { file, path: taskPath })
-
-      const notes = task.notes
-      if (notes === undefined) continue
-      if (!Array.isArray(notes)) {
-        reasons.push(reason({ code: 'invalid_task_notes_shape', file, path: `${taskPath}.notes`, field: 'notes', value: notes, message: `Task ${taskId} notes must be an array` }))
-        continue
+      if ('notes' in task) {
+        reasons.push(reason({
+          code: 'legacy_task_notes',
+          file,
+          path: `${taskPath}.notes`,
+          field: 'notes',
+          value: task.notes,
+          message: `Legacy task.notes for ${taskId} must be migrated to TaskReport/TaskEvent/TaskMessageRef history before active persistence`,
+        }))
       }
-      notes.forEach((note, index) => {
-        if (!isObjectRecord(note)) return
-        pushInvalidMessageType(reasons, {
-          file,
-          path: `${taskPath}.notes[${index}].messageType`,
-          field: 'messageType',
-          value: note.messageType,
-        })
-        pushInvalidTaskNoteMetadata(reasons, {
-          file,
-          path: `${taskPath}.notes[${index}].metadata`,
-          metadata: note.metadata,
-        })
-      })
     }
   }
 
@@ -264,6 +253,51 @@ export function validatePersistedTeamState(raw: unknown, file = 'team.json'): St
         inspectOldLayoutMarkers(reasons, event, { file, path: `$.events[${index}]` })
       }
     })
+  }
+
+  const taskReports = raw.taskReports
+  if (taskReports !== undefined && !isObjectRecord(taskReports)) {
+    reasons.push(reason({ code: 'invalid_task_reports_shape', file, path: '$.taskReports', field: 'taskReports', value: taskReports, message: 'Team state taskReports must be an object when present' }))
+  } else if (isObjectRecord(taskReports)) {
+    for (const [reportId, report] of Object.entries(taskReports)) {
+      const reportPath = `$.taskReports.${reportId}`
+      if (!isObjectRecord(report)) {
+        reasons.push(reason({ code: 'invalid_task_report_shape', file, path: reportPath, field: reportId, value: report, message: `Task report ${reportId} must be an object` }))
+        continue
+      }
+      if (!isTaskReportType(report.type)) {
+        pushInvalidMessageType(reasons, { file, path: `${reportPath}.type`, field: 'type', value: report.type })
+      }
+      pushInvalidReportStatusAtReport(reasons, { file, path: `${reportPath}.statusAtReport`, field: 'statusAtReport', value: report.statusAtReport })
+    }
+  }
+
+  const taskEvents = raw.taskEvents
+  if (taskEvents !== undefined && !isObjectRecord(taskEvents)) {
+    reasons.push(reason({ code: 'invalid_task_events_shape', file, path: '$.taskEvents', field: 'taskEvents', value: taskEvents, message: 'Team state taskEvents must be an object when present' }))
+  } else if (isObjectRecord(taskEvents)) {
+    for (const [eventId, event] of Object.entries(taskEvents)) {
+      const eventPath = `$.taskEvents.${eventId}`
+      if (!isObjectRecord(event)) {
+        reasons.push(reason({ code: 'invalid_task_event_shape', file, path: eventPath, field: eventId, value: event, message: `Task event ${eventId} must be an object` }))
+        continue
+      }
+      pushInvalidTaskEventType(reasons, { file, path: `${eventPath}.type`, field: 'type', value: event.type })
+    }
+  }
+
+  const taskMessageRefs = raw.taskMessageRefs
+  if (taskMessageRefs !== undefined && !isObjectRecord(taskMessageRefs)) {
+    reasons.push(reason({ code: 'invalid_task_message_refs_shape', file, path: '$.taskMessageRefs', field: 'taskMessageRefs', value: taskMessageRefs, message: 'Team state taskMessageRefs must be an object when present' }))
+  } else if (isObjectRecord(taskMessageRefs)) {
+    for (const [refId, ref] of Object.entries(taskMessageRefs)) {
+      const refPath = `$.taskMessageRefs.${refId}`
+      if (!isObjectRecord(ref)) {
+        reasons.push(reason({ code: 'invalid_task_message_ref_shape', file, path: refPath, field: refId, value: ref, message: `Task message ref ${refId} must be an object` }))
+        continue
+      }
+      pushInvalidMessageType(reasons, { file, path: `${refPath}.type`, field: 'type', value: ref.type })
+    }
   }
 
   return reasons
@@ -318,7 +352,7 @@ export function validatePersistedOutbox(raw: unknown, file = 'outbox.json'): Sta
       field: 'kind',
       value: kind,
       message: legacy
-        ? `Legacy outbox effect kind ${kind} is not supported in vNext persisted state`
+        ? `Legacy outbox effect kind ${kind} is not supported in active vNext persisted state`
         : `Unsupported outbox effect kind ${valueString(kind)} in persisted state`,
     }))
   }
@@ -423,8 +457,129 @@ export function quarantineTeamDir(teamName: string, reasons: StateValidationReas
   return record
 }
 
+function appendLegacyOutboxCleanupEvent(team: TeamState, input: { effectId: string; summary: string; at: number; taskId?: string; converted?: boolean }): void {
+  const existing = (team.events ?? []).some(event => event.id === `legacy-outbox-cleanup-${input.effectId}`)
+  if (!existing) {
+    team.events = [
+      ...(team.events ?? []),
+      {
+        id: `legacy-outbox-cleanup-${input.effectId}`,
+        at: input.at,
+        type: 'legacy_outbox_cleanup',
+        by: TEAM_LEAD,
+        text: input.summary,
+        metadata: {
+          source: 'task_note_append_requested_cleanup',
+          effectId: input.effectId,
+          taskId: input.taskId,
+          converted: input.converted,
+        },
+      },
+    ]
+  }
+  if (input.taskId && team.tasks[input.taskId]) {
+    const already = Object.values(team.taskEvents ?? {}).some(event => event.data?.legacyOutboxEffectId === input.effectId)
+    if (!already) {
+      const seq = typeof team.nextTaskEventSeq === 'number' && Number.isFinite(team.nextTaskEventSeq) && team.nextTaskEventSeq >= 1
+        ? Math.floor(team.nextTaskEventSeq)
+        : 1
+      team.nextTaskEventSeq = seq + 1
+      const id = formatTaskEventId(seq)
+      team.taskEvents[id] = {
+        id,
+        taskId: input.taskId,
+        type: 'migrated',
+        by: TEAM_LEAD,
+        at: input.at,
+        summary: compactTaskHistorySummary(input.summary),
+        data: {
+          source: 'legacy_outbox_cleanup',
+          legacyOutboxEffectId: input.effectId,
+          converted: input.converted,
+        },
+      }
+    }
+  }
+}
+
+function migrateLegacyTaskNoteOutboxEffects(team: TeamState, rawOutbox: unknown, outboxPath: string, now: number): boolean {
+  if (!isObjectRecord(rawOutbox)) return false
+  const effects = isObjectRecord(rawOutbox.effects) ? rawOutbox.effects : {}
+  let changed = false
+  for (const [effectId, rawEffect] of Object.entries(effects)) {
+    if (!isObjectRecord(rawEffect) || rawEffect.kind !== 'task_note_append_requested') continue
+    const payload = isObjectRecord(rawEffect.payload) ? rawEffect.payload : {}
+    const details = isObjectRecord(payload.details) ? payload.details : {}
+    const metadata = isObjectRecord(details.metadata) ? details.metadata : {}
+    const taskId = stringValue(payload.taskId)
+    const mailboxMessageId = stringValue(details.linkedMessageId) ?? stringValue(metadata.linkedMailboxMessageId)
+    const createdAt = numberValue(rawEffect.createdAt, now)
+    let converted = false
+    if (taskId && team.tasks[taskId] && mailboxMessageId) {
+      appendTaskMessageRef(team, {
+        taskId,
+        mailboxMessageId,
+        from: stringValue(metadata.from) ?? stringValue(payload.author) ?? TEAM_LEAD,
+        to: stringValue(metadata.to) ?? TEAM_LEAD,
+        type: messageTypeValue(details.messageType) ?? messageTypeValue(metadata.messageType) ?? 'inform',
+        createdAt,
+        threadId: stringValue(details.threadId) ?? stringValue(metadata.threadId),
+        summary: stringValue(metadata.summary),
+        priority: priorityValue(metadata.priority),
+        wakeHint: wakeHintValue(metadata.wakeHint),
+        diagnostic: true,
+        metadata: {
+          source: 'legacy_task_note_outbox_migration',
+          legacyOutboxEffectId: effectId,
+          compact: true,
+        },
+      })
+      converted = true
+    }
+    appendLegacyOutboxCleanupEvent(team, {
+      effectId,
+      taskId,
+      at: createdAt,
+      converted,
+      summary: converted
+        ? `Migrated legacy task_note_append_requested outbox effect ${effectId} to TaskMessageRef`
+        : `Removed unsupported legacy task_note_append_requested outbox effect ${effectId}`,
+    })
+    delete effects[effectId]
+    if (isObjectRecord(rawOutbox.idempotency)) {
+      for (const [key, value] of Object.entries(rawOutbox.idempotency)) {
+        if (value === effectId) delete rawOutbox.idempotency[key]
+      }
+    }
+    changed = true
+  }
+  if (changed) writeJsonFile(outboxPath, rawOutbox)
+  return changed
+}
+
+function migrateLegacyPersistedStateBeforeValidation(teamName: string, now: number): void {
+  const teamDir = activeTeamDir(teamName)
+  const statePath = path.join(teamDir, 'team.json')
+  const outboxPath = path.join(teamDir, 'outbox.json')
+  const rawState = fs.existsSync(statePath) ? readJsonFile<unknown>(statePath) : null
+  let team: TeamState | null = null
+  let stateChanged = false
+  if (rawState && teamHasLegacyTaskNotes(rawState)) {
+    team = migrateTaskNotesToHistory(rawState).team
+    stateChanged = true
+  } else if (rawState && isObjectRecord(rawState)) {
+    team = rawState as TeamState
+  }
+  if (team && fs.existsSync(outboxPath)) {
+    const rawOutbox = readJsonFile<unknown>(outboxPath)
+    if (migrateLegacyTaskNoteOutboxEffects(team, rawOutbox, outboxPath, now)) stateChanged = true
+  }
+  if (team && stateChanged) writeJsonFile(statePath, team)
+}
+
 export function validateOrQuarantineTeam(teamName: string, now = Date.now()): QuarantineRecord | null {
   if (!teamDirExists(teamName)) return null
+  migrateLegacyPersistedStateBeforeValidation(teamName, now)
   const reasons = validatePersistedTeamDir(teamName)
   if (reasons.length === 0) return null
   return quarantineTeamDir(teamName, reasons, now)

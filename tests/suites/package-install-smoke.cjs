@@ -35,7 +35,7 @@ module.exports = {
 
     const files = pkg.files || []
     const packedFiles = packedFileList(root)
-    assert.equal(pkg.version, '0.6.1', 'release package version should match approved v0.6.1 target')
+    assert.equal(pkg.version, '0.6.2', 'release package version should match approved v0.6.2 target')
     assert.equal(pkg.scripts?.test, 'node tests/run.cjs')
     assert.equal(pkg.scripts?.typecheck, 'tsc --noEmit -p tsconfig.json')
     assert.equal(pkg.scripts?.['check:boundaries'], 'node scripts/check-import-boundaries.cjs')
@@ -168,6 +168,8 @@ module.exports = {
       'tools/taskPolicy.ts',
       'tools/taskActionability.ts',
       'runtime/teamSideEffects.ts',
+      'core/taskNoteModel.ts',
+      'state/taskNotes.ts',
       'docs/release-checklist.md',
       'docs/testing-real-experience.md',
     ]
@@ -186,7 +188,8 @@ module.exports = {
       'adapters/tmux/index.ts',
       'runtime/bridgeRequest.ts',
       'state/teamStore.ts',
-      'state/taskNotes.ts',
+      'state/taskHistory.ts',
+      'state/taskHistoryMigration.ts',
       'tools/team.ts',
       'commands/team.ts',
       'agents/implementer.md',
@@ -297,14 +300,17 @@ module.exports = {
     const plannerPrompt = fs.readFileSync(path.join(root, 'agents/planner.md'), 'utf8')
     assert.ok(plannerPrompt.includes('not a second leader'), 'planner prompt should preserve advisory role')
     assert.ok(plannerPrompt.includes('Do not create downstream execution tasks by default'), 'planner should not own downstream task creation by default')
-    assert.ok(plannerPrompt.includes('Only create or note task-board decomposition when team-lead explicitly asks'), 'planner task-board decomposition should be explicit')
+    assert.ok(plannerPrompt.includes('Only create task-board decomposition when team-lead explicitly asks'), 'planner task-board decomposition should be explicit')
     assert.ok(plannerPrompt.includes('leader-created actionable planning task'), 'planner should require leader-created planning work')
     assert.ok(plannerPrompt.includes('Peer inform/handoff can inform later planning'), 'planner should treat peer handoff as context only')
     assert.ok(plannerPrompt.includes('report-only and does not close the task until team-lead reviews it'), 'planner close should be report-only by default')
 
     const workerPrompt = fs.readFileSync(path.join(root, 'tools/workerPrompt.ts'), 'utf8')
     assert.ok(workerPrompt.includes('report-only and does not close the task until leader review'), 'worker prompt should describe non-leader close as report-only')
-    assert.ok(workerPrompt.includes('notes are task-local memory and do not notify team-lead'), 'worker prompt should describe notes as local memory')
+    assert.ok(workerPrompt.includes('Task facts are concise shared state'), 'worker prompt should describe concise task facts')
+    assert.ok(workerPrompt.includes('durable TaskReport artifacts and owner-to-leader action requests'), 'worker prompt should make reports the durable completion/blocker artifact')
+    assert.ok(workerPrompt.includes('Task progress/history is compact local activity only and does not notify team-lead'), 'worker prompt should describe progress/history as non-notifying local activity')
+    assert.equal(workerPrompt.includes('task-local notes'), false, 'worker prompt should not recommend task-local notes as primary workflow')
     assert.ok(workerPrompt.includes('compact wake/projection prompts are reminders, not the full message body'), 'worker prompt should keep receive as full-text boundary')
     assert.ok(workerPrompt.includes('same-task assigned task facts with task-bound mailbox messages'), 'worker prompt should document same-task prompt merge')
     assert.ok(workerPrompt.includes('Planner advisory gate'), 'worker prompt should include planner advisory gate')
@@ -317,14 +323,18 @@ module.exports = {
     assert.ok(taskToolSource.includes('planner is advisory by default'), 'task tool guidelines should identify planner as advisory')
     assert.ok(taskToolSource.includes('Blocked tasks are non-actionable'), 'task tool guidelines should mention blocked hard gate')
     assert.ok(taskToolSource.includes('sequential leader-gated tasks'), 'task tool guidelines should describe sequential chain delegation')
-    assert.ok(taskToolSource.includes('task-local memory only'), 'task tool guidelines should document note as task-local memory')
-    assert.ok(taskToolSource.includes('owner-to-leader action request'), 'task tool guidelines should document report actions as owner-to-leader requests')
+    assert.ok(taskToolSource.includes('action=progress records compact TaskEvent progress/history only'), 'task tool guidelines should document progress as compact local activity')
+    assert.equal(taskToolSource.includes('action=note'), false, 'task tool should not promote public action=note')
+    assert.ok(taskToolSource.includes('TaskEvent progress/activity'), 'task tool guidelines should document compact task progress/history')
+    assert.ok(taskToolSource.includes('TaskMessageRef indexes'), 'task tool guidelines should document no-body task message refs')
+    assert.ok(taskToolSource.includes('durable TaskReport'), 'task tool guidelines should document report actions as durable TaskReports')
 
     const messageToolSource = fs.readFileSync(path.join(root, 'tools/message.ts'), 'utf8')
     assert.ok(messageToolSource.includes('research→planning chains'), 'message tool guidelines should describe research-to-planning chains')
     assert.ok(messageToolSource.includes('do not let worker inform messages drive planner work directly'), 'message tool guidelines should prevent peer-driven planner work')
     assert.ok(messageToolSource.includes('mailbox remains source of truth'), 'message tool guidelines should document mailbox source of truth')
-    assert.ok(messageToolSource.includes('worker-to-worker diagnostics are hidden audit/index metadata and do not copy the full body'), 'message tool guidelines should document peer diagnostic refs')
+    assert.ok(messageToolSource.includes('worker-to-worker diagnostics are compact no-body audit/index metadata'), 'message tool guidelines should document no-body peer diagnostic refs')
+    assert.equal(messageToolSource.includes('shared task notes'), false, 'message tool should not recommend shared task notes for long artifacts')
     assert.ok(messageToolSource.includes('full-text mailbox read boundary'), 'receive tool description should document full-text boundary')
     assert.ok(messageToolSource.includes('Multi-message human output is compactly grouped by task/thread'), 'receive tool description should document folded multi-message human output')
 
@@ -339,20 +349,27 @@ module.exports = {
     assert.ok(readme.includes('leader reviews attention signals and explicitly starts downstream work'), 'README feature table should preserve leader-reviewed downstream work')
     assert.ok(!readme.includes('Workers coordinate directly (researcher → planner) without going through the leader'), 'README must not reintroduce direct peer-driven researcher-to-planner feature row')
     assert.ok(!readme.includes('without going through the leader'), 'README must not imply peer handoff bypasses leader attention')
-    assert.ok(readme.includes('Peer `inform` handoffs are mailbox communication plus hidden task audit refs/diagnostic event refs only'), 'README should document peer inform no-wake handoff semantics')
+    assert.ok(readme.includes('Peer `inform` handoffs are mailbox communication plus compact `TaskMessageRef` task audit refs/diagnostic event refs only'), 'README should document peer inform no-wake handoff semantics')
     assert.ok(readme.includes('diagnostic refs are compact, do not copy the full body'), 'README should document compact peer diagnostic refs')
     assert.ok(readme.includes('Bounded leader attention means one compact native leader wake'), 'README should document compact bounded leader attention')
     assert.ok(readme.includes('Outbox effect kind is `leader_attention_requested`'), 'README should document the renamed durable leader attention effect in diagnostics')
+    assert.ok(readme.includes('Task-bound send indexing uses `task_message_ref_append_requested`'), 'README should document TaskMessageRef outbox effect')
+    assert.ok(readme.includes('Legacy pending `task_note_append_requested` effects are migrated/cleaned before validation when possible; otherwise unsupported legacy state is quarantined'), 'README should document legacy task-note outbox cleanup/quarantine')
     assert.ok(readme.includes('using `leader_triage_requested` have no compatibility path'), 'README should document that old leader triage effects are not compatible')
     assert.ok(readme.includes('quarantine as unsupported legacy state instead of being normalized or executed'), 'README should document old leader triage effect quarantine semantics')
     assert.ok(readme.includes('`inform` never requests leader attention'), 'README should document inform no leader attention')
     assert.ok(readme.includes('`report_done` and `report_blocked` are task-report outcomes, not `agentteam_send` types'), 'README should document task reports instead of send report types')
     assert.ok(readme.includes('only for tasks they own; non-owners should use `inform` or `question` for context'), 'README should document owner-only non-leader task reports')
-    assert.ok(readme.includes('`agentteam_task action=note` appends task-local memory only'), 'README should document notes as task-local memory')
+    assert.ok(readme.includes('`agentteam_task action=progress` records compact local TaskEvent progress/history only'), 'README should document progress as compact local activity')
+    assert.equal(readme.includes('action=note'), false, 'README should not document active or deprecated note actions after no-notes cleanup')
+    assert.ok(readme.includes('TaskReport/TaskEvent/TaskMessageRef history queries'), 'README should document task history query model')
     assert.ok(readme.includes('Projection and attention are reminders/wake signals'), 'README should document compact projection/attention reminders')
-    assert.ok(readme.includes('hidden communication ref for audit/indexing'), 'README should document hidden communication refs')
-    assert.ok(readme.includes('`sourceKind=communication_ref`, `displayMode=hidden`, and `linkedIds.mailboxMessageId`'), 'README should document formal internal communication ref metadata shape')
-    assert.ok(readme.includes('`/team` folds these refs by default and may show only a compact ref count'), 'README should document panel ref folding behavior')
+    assert.ok(readme.includes('compact `TaskMessageRef` audit/index rows'), 'README should document TaskMessageRef audit refs')
+    assert.ok(readme.includes('new task-bound sends produce zero hidden communication-ref notes'), 'README should document no new hidden communication-ref notes')
+    assert.ok(readme.includes('Legacy `task.notes` are migrated into TaskReport/TaskEvent/TaskMessageRef history and removed from active state'), 'README should document legacy note migration/removal')
+    assert.ok(readme.includes('`/team` now shows compact TaskReport/TaskEvent/TaskMessageRef summaries and counts'), 'README should document panel task-history summaries')
+    assert.equal(readme.includes('legacy note refs may appear only as de-emphasized compatibility diagnostics'), false, 'README should not describe legacy note refs as active panel diagnostics')
+    assert.ok(readme.includes('does **not** focus tmux panes, perform task/message CRUD, or mark mailbox items delivered/read'), 'README should document panel read-only mailbox boundary')
     assert.ok(readme.includes('Unread blocked reports appear as panel attention; after the report mailbox item is read'), 'README should document read blocked-report attention cleanup')
     assert.ok(readme.includes('same-task assigned task facts and task-bound mailbox messages are merged'), 'README should document same-task worker prompt dedupe')
     assert.ok(readme.includes('full-text read boundary'), 'README should document receive full-text boundary')
@@ -398,12 +415,15 @@ module.exports = {
     const messageTool = env.pi.__tools.get('agentteam_send')
     assert.deepEqual(messageTool.parameters.o.type.v.enum, ['assignment', 'question', 'inform'])
     assert.deepEqual(messageTool.parameters.o.priority.v.enum, ['low', 'normal', 'high'])
+    assert.ok(messageTool.promptSnippet.includes('TaskMessageRef'), 'send tool should document task-bound refs as TaskMessageRef-backed')
 
     const taskTool = env.pi.__tools.get('agentteam_task')
-    assert.deepEqual(taskTool.parameters.o.action.enum, ['create', 'assign', 'block', 'unblock', 'close', 'note', 'report_done', 'report_blocked', 'list'])
+    assert.deepEqual(taskTool.parameters.o.action.enum, ['create', 'assign', 'block', 'unblock', 'close', 'progress', 'report_done', 'report_blocked', 'list', 'show', 'history', 'reports', 'report'])
     assert.deepEqual(taskTool.parameters.o.status.v.enum, ['open', 'blocked', 'done'])
+    assert.equal(taskTool.parameters.o.reportId.kind, 'optional')
     assert.equal(taskTool.parameters.o.limit.kind, 'optional')
     assert.equal(taskTool.parameters.o.all.kind, 'optional')
+    assert.equal(taskTool.parameters.o.includeMessages.kind, 'optional')
 
     assert.deepEqual([...env.pi.__commands.keys()].filter(name => name.startsWith('team')), ['team'])
   },

@@ -114,7 +114,7 @@ export function buildWorkerTurnPrompt(
     sections.push(`Instruction: ${oneLine(explicitInstruction)}`)
   }
   if (hasAssignmentMessage(actionableUnreadMessages) || hasExplicitWorkTrigger || hasAssignedTaskTrigger) {
-    sections.push('Do the work now. Use task-local notes for progress, agentteam_send type=inform/question for communication, agentteam_task action=report_done when finished, and report_blocked if blocked.')
+    sections.push('Do the work now. Use agentteam_send type=inform/question for directed communication, agentteam_task action=report_done for the durable completion report when finished, and report_blocked if blocked. Progress/history is compact local activity only and does not notify team-lead.')
   } else if (hasQuestionMessage(actionableUnreadMessages)) {
     sections.push('Answer/respond to the question now. Do not start unrelated task work unless team-lead explicitly assigned it.')
   }

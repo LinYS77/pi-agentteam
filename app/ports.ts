@@ -1,10 +1,11 @@
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import type {
   MailboxMessage,
-  TeamMessageType,
   TeamState,
+  TaskEvent,
+  TaskMessageRef,
+  TaskReport,
   TeamTask,
-  TeamTaskNote,
 } from '../internalTypes.js'
 import type {
   OutboxClaimInput,
@@ -34,23 +35,40 @@ export type CreateTaskInput = {
   owner?: string
 }
 
-export type StructuredTaskNoteDetails = {
-  threadId?: string
-  messageType?: TeamMessageType
-  requestId?: string
-  linkedMessageId?: string
-  metadata?: Record<string, unknown>
-  hidden?: boolean
+export type AppendTaskEventInput = Omit<TaskEvent, 'id'>
+export type AppendTaskReportInput = Omit<TaskReport, 'id' | 'reportOnly'>
+export type UpdateTaskReportInput = Partial<Omit<TaskReport, 'id' | 'taskId'>>
+export type AppendTaskMessageRefInput = Omit<TaskMessageRef, 'id'>
+
+export type TaskHistoryCounts = {
+  reports: number
+  events: number
+  messageRefs: number
+}
+
+export type TaskHistorySummary = TaskHistoryCounts & {
+  taskId: string
+  latestReport?: TaskReport
+  latestActivity?: TaskReport | TaskEvent | TaskMessageRef
+}
+
+export type TaskHistoryQueryPort = {
+  taskReportsForTask(team: TeamState, taskId: string): TaskReport[]
+  taskEventsForTask(team: TeamState, taskId: string): TaskEvent[]
+  taskMessageRefsForTask(team: TeamState, taskId: string): TaskMessageRef[]
+  latestTaskReport(team: TeamState, taskId: string): TaskReport | undefined
+  latestTaskActivity(team: TeamState, taskId: string): TaskReport | TaskEvent | TaskMessageRef | undefined
+  taskHistoryCounts(team: TeamState, taskId: string): TaskHistoryCounts
+  taskHistorySummary(team: TeamState, taskId: string): TaskHistorySummary
+  findTaskReport(team: TeamState, reportId: string): TaskReport | undefined
 }
 
 export type TaskMutationPort = {
   createTask(team: TeamState, input: CreateTaskInput): TeamTask
-  appendStructuredTaskNote(
-    task: TeamTask,
-    author: string,
-    text: string,
-    details?: StructuredTaskNoteDetails,
-  ): TeamTaskNote | void
+  appendTaskEvent(team: TeamState, input: AppendTaskEventInput): TaskEvent
+  appendTaskReport(team: TeamState, input: AppendTaskReportInput): TaskReport
+  updateTaskReport(team: TeamState, reportId: string, patch: UpdateTaskReportInput): TaskReport | undefined
+  appendTaskMessageRef(team: TeamState, input: AppendTaskMessageRefInput): TaskMessageRef
 }
 
 export type MailboxRepositoryPort = {
@@ -92,7 +110,7 @@ export type OutboxEffectHandlers = {
   inbox_item_append_requested: OutboxEffectHandler<'inbox_item_append_requested'>
   worker_delivery_requested: OutboxEffectHandler<'worker_delivery_requested'>
   leader_attention_requested: OutboxEffectHandler<'leader_attention_requested'>
-  task_note_append_requested: OutboxEffectHandler<'task_note_append_requested'>
+  task_message_ref_append_requested: OutboxEffectHandler<'task_message_ref_append_requested'>
   append_event_requested: OutboxEffectHandler<'append_event_requested'>
 }
 

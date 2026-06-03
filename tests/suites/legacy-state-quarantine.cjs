@@ -134,7 +134,13 @@ function createFreshTeam(modules, teamName) {
   })
   const task = modules.state.createTask(team, { title: 'Fresh vNext task', description: 'loads normally', owner: 'fresh-worker' })
   task.status = 'open'
-  task.notes.push({ at: Date.now(), author: 'team-lead', text: 'fresh note', messageType: 'inform' })
+  modules.state.appendTaskEvent(team, {
+    taskId: task.id,
+    type: 'progress',
+    by: 'team-lead',
+    summary: 'fresh progress',
+    at: Date.now(),
+  })
   modules.state.writeTeamState(team)
   modules.state.pushMailboxMessage(team.name, 'team-lead', {
     from: 'fresh-worker',
@@ -193,9 +199,9 @@ module.exports = {
       assert.ok(reasonTuples.some(item => item[0] === 'legacy_task_status' && item[2] === '$.tasks.T001.status' && item[4] === 'completed'))
       assert.ok(reasonTuples.some(item => item[0] === 'legacy_task_status' && item[2] === '$.tasks.T002.status' && item[4] === 'in_progress'))
       assert.ok(reasonTuples.some(item => item[0] === 'legacy_task_status' && item[2] === '$.tasks.T003.status' && item[4] === 'pending'))
-      assert.ok(reasonTuples.some(item => item[0] === 'legacy_message_type' && item[2] === '$.tasks.T001.notes[0].messageType' && item[4] === 'completion_report'))
-      assert.ok(reasonTuples.some(item => item[0] === 'legacy_message_type' && item[2] === '$.tasks.T002.notes[0].messageType' && item[4] === 'fyi'))
-      assert.ok(reasonTuples.some(item => item[0] === 'legacy_message_type' && item[2] === '$.tasks.T003.notes[0].messageType' && item[4] === 'blocked'))
+      assert.ok(reasonTuples.some(item => item[0] === 'legacy_task_notes' && item[2] === '$.tasks.T001.notes'))
+      assert.ok(reasonTuples.some(item => item[0] === 'legacy_task_notes' && item[2] === '$.tasks.T002.notes'))
+      assert.ok(reasonTuples.some(item => item[0] === 'legacy_task_notes' && item[2] === '$.tasks.T003.notes'))
       assert.ok(reasonTuples.some(item => item[0] === 'legacy_message_type' && item[1] === path.join('mailboxes', 'team-lead.json') && item[4] === 'fyi'))
       assert.ok(reasonTuples.some(item => item[0] === 'legacy_message_type' && item[1] === path.join('mailboxes', 'team-lead.json') && item[4] === 'blocked'))
 

@@ -29,15 +29,15 @@ export function registerMessageTools(pi: ExtensionAPI, deps: ToolHandlerDeps): v
     name: 'agentteam_send',
     label: 'AgentTeam Send',
     description: 'Send typed communication to one teammate, a task owner, or explicit broadcast within the current team.',
-    promptSnippet: 'Send typed coordination messages such as assignment, question, or inform within the current team. Inform is context-only and does not wake by default. When taskId has an owner, to can be omitted for safe task-based routing. Task-bound sends keep the mailbox as source of truth and add only hidden audit refs/diagnostics.',
+    promptSnippet: 'Send typed coordination messages such as assignment, question, or inform within the current team. Inform is context-only and does not wake by default. When taskId has an owner, to can be omitted for safe task-based routing. Task-bound sends keep the mailbox as source of truth and add compact TaskMessageRef audit refs/diagnostics.',
     promptGuidelines: [
       'Use agentteam_send after creating or assigning a shared task so the message can reference taskId when possible.',
       'For research→planning chains, leader should send the research assignment first, review the researcher report, then send a separate planner assignment/question with its own taskId; do not let worker inform messages drive planner work directly.',
       'When sending from leader about an owned task, you may omit to and let taskId route to the task owner; when the owner reports back on their task, omitting to routes to team-lead.',
       'Specify to when overriding task-owner routing; use to="*" only for intentional broadcast to everyone else.',
       'Use agentteam_send with type assignment for direct delegation, question for clarification, and inform for context-only handoffs.',
-      'Task-bound agentteam_send is communication, not a task note: recipient mailbox remains source of truth; linked task refs and worker-to-worker diagnostics are hidden audit/index metadata and do not copy the full body.',
-      'Prefer concise summaries in agentteam_send and keep long artifacts in shared task notes or files.',
+      'Task-bound agentteam_send is directed communication, not task history: recipient mailbox remains source of truth; TaskMessageRef rows and worker-to-worker diagnostics are compact no-body audit/index metadata.',
+      'Prefer concise summaries in agentteam_send; put completion/blocker artifacts in report_done/report_blocked TaskReports or project files, not task-bound message refs.',
     ],
     parameters: TeamSendParams,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

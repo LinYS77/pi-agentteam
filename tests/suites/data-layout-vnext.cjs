@@ -60,7 +60,13 @@ function vnextTeamFixture(modules, teamName) {
     },
     tasks: {},
     events: [],
+    taskReports: {},
+    taskEvents: {},
+    taskMessageRefs: {},
     nextTaskSeq: 1,
+    nextTaskReportSeq: 1,
+    nextTaskEventSeq: 1,
+    nextTaskMessageRefSeq: 1,
     revision: 1,
     memberTombstones: {},
   }
