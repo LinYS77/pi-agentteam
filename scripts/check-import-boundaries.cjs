@@ -172,15 +172,101 @@ const completedPortBoundaryRules = [
   },
   {
     rel: 'app/taskApplication.ts',
-    forbiddenImportTargets: ['state/outboxStore.ts', 'state/taskNotes.ts', 'state/taskStore.ts', 'state/teamStore.ts'],
+    allowedImportTargets: [
+      'app/taskPermissions.ts',
+      'app/taskMutationCommands.ts',
+      'app/taskReadCommands.ts',
+      'app/taskReportWorkflow.ts',
+      'app/taskSideEffects.ts',
+      'app/types.ts',
+      'app/taskTypes.ts',
+    ],
+    forbiddenImportTargets: [
+      'core/taskReducer.ts',
+      'state/taskHistoryReadModel.ts',
+      'state/outboxStore.ts',
+      'state/taskNotes.ts',
+      'state/taskStore.ts',
+      'state/teamStore.ts',
+      'app/messageApplication.ts',
+      'app/effectRunner.ts',
+      'app/outbox.ts',
+      'app/taskCommandShared.ts',
+    ],
     forbiddenText: [
       { token: 'appendStructuredTaskNote', message: 'must not append active TeamTask.notes from taskApplication' },
       { token: '../core/taskNoteModel.js', message: 'must not build task-note metadata in active taskApplication workflow' },
+      { token: 'deps.outboxStore.enqueue', message: 'must delegate task-local side-effect execution to app/taskSideEffects' },
+      { token: 'runOutboxOnce', message: 'must delegate task-local side-effect execution to app/taskSideEffects' },
+      { token: 'planTaskReportEffects', message: 'must delegate task-local side-effect execution to app/taskSideEffects' },
+      { token: 'deps.teamState.updateTeam', message: 'must delegate report mailbox delivery state updates to app/taskSideEffects' },
+      { token: 'transitionTask', message: 'must delegate reducer transitions to task mutation/report workflow modules' },
+      { token: 'compactTaskHistorySummary', message: 'must delegate compact task history rendering to read/report modules' },
+      { token: 'taskHistoryTimelineItems', message: 'must delegate task history reads to taskReadCommands' },
+      { token: 'taskReportsForTask', message: 'must delegate task report reads to taskReadCommands' },
+      { token: 'appendTaskReportHistory', message: 'must delegate report artifact creation to taskReportWorkflow' },
+      { token: 'appendTaskEventHistory', message: 'must delegate task event creation to command modules' },
+      { token: 'function denyNonOwnerReport', message: 'must delegate report owner governance to taskReportWorkflow' },
+      { token: 'function handleTaskApplicationSideEffects', message: 'must delegate side-effect execution to taskSideEffects' },
+      { token: 'function runTaskOutboxEffects', message: 'must delegate side-effect execution to taskSideEffects' },
+    ],
+    requiredText: [
+      { token: './taskPermissions.js', message: 'must delegate permissions to app/taskPermissions' },
+      { token: './taskReadCommands.js', message: 'must delegate read commands to app/taskReadCommands' },
+      { token: './taskMutationCommands.js', message: 'must delegate mutation commands to app/taskMutationCommands' },
+      { token: './taskReportWorkflow.js', message: 'must delegate report workflow to app/taskReportWorkflow' },
+      { token: './taskSideEffects.js', message: 'must delegate task-local side effects to app/taskSideEffects' },
+      { token: 'handleTaskApplicationSideEffects', message: 'must run task-local side effects through extracted module' },
+      { token: 'executeTaskApplication', message: 'must expose the public task application use-case' },
+    ],
+  },
+  {
+    rel: 'app/taskMutationCommands.ts',
+    forbiddenImportTargets: ['state/outboxStore.ts', 'state/taskNotes.ts', 'state/taskStore.ts', 'state/teamStore.ts'],
+    forbiddenImportPrefixes: ['runtime/', 'adapters/', 'tmux/'],
+    forbiddenText: [
+      { token: 'appendStructuredTaskNote', message: 'must not append active TeamTask.notes from task mutation commands' },
+      { token: '../core/taskNoteModel.js', message: 'must not build task-note metadata in active task mutation commands' },
+    ],
+    requiredText: [
+      { token: 'deps.teamState.updateTeam', message: 'must mutate team state through injected teamState port' },
+      { token: 'deps.taskMutations.createTask', message: 'must create tasks through injected task mutation port' },
+    ],
+  },
+  {
+    rel: 'app/taskReportWorkflow.ts',
+    forbiddenImportTargets: ['state/outboxStore.ts', 'state/taskNotes.ts', 'state/taskStore.ts', 'state/teamStore.ts'],
+    forbiddenImportPrefixes: ['runtime/', 'adapters/', 'tmux/'],
+    forbiddenText: [
+      { token: 'appendStructuredTaskNote', message: 'must not append active TeamTask.notes from task report workflow' },
+      { token: '../core/taskNoteModel.js', message: 'must not build task-note metadata in active task report workflow' },
+      { token: 'deps.outboxStore.enqueue', message: 'must leave task report side-effect execution in taskSideEffects' },
+      { token: 'runOutboxOnce', message: 'must leave task report side-effect execution in taskSideEffects' },
+      { token: 'planTaskReportEffects', message: 'must leave task report side-effect execution in taskSideEffects' },
+    ],
+    requiredText: [
+      { token: 'deps.teamState.updateTeam', message: 'must mutate report workflow artifacts through injected teamState port' },
+      { token: 'appendTaskReportHistory', message: 'must append TaskReport artifacts through shared helper' },
+      { token: "type: 'report_submitted'", message: 'must append report_submitted TaskEvent artifacts' },
+    ],
+  },
+  {
+    rel: 'app/taskSideEffects.ts',
+    forbiddenImportTargets: ['state/outboxStore.ts', 'state/taskNotes.ts', 'state/taskStore.ts', 'state/teamStore.ts'],
+    forbiddenImportPrefixes: ['runtime/', 'adapters/', 'tmux/'],
+    forbiddenText: [
+      { token: 'appendStructuredTaskNote', message: 'must not append active TeamTask.notes from task side effects' },
+      { token: '../core/taskNoteModel.js', message: 'must not build task-note metadata in task side effects' },
+      { token: "kind: 'task_message_ref_append_requested'", message: 'must not introduce TaskMessageRef effects in task side effects' },
     ],
     requiredText: [
       { token: 'deps.outboxStore.enqueue', message: 'must enqueue durable effects through injected outboxStore port' },
-      { token: 'deps.teamState.updateTeam', message: 'must mutate team state through injected teamState port' },
-      { token: 'deps.taskMutations.createTask', message: 'must create tasks through injected task mutation port' },
+      { token: 'runOutboxOnce', message: 'must run task-local outbox effects through injected runner helper' },
+      { token: "workerId: 'task-application'", message: 'must preserve task application outbox worker id' },
+      { token: '`mailbox-${effectId}`', message: 'must preserve deterministic task mailbox id' },
+      { token: 'planTaskReportEffects', message: 'must preserve task report leader attention planning' },
+      { token: 'deps.teamState.updateTeam', message: 'must update report mailboxMessageId through injected teamState port' },
+      { token: 'deps.taskMutations.updateTaskReport', message: 'must update TaskReport mailboxMessageId through injected task mutation port' },
     ],
   },
   {
@@ -288,6 +374,9 @@ function completedPortBoundaryViolations(rel, file, text) {
     const target = normalizedImportTarget(file, specifier)
     if (!target) continue
     const targetRel = path.relative(root, target).replace(/\\/g, '/')
+    if (rule.allowedImportTargets && !rule.allowedImportTargets.includes(targetRel)) {
+      out.push(`${rel}: must not import ${targetRel}; facade should delegate only to approved extracted modules`)
+    }
     if ((rule.forbiddenImportTargets ?? []).includes(targetRel)) {
       out.push(`${rel}: must not import ${targetRel}; use injected port/dependency boundary`)
     }

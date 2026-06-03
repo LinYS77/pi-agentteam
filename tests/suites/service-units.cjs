@@ -20,6 +20,11 @@ module.exports = {
     const messageApplication = env.helpers.requireDist('app/messageApplication.js')
     const messageReceiveApplication = env.helpers.requireDist('app/messageReceiveApplication.js')
     const taskApplication = env.helpers.requireDist('app/taskApplication.js')
+    const taskPermissions = env.helpers.requireDist('app/taskPermissions.js')
+    const taskReadCommands = env.helpers.requireDist('app/taskReadCommands.js')
+    const taskMutationCommands = env.helpers.requireDist('app/taskMutationCommands.js')
+    const taskReportWorkflow = env.helpers.requireDist('app/taskReportWorkflow.js')
+    const taskSideEffects = env.helpers.requireDist('app/taskSideEffects.js')
     const taskFormatting = env.helpers.requireDist('app/taskFormatting.js')
     const corePublicModel = env.helpers.requireDist('core/publicModel.js')
     const coreMessagePolicy = env.helpers.requireDist('core/messagePolicy.js')
@@ -213,29 +218,168 @@ module.exports = {
     assert.ok(!taskServiceSource.includes('enqueueOutboxEffect'), 'task service should not plan durable task side effects')
     const appTaskSource = env.helpers.readSource('app/taskApplication.ts')
     const appTaskTypesSource = env.helpers.readSource('app/taskTypes.ts')
+    const appTaskPermissionsSource = env.helpers.readSource('app/taskPermissions.ts')
+    const appTaskReadCommandsSource = env.helpers.readSource('app/taskReadCommands.ts')
+    const appTaskMutationCommandsSource = env.helpers.readSource('app/taskMutationCommands.ts')
+    const appTaskReportWorkflowSource = env.helpers.readSource('app/taskReportWorkflow.ts')
+    const appTaskSideEffectsSource = env.helpers.readSource('app/taskSideEffects.ts')
+    const appTaskCommandSharedSource = env.helpers.readSource('app/taskCommandShared.ts')
     const taskDepsBlock = appTypesSource.slice(appTypesSource.indexOf('export type TaskApplicationDeps'))
     assert.equal(appTaskSource.includes('ExtensionContext'), false, 'app task boundary should not mention Pi ExtensionContext')
     assert.equal(appTaskSource.includes('@earendil-works/pi-coding-agent'), false, 'app task boundary should not import Pi APIs')
     assert.equal(appTaskSource.includes('ensureTeamForSession('), false, 'app task boundary should not resolve team/session context')
     assert.equal(appTaskSource.includes('currentActor('), false, 'app task boundary should not resolve actor context')
     assert.equal(appTaskSource.includes('invalidateStatus('), false, 'app task boundary should not invalidate Pi status directly')
+    const appTaskImportSpecifiers = [...new Set([...appTaskSource.matchAll(/from ['"]([^'"]+)['"]/g)].map(match => match[1]))].sort()
+    assert.deepEqual(appTaskImportSpecifiers, [
+      './taskMutationCommands.js',
+      './taskPermissions.js',
+      './taskReadCommands.js',
+      './taskReportWorkflow.js',
+      './taskSideEffects.js',
+      './taskTypes.js',
+      './types.js',
+    ].sort(), 'task application facade should import only extracted task modules and app types')
+    const appTaskFunctionNames = [...appTaskSource.matchAll(/\bfunction\s+([A-Za-z0-9_]+)/g)].map(match => match[1])
+    assert.deepEqual(appTaskFunctionNames, ['executeTaskApplication'], 'task application facade should define only executeTaskApplication')
+    assert.equal(/function\s+\w*TaskCommand/.test(appTaskSource), false, 'task application facade should contain no inline task command implementation')
+    for (const forbiddenFacadeToken of [
+      'transitionTask',
+      'compactTaskHistorySummary',
+      'taskHistoryTimelineItems',
+      'taskReportsForTask',
+      'appendTaskReportHistory',
+      'appendTaskEventHistory',
+      'deps.outboxStore.enqueue',
+      'runOutboxOnce',
+      'planTaskReportEffects',
+      'function denyNonOwnerReport',
+      'function handleTaskApplicationSideEffects',
+      'function runTaskOutboxEffects',
+    ]) {
+      assert.equal(appTaskSource.includes(forbiddenFacadeToken), false, `task application facade should not contain ${forbiddenFacadeToken}`)
+    }
+    assert.equal(countOccurrences(appTaskSource, 'handleTaskApplicationSideEffects'), 4, 'task application facade should import side-effect handler and invoke it only on denied/create/actionable result paths')
+    assert.ok(appTaskSource.includes("if (params.action === 'show' || params.action === 'history' || params.action === 'reports')"), 'task application facade should return task read-only detail actions before side-effect handling')
     assert.equal(appTaskTypesSource.includes('ExtensionContext'), false, 'task app input types should be Pi-context-free')
     assert.equal(appTaskTypesSource.includes('@earendil-works/pi-coding-agent'), false, 'task app input types should not import Pi APIs')
     assert.equal(taskDepsBlock.includes('ExtensionContext'), false, 'task app dependency types should be Pi-context-free')
     assert.equal(taskDepsBlock.includes('ensureTeamForSession'), false, 'task app dependency types should not resolve team/session context')
     assert.equal(taskDepsBlock.includes('currentActor'), false, 'task app dependency types should not resolve actor context')
     assert.equal(taskDepsBlock.includes('invalidateStatus'), false, 'task app dependency types should not invalidate Pi status')
-    assert.ok(appTaskSource.includes('../core/taskReducer.js'), 'app task boundary should depend on core task reducer')
+    assert.equal(appTaskPermissionsSource.includes('ExtensionContext'), false, 'task permissions module should not mention Pi ExtensionContext')
+    assert.equal(appTaskPermissionsSource.includes('@earendil-works/pi-coding-agent'), false, 'task permissions module should not import Pi APIs')
+    for (const forbiddenTaskPermissionImport of ['../state/', '../runtime/', '../adapters/', '../tmux/']) {
+      assert.equal(appTaskPermissionsSource.includes(forbiddenTaskPermissionImport), false, `task permissions module should not import ${forbiddenTaskPermissionImport}`)
+    }
+    assert.equal(appTaskReadCommandsSource.includes('ExtensionContext'), false, 'task read commands module should not mention Pi ExtensionContext')
+    assert.equal(appTaskReadCommandsSource.includes('@earendil-works/pi-coding-agent'), false, 'task read commands module should not import Pi APIs')
+    assert.ok(appTaskReadCommandsSource.includes('../state/taskHistoryReadModel.js'), 'task read commands should reuse shared TaskHistory read model selectors')
+    for (const forbiddenTaskReadCommandImport of ['../state/taskStore.js', '../state/teamStore.js', '../state/outboxStore.js', '../runtime/', '../adapters/', '../tmux/']) {
+      assert.equal(appTaskReadCommandsSource.includes(forbiddenTaskReadCommandImport), false, `task read commands module should not import ${forbiddenTaskReadCommandImport}`)
+    }
+    for (const readCommandExport of ['listTasksCommand', 'showTaskCommand', 'historyTaskCommand', 'reportsTaskCommand', 'reportTaskCommand']) {
+      assert.equal(typeof taskReadCommands[readCommandExport], 'function', `task read commands module should export ${readCommandExport}`)
+      assert.ok(appTaskReadCommandsSource.includes(`function ${readCommandExport}`), `${readCommandExport} implementation should live in taskReadCommands`)
+      assert.equal(appTaskSource.includes(`function ${readCommandExport}`), false, `${readCommandExport} implementation should not live in taskApplication`)
+    }
+    for (const readModelSelector of ['taskHistoryCompactSummary', 'taskHistoryTimelineItems', 'taskReportsForTask', 'compactTaskReport', 'compactTaskActivity']) {
+      assert.ok(appTaskReadCommandsSource.includes(readModelSelector), `task read commands should use shared read model helper ${readModelSelector}`)
+    }
+    assert.equal(appTaskMutationCommandsSource.includes('ExtensionContext'), false, 'task mutation commands module should not mention Pi ExtensionContext')
+    assert.equal(appTaskMutationCommandsSource.includes('@earendil-works/pi-coding-agent'), false, 'task mutation commands module should not import Pi APIs')
+    assert.equal(appTaskCommandSharedSource.includes('ExtensionContext'), false, 'task command shared module should not mention Pi ExtensionContext')
+    assert.equal(appTaskCommandSharedSource.includes('@earendil-works/pi-coding-agent'), false, 'task command shared module should not import Pi APIs')
+    for (const forbiddenTaskMutationImport of ['../state/taskStore.js', '../state/teamStore.js', '../state/outboxStore.js', '../runtime/', '../adapters/', '../tmux/']) {
+      assert.equal(appTaskMutationCommandsSource.includes(forbiddenTaskMutationImport), false, `task mutation commands module should not import ${forbiddenTaskMutationImport}`)
+      assert.equal(appTaskCommandSharedSource.includes(forbiddenTaskMutationImport), false, `task command shared module should not import ${forbiddenTaskMutationImport}`)
+    }
+    for (const mutationCommandExport of ['createTaskCommand', 'assignTaskCommand', 'blockTaskCommand', 'unblockTaskCommand', 'closeTaskCommand', 'progressTaskCommand']) {
+      assert.equal(typeof taskMutationCommands[mutationCommandExport], 'function', `task mutation commands module should export ${mutationCommandExport}`)
+      assert.ok(appTaskMutationCommandsSource.includes(`function ${mutationCommandExport}`), `${mutationCommandExport} implementation should live in taskMutationCommands`)
+      assert.equal(appTaskSource.includes(`function ${mutationCommandExport}`), false, `${mutationCommandExport} implementation should not live in taskApplication`)
+    }
+    for (const mutationHelper of ['reducerTaskSnapshot', 'applyReducerTransition', 'taskTransitionFailure', 'unsupportedStatusParam', 'unsupportedBlockedByParam']) {
+      assert.ok(appTaskCommandSharedSource.includes(`function ${mutationHelper}`), `${mutationHelper} should live in taskCommandShared`)
+    }
+    assert.ok(appTaskMutationCommandsSource.includes('../core/taskReducer.js'), 'task mutation commands should apply reducer transitions')
+    assert.ok(appTaskMutationCommandsSource.includes('buildImplementationCompletionNote'), 'task mutation commands should preserve implementer close completion-note formatting')
+    assert.ok(appTaskMutationCommandsSource.includes('deps.teamState.updateTeam'), 'task mutation commands should mutate through injected teamState port')
+    assert.ok(appTaskMutationCommandsSource.includes('deps.taskMutations.createTask'), 'task mutation commands should create through injected task mutation port')
+    assert.equal(appTaskMutationCommandsSource.includes('deps.outboxStore.enqueue'), false, 'task mutation commands should not plan side effects')
+    assert.equal(appTaskSideEffectsSource.includes('ExtensionContext'), false, 'task side effects module should not mention Pi ExtensionContext')
+    assert.equal(appTaskSideEffectsSource.includes('@earendil-works/pi-coding-agent'), false, 'task side effects module should not import Pi APIs')
+    for (const forbiddenTaskSideEffectsImport of ['../state/', '../runtime/', '../adapters/', '../tmux/']) {
+      assert.equal(appTaskSideEffectsSource.includes(forbiddenTaskSideEffectsImport), false, `task side effects module should not import ${forbiddenTaskSideEffectsImport}`)
+    }
+    assert.equal(typeof taskSideEffects.handleTaskApplicationSideEffects, 'function', 'task side effects module should export handleTaskApplicationSideEffects')
+    assert.ok(appTaskSideEffectsSource.includes('function handleTaskApplicationSideEffects'), 'task side effects implementation should live in taskSideEffects')
+    assert.ok(appTaskSideEffectsSource.includes('function runTaskOutboxEffects'), 'task side effects should own task outbox execution helper')
+    assert.ok(appTaskSideEffectsSource.includes('function appendTaskWarnings'), 'task side effects should own warning formatting')
+    assert.ok(appTaskSideEffectsSource.includes('function appendOutboxTaskWarnings'), 'task side effects should own outbox warning mapping')
+    assert.ok(appTaskSideEffectsSource.includes('function mailboxMessageId'), 'task side effects should own deterministic mailbox id helper')
+    assert.equal(appTaskSource.includes('function handleTaskApplicationSideEffects'), false, 'taskApplication should not implement side-effect runner')
+    assert.equal(appTaskSource.includes('function runTaskOutboxEffects'), false, 'taskApplication should not implement outbox runner helper')
+    assert.equal(appTaskSource.includes('function appendTaskWarnings'), false, 'taskApplication should not implement side-effect warning formatting')
+    assert.equal(appTaskSource.includes('function appendOutboxTaskWarnings'), false, 'taskApplication should not implement outbox warning mapping')
+    assert.equal(appTaskSource.includes('function mailboxMessageId'), false, 'taskApplication should not implement deterministic mailbox id helper')
+    assert.ok(appTaskSideEffectsSource.includes("workerId: 'task-application'"), 'task side effects should preserve task-application outbox worker id')
+    assert.ok(appTaskSideEffectsSource.includes('`mailbox-${effectId}`'), 'task side effects should preserve deterministic mailbox id format')
+    assert.ok(appTaskSideEffectsSource.includes('deps.outboxStore.enqueue'), 'task side effects should enqueue through injected outboxStore port')
+    assert.ok(appTaskSideEffectsSource.includes('runOutboxOnce'), 'task side effects should execute through injected outbox runner helper')
+    assert.ok(appTaskSideEffectsSource.includes('planTaskReportEffects'), 'task side effects should plan leader attention through report effect planner')
+    assert.ok(appTaskSideEffectsSource.includes("kind: 'inbox_item_append_requested'"), 'task side effects should enqueue leader mailbox append effect')
+    assert.ok(appTaskSideEffectsSource.includes("kind: 'leader_attention_requested'"), 'task side effects should enqueue leader attention effect')
+    assert.ok(appTaskSideEffectsSource.includes('deps.teamState.updateTeam'), 'task side effects should update report mailboxMessageId through injected teamState port')
+    assert.ok(appTaskSideEffectsSource.includes('deps.taskMutations.updateTaskReport'), 'task side effects should update TaskReport mailboxMessageId through injected task mutation port')
+    for (const sideEffectDetailToken of ['leaderMailboxDelivered', 'mailboxDeliveryFailed', 'outboxRun', 'outboxEffects', 'outboxEffectIds', 'side_effect_failed']) {
+      assert.ok(appTaskSideEffectsSource.includes(sideEffectDetailToken), `task side effects should preserve detail/warning token ${sideEffectDetailToken}`)
+    }
+    assert.equal(appTaskSideEffectsSource.includes("kind: 'task_message_ref_append_requested'"), false, 'task side effects should not introduce TaskMessageRef effects')
+    assert.equal(appTaskReportWorkflowSource.includes('ExtensionContext'), false, 'task report workflow module should not mention Pi ExtensionContext')
+    assert.equal(appTaskReportWorkflowSource.includes('@earendil-works/pi-coding-agent'), false, 'task report workflow module should not import Pi APIs')
+    for (const forbiddenTaskReportWorkflowImport of ['../state/taskStore.js', '../state/teamStore.js', '../state/outboxStore.js', '../runtime/', '../adapters/', '../tmux/']) {
+      assert.equal(appTaskReportWorkflowSource.includes(forbiddenTaskReportWorkflowImport), false, `task report workflow module should not import ${forbiddenTaskReportWorkflowImport}`)
+    }
+    for (const reportWorkflowExport of ['reportDoneTaskCommand', 'reportBlockedTaskCommand']) {
+      assert.equal(typeof taskReportWorkflow[reportWorkflowExport], 'function', `task report workflow module should export ${reportWorkflowExport}`)
+      assert.ok(appTaskReportWorkflowSource.includes(`function ${reportWorkflowExport}`), `${reportWorkflowExport} implementation should live in taskReportWorkflow`)
+      assert.equal(appTaskSource.includes(`function ${reportWorkflowExport}`), false, `${reportWorkflowExport} implementation should not live in taskApplication`)
+    }
+    assert.ok(appTaskReportWorkflowSource.includes('function denyNonOwnerReport'), 'non-owner report denial should live in taskReportWorkflow')
+    assert.equal(appTaskSource.includes('function denyNonOwnerReport'), false, 'non-owner report denial should not live in taskApplication')
+    assert.ok(appTaskReportWorkflowSource.includes('../core/taskReducer.js'), 'task report workflow should apply reducer report transitions')
+    assert.ok(appTaskReportWorkflowSource.includes('appendTaskReportHistory'), 'task report workflow should append TaskReport artifacts through shared helper')
+    assert.ok(appTaskReportWorkflowSource.includes('appendTaskEventHistory'), 'task report workflow should append report_submitted TaskEvent artifacts through shared helper')
+    assert.ok(appTaskReportWorkflowSource.includes("type: 'report_submitted'"), 'task report workflow should preserve report_submitted TaskEvent type')
+    assert.ok(appTaskReportWorkflowSource.includes('planTaskReportAttention'), 'task report workflow should plan compact leader report wake metadata')
+    assert.ok(appTaskReportWorkflowSource.includes("priority: 'normal'"), 'report_done leader mailbox priority should remain normal')
+    assert.ok(appTaskReportWorkflowSource.includes("priority: 'high'"), 'report_blocked leader mailbox priority should remain high')
+    for (const sideEffectToken of ['deps.outboxStore.enqueue', 'runOutboxOnce', 'planTaskReportEffects', 'pushMailbox', 'requestLeaderAttention']) {
+      assert.equal(appTaskReportWorkflowSource.includes(sideEffectToken), false, `task report workflow should not own side-effect execution token ${sideEffectToken}`)
+    }
+    assert.ok(appTaskSource.includes("from './taskPermissions.js'"), 'task application should import extracted task permission helpers')
+    assert.ok(appTaskSource.includes("from './taskReadCommands.js'"), 'task application should delegate read-only commands to extracted module')
+    assert.ok(appTaskSource.includes("from './taskMutationCommands.js'"), 'task application should delegate mutation commands to extracted module')
+    assert.ok(appTaskSource.includes("from './taskReportWorkflow.js'"), 'task application should delegate report workflow commands to extracted module')
+    assert.ok(appTaskSource.includes("from './taskSideEffects.js'"), 'task application should delegate task-local side effects to extracted module')
+    assert.ok(appTaskSource.includes("export { actorRole, ensureTaskPrivilege } from './taskPermissions.js'"), 'task application should preserve task permission helper re-exports')
+    assert.ok(appTaskMutationCommandsSource.includes('../core/taskReducer.js'), 'task mutation command boundary should depend on core task reducer')
     assert.equal(appTaskSource.includes('../core/taskNoteModel.js'), false, 'active app task boundary should no longer depend on core task note metadata model')
     assert.equal(appTaskSource.includes('appendStructuredTaskNote'), false, 'active app task boundary should not append legacy task notes')
-    assert.ok(appTaskSource.includes('transitionTask'), 'app task boundary should apply reducer transitions')
+    assert.ok(appTaskMutationCommandsSource.includes('transitionTask'), 'task mutation command boundary should apply reducer transitions')
     assert.ok(!appTaskSource.includes('../state/outboxStore.js'), 'app task boundary should use injected outbox store port')
     assert.ok(!appTaskSource.includes('../state/taskNotes.js'), 'app task boundary should not import state task note metadata helpers')
     assert.ok(!appTaskSource.includes('../state/taskStore.js'), 'app task boundary should use injected task mutation port')
     assert.ok(!appTaskSource.includes('../state/teamStore.js'), 'app task boundary should use injected team state port')
-    assert.ok(appTaskSource.includes('deps.outboxStore.enqueue'), 'app task boundary should plan durable outbox effects through port')
-    assert.ok(appTaskSource.includes('deps.teamState.updateTeam'), 'app task boundary should mutate team state through port')
-    assert.ok(appTaskSource.includes('deps.taskMutations.createTask'), 'app task boundary should create tasks through port')
+    assert.equal(appTaskSource.includes('deps.outboxStore.enqueue'), false, 'app task facade should not enqueue durable outbox effects directly after side-effect extraction')
+    assert.equal(appTaskSource.includes('runOutboxOnce'), false, 'app task facade should not run outbox effects directly after side-effect extraction')
+    assert.equal(appTaskSource.includes('planTaskReportEffects'), false, 'app task facade should not plan report side effects directly after side-effect extraction')
+    assert.equal(appTaskSource.includes('deps.teamState.updateTeam'), false, 'app task facade should not record report mailbox delivery directly after side-effect extraction')
+    assert.ok(appTaskMutationCommandsSource.includes('deps.teamState.updateTeam'), 'task mutation command boundary should mutate team state through port')
+    assert.ok(appTaskMutationCommandsSource.includes('deps.taskMutations.createTask'), 'task mutation command boundary should create tasks through port')
+    assert.ok(appTaskReportWorkflowSource.includes('deps.teamState.updateTeam'), 'task report workflow should mutate report artifacts through injected teamState port')
+    assert.ok(appTaskSideEffectsSource.includes('deps.outboxStore.enqueue'), 'task side-effect boundary should plan durable outbox effects through injected outboxStore port')
     assert.ok(appTaskSource.includes('executeTaskApplication'), 'app task boundary should expose the task use-case')
     for (const removedCompatWrapper of [
       'tools/messageDelivery.ts',
@@ -474,6 +618,212 @@ module.exports = {
     assert.equal(taskAppResult.details.task.owner, 'worker-a')
     assert.ok(appEffectOrder.includes('taskInvalidateStatus'), 'task app boundary should request status invalidation for the adapter')
 
+    const taskCharacterizationTeamName = 'task-application-characterization-suite'
+    modules.state.deleteTeamState(taskCharacterizationTeamName)
+    const taskCharacterizationTeam = modules.state.createInitialTeamState({
+      teamName: taskCharacterizationTeamName,
+      leaderSessionFile: '/tmp/task-application-characterization-leader.jsonl',
+      leaderCwd: '/tmp/task-application-characterization',
+    })
+    modules.state.upsertMember(taskCharacterizationTeam, {
+      name: 'worker-a',
+      role: 'researcher',
+      cwd: '/tmp/task-application-characterization',
+      sessionFile: '/tmp/task-application-characterization-worker-a.jsonl',
+      paneId: '%task-char-worker-a',
+    })
+    modules.state.upsertMember(taskCharacterizationTeam, {
+      name: 'worker-b',
+      role: 'planner',
+      cwd: '/tmp/task-application-characterization',
+      sessionFile: '/tmp/task-application-characterization-worker-b.jsonl',
+      paneId: '%task-char-worker-b',
+    })
+    modules.state.writeTeamState(taskCharacterizationTeam)
+    const taskAppDeps = overrides => env.patches.withOutboxHandlers({
+      ...env.patches.deps,
+      ...overrides,
+    })
+    const callTaskApp = (params, actor = 'team-lead', overrides = {}) => taskApplication.executeTaskApplication({
+      params,
+      context: { team: modules.state.readTeamState(taskCharacterizationTeamName), actor },
+    }, taskAppDeps(overrides))
+    const taskArtifactCounts = () => {
+      const team = modules.state.readTeamState(taskCharacterizationTeamName)
+      return {
+        tasks: Object.keys(team.tasks).length,
+        reports: Object.keys(team.taskReports).length,
+        reportEvents: Object.values(team.taskEvents).filter(event => event.type === 'report_submitted').length,
+        events: Object.keys(team.taskEvents).length,
+        mailbox: modules.state.readMailbox(taskCharacterizationTeamName, 'team-lead').length,
+        projections: Object.keys(modules.state.readLeaderProjectionStore(taskCharacterizationTeamName).projections).length,
+        attentions: Object.keys(modules.state.readLeaderAttentionStore(taskCharacterizationTeamName).attentions).length,
+        outbox: modules.state.listOutboxEffects(taskCharacterizationTeamName).length,
+      }
+    }
+
+    let directTaskResult = await callTaskApp({
+      action: 'create',
+      title: 'Characterize direct task app',
+      description: 'Locks executeTaskApplication direct context behavior',
+      owner: 'worker-a',
+    })
+    assert.equal(directTaskResult.statusInvalidationRequested, true, 'direct create should request adapter status invalidation')
+    assert.equal(directTaskResult.sideEffectWarnings, undefined, 'successful direct create should not add sideEffectWarnings')
+    assert.ok(directTaskResult.text.includes('Created T001'), 'direct create text should remain stable')
+    assert.equal(directTaskResult.details.task.id, 'T001')
+    assert.equal(directTaskResult.details.task.owner, 'worker-a')
+    assert.equal(directTaskResult.details.task.status, 'open')
+    const reportSecretTail = 'SECRET_FULL_REPORT_TAIL_DIRECT_ONLY'
+    const reportNote = `direct report full body should stay in TaskReport only and not leak into compact list/show/history/reports mailbox notification ${'detail '.repeat(30)}${reportSecretTail}`
+    directTaskResult = await callTaskApp({ action: 'report_done', taskId: 'T001', note: reportNote }, 'worker-a')
+    assert.equal(directTaskResult.statusInvalidationRequested, true, 'owner report_done should request adapter status invalidation')
+    assert.equal(directTaskResult.details.reportOnly, true, 'owner report_done should remain report-only')
+    assert.equal(directTaskResult.details.reporterIsOwner, true, 'owner report_done should mark owner reporter')
+    let characterizedTeam = modules.state.readTeamState(taskCharacterizationTeamName)
+    assert.equal(characterizedTeam.tasks.T001.status, 'open', 'owner report_done must not mutate task status')
+    assert.equal(characterizedTeam.tasks.T001.owner, 'worker-a', 'owner report_done must not mutate owner')
+    assert.deepEqual(characterizedTeam.tasks.T001.blockedBy, [], 'owner report_done must not mutate blockers')
+    const doneReport = Object.values(characterizedTeam.taskReports).find(report => report.taskId === 'T001' && report.type === 'report_done')
+    assert.ok(doneReport, 'owner report_done should create a TaskReport')
+    assert.equal(doneReport.text, reportNote, 'TaskReport should retain full report body')
+    assert.equal(Object.values(characterizedTeam.taskEvents).some(event => event.type === 'report_submitted' && event.reportId === doneReport.id), true, 'owner report_done should create report_submitted TaskEvent')
+    let leaderReportMailbox = modules.state.readMailbox(taskCharacterizationTeamName, 'team-lead').find(message => message.metadata?.reportId === doneReport.id)
+    assert.ok(leaderReportMailbox, 'owner report_done should create compact leader mailbox notification')
+    assert.equal(leaderReportMailbox.metadata.reportId, doneReport.id, 'leader mailbox notification should reference reportId')
+    assert.equal(leaderReportMailbox.text.includes(reportNote), false, 'leader mailbox notification text must not contain full report body')
+    assert.equal(leaderReportMailbox.summary.includes(reportSecretTail), false, 'leader mailbox summary must not contain non-compact report tail')
+    assert.ok(leaderReportMailbox.summary.includes('direct report full body'), 'leader mailbox summary may contain compact report summary')
+
+    for (const readOnlyParams of [
+      { action: 'list' },
+      { action: 'show', taskId: 'T001' },
+      { action: 'history', taskId: 'T001', all: true },
+      { action: 'reports', taskId: 'T001' },
+    ]) {
+      directTaskResult = await callTaskApp(readOnlyParams)
+      assert.equal(directTaskResult.statusInvalidationRequested, undefined, `${readOnlyParams.action} should not request status invalidation`)
+      assert.equal(directTaskResult.text.includes(reportNote), false, `${readOnlyParams.action} should keep full report body out of compact output`)
+      assert.equal(JSON.stringify(directTaskResult.details).includes(reportNote), false, `${readOnlyParams.action} details should keep full report body out of compact output`)
+      assert.equal(directTaskResult.text.includes(reportSecretTail), false, `${readOnlyParams.action} should keep non-compact report tail out of output`)
+      assert.equal(JSON.stringify(directTaskResult.details).includes(reportSecretTail), false, `${readOnlyParams.action} details should keep non-compact report tail out of output`)
+    }
+    directTaskResult = await callTaskApp({ action: 'report', taskId: 'T001', reportId: doneReport.id })
+    assert.equal(directTaskResult.statusInvalidationRequested, undefined, 'report read should not request status invalidation')
+    assert.ok(directTaskResult.text.includes(reportNote), 'action=report should expose full report text')
+    assert.equal(directTaskResult.details.text, reportNote, 'action=report details should expose full report text')
+
+    for (const mutationParams of [
+      { action: 'assign', taskId: 'T001', owner: 'worker-b', note: 'assign for characterization' },
+      { action: 'block', taskId: 'T001', blockedBy: ['waiting'], note: 'block for characterization' },
+      { action: 'unblock', taskId: 'T001', note: 'unblock for characterization' },
+      { action: 'progress', taskId: 'T001', note: 'progress for characterization' },
+      { action: 'close', taskId: 'T001', note: 'close for characterization' },
+    ]) {
+      const before = taskArtifactCounts()
+      directTaskResult = await callTaskApp(mutationParams)
+      assert.equal(directTaskResult.statusInvalidationRequested, true, `${mutationParams.action} should request status invalidation`)
+      if (mutationParams.action === 'progress') {
+        const after = taskArtifactCounts()
+        assert.equal(after.events, before.events + 1, 'progress should write exactly one TaskEvent')
+        assert.equal(after.reports, before.reports, 'progress should not create TaskReport')
+        assert.equal(after.mailbox, before.mailbox, 'progress should not notify leader mailbox')
+        assert.equal(after.projections, before.projections, 'progress should not create leader projection')
+        assert.equal(after.attentions, before.attentions, 'progress should not create leader attention artifact')
+        assert.equal(after.outbox, before.outbox, 'progress should not enqueue outbox effects')
+      }
+    }
+
+    const beforeDeniedCreate = taskArtifactCounts()
+    directTaskResult = await callTaskApp({ action: 'create', title: 'Denied worker create', description: 'denied factual mutation' }, 'worker-a')
+    assert.equal(directTaskResult.statusInvalidationRequested, true, 'non-leader denied factual mutation should preserve current invalidation request')
+    assert.equal(directTaskResult.details.denied, true)
+    assert.equal(directTaskResult.details.reason, undefined, 'leader-only privilege denial currently has no reason field')
+    assert.equal(directTaskResult.details.action, 'create')
+    assert.equal(directTaskResult.details.actor, 'worker-a')
+    assert.ok(directTaskResult.text.includes("Task action 'create' is leader-only for worker-a (researcher). Allowed for non-leaders"), 'denied factual mutation text should remain stable')
+    assert.deepEqual(taskArtifactCounts(), beforeDeniedCreate, 'non-leader denied factual mutation should create no task/report/event/mailbox/projection/attention/outbox artifacts')
+    assert.equal(modules.state.readTeamState(taskCharacterizationTeamName).tasks.T002, undefined, 'denied worker create should create no task')
+
+    directTaskResult = await callTaskApp({ action: 'create', title: 'Report blocked characterization', description: 'report_blocked task', owner: 'worker-a' })
+    const blockedReportTaskId = directTaskResult.details.task.id
+    const beforeLeaderLocalReport = taskArtifactCounts()
+    directTaskResult = await callTaskApp({ action: 'report_done', taskId: blockedReportTaskId, note: 'leader local done report body' })
+    assert.equal(directTaskResult.statusInvalidationRequested, true, 'leader local report_done should request status invalidation')
+    assert.equal(directTaskResult.text, `Recorded done report for ${blockedReportTaskId}`, 'leader local report_done text should remain stable')
+    assert.equal(directTaskResult.details.reportOnly, true, 'leader local report_done should remain report-only')
+    characterizedTeam = modules.state.readTeamState(taskCharacterizationTeamName)
+    assert.equal(characterizedTeam.tasks[blockedReportTaskId].status, 'open', 'leader local report_done must not mutate task status')
+    assert.equal(characterizedTeam.tasks[blockedReportTaskId].owner, 'worker-a', 'leader local report_done must not mutate owner')
+    assert.deepEqual(characterizedTeam.tasks[blockedReportTaskId].blockedBy, [], 'leader local report_done must not mutate blockedBy')
+    const leaderLocalReport = Object.values(characterizedTeam.taskReports).find(report => report.taskId === blockedReportTaskId && report.type === 'report_done' && report.author === 'team-lead')
+    assert.ok(leaderLocalReport, 'leader local report_done should create a TaskReport')
+    assert.equal(leaderLocalReport.text, 'leader local done report body', 'leader local TaskReport should retain full body')
+    assert.equal(leaderLocalReport.reporterIsOwner, false, 'leader local TaskReport should record reporterIsOwner=false when leader is not owner')
+    assert.equal(Object.values(characterizedTeam.taskEvents).some(event => event.type === 'report_submitted' && event.reportId === leaderLocalReport.id), true, 'leader local report_done should create report_submitted TaskEvent')
+    const afterLeaderLocalReport = taskArtifactCounts()
+    assert.equal(afterLeaderLocalReport.reports, beforeLeaderLocalReport.reports + 1, 'leader local report_done should create exactly one TaskReport')
+    assert.equal(afterLeaderLocalReport.reportEvents, beforeLeaderLocalReport.reportEvents + 1, 'leader local report_done should create exactly one report_submitted event')
+    assert.equal(afterLeaderLocalReport.mailbox, beforeLeaderLocalReport.mailbox, 'leader local report_done should not notify leader mailbox')
+    assert.equal(afterLeaderLocalReport.projections, beforeLeaderLocalReport.projections, 'leader local report_done should not create leader projection')
+    assert.equal(afterLeaderLocalReport.attentions, beforeLeaderLocalReport.attentions, 'leader local report_done should not create leader attention artifact')
+    assert.equal(afterLeaderLocalReport.outbox, beforeLeaderLocalReport.outbox, 'leader local report_done should not enqueue outbox effects')
+    const beforeNonOwnerBlocked = taskArtifactCounts()
+    directTaskResult = await callTaskApp({ action: 'report_blocked', taskId: blockedReportTaskId, note: 'non-owner blocked report denied', blockedBy: ['external'] }, 'worker-b')
+    assert.equal(directTaskResult.statusInvalidationRequested, true, 'non-owner report_blocked denial should preserve current invalidation request')
+    assert.equal(directTaskResult.details.denied, true)
+    assert.equal(directTaskResult.details.reason, 'task_reporter_not_owner')
+    assert.equal(directTaskResult.details.taskOwner, 'worker-a')
+    assert.ok(directTaskResult.text.includes(`Cannot report_blocked ${blockedReportTaskId}: worker-b is not the task owner (worker-a)`), 'non-owner report_blocked denial text should remain stable')
+    assert.deepEqual(taskArtifactCounts(), beforeNonOwnerBlocked, 'non-owner report_blocked denial should create no report/event/mailbox/projection/attention/outbox artifacts')
+
+    const beforeNonOwnerDone = taskArtifactCounts()
+    directTaskResult = await callTaskApp({ action: 'report_done', taskId: blockedReportTaskId, note: 'non-owner done report denied' }, 'worker-b')
+    assert.equal(directTaskResult.statusInvalidationRequested, true, 'non-owner report_done denial should preserve current invalidation request')
+    assert.equal(directTaskResult.details.denied, true)
+    assert.equal(directTaskResult.details.reason, 'task_reporter_not_owner')
+    assert.equal(directTaskResult.details.taskOwner, 'worker-a')
+    assert.ok(directTaskResult.text.includes(`Cannot report_done ${blockedReportTaskId}: worker-b is not the task owner (worker-a)`), 'non-owner report_done denial text should remain stable')
+    assert.deepEqual(taskArtifactCounts(), beforeNonOwnerDone, 'non-owner report_done denial should create no report/event/mailbox/projection/attention/outbox artifacts')
+
+    directTaskResult = await callTaskApp({ action: 'report_blocked', taskId: blockedReportTaskId, note: 'owner blocked report full body', blockedBy: ['api access'] }, 'worker-a')
+    assert.equal(directTaskResult.statusInvalidationRequested, true, 'owner report_blocked should request status invalidation')
+    assert.equal(directTaskResult.details.reportOnly, true, 'owner report_blocked should remain report-only')
+    assert.deepEqual(directTaskResult.details.reportedBlockedBy, ['api access'])
+    characterizedTeam = modules.state.readTeamState(taskCharacterizationTeamName)
+    assert.equal(characterizedTeam.tasks[blockedReportTaskId].status, 'open', 'owner report_blocked must not mutate task status')
+    assert.equal(characterizedTeam.tasks[blockedReportTaskId].owner, 'worker-a', 'owner report_blocked must not mutate owner')
+    assert.deepEqual(characterizedTeam.tasks[blockedReportTaskId].blockedBy, [], 'owner report_blocked must not mutate task blockedBy')
+    const blockedReport = Object.values(characterizedTeam.taskReports).find(report => report.taskId === blockedReportTaskId && report.type === 'report_blocked')
+    assert.ok(blockedReport, 'owner report_blocked should create a TaskReport')
+    assert.ok(blockedReport.text.includes('owner blocked report full body'), 'blocked TaskReport should retain full report body')
+    assert.equal(Object.values(characterizedTeam.taskEvents).some(event => event.type === 'report_submitted' && event.reportId === blockedReport.id), true, 'owner report_blocked should create report_submitted TaskEvent')
+    leaderReportMailbox = modules.state.readMailbox(taskCharacterizationTeamName, 'team-lead').find(message => message.metadata?.reportId === blockedReport.id)
+    assert.ok(leaderReportMailbox, 'owner report_blocked should create compact leader mailbox notification')
+    assert.equal(leaderReportMailbox.metadata.reportId, blockedReport.id, 'blocked report mailbox should reference reportId')
+    assert.equal(leaderReportMailbox.text.includes('owner blocked report full body'), false, 'blocked report mailbox notification text must not contain full report body')
+
+    directTaskResult = await callTaskApp({ action: 'create', title: 'Mailbox failure characterization', description: 'mailbox failure prevents attention', owner: 'worker-a' })
+    const mailboxFailureTaskId = directTaskResult.details.task.id
+    const mailboxFailureEffects = []
+    directTaskResult = await callTaskApp({ action: 'report_done', taskId: mailboxFailureTaskId, note: 'mailbox failure full body' }, 'worker-a', {
+      pushMailboxMessage: async () => {
+        mailboxFailureEffects.push('pushMailbox')
+        throw new Error('characterized mailbox failure')
+      },
+      requestLeaderAttentionIfNeeded: async () => {
+        mailboxFailureEffects.push('leaderAttention')
+        throw new Error('leader attention must not run after mailbox failure')
+      },
+    })
+    assert.equal(directTaskResult.statusInvalidationRequested, true, 'mailbox-failed report should still request status invalidation')
+    assert.equal(directTaskResult.details.leaderMailboxDelivered, false)
+    assert.deepEqual(directTaskResult.details.mailboxDeliveryFailed, { recipient: 'team-lead', error: 'characterized mailbox failure' })
+    assert.equal(mailboxFailureEffects.includes('pushMailbox'), true, 'mailbox failure path should attempt mailbox delivery')
+    assert.equal(mailboxFailureEffects.includes('leaderAttention'), false, 'mailbox failure should prevent leader attention request')
+    assert.ok(directTaskResult.details.sideEffectWarnings.some(item => item.kind === 'pushMailbox' && item.error.includes('characterized mailbox failure')), 'mailbox failure should surface side effect warning')
+
+    modules.state.deleteTeamState(taskCharacterizationTeamName)
     modules.state.deleteTeamState('app-boundary-suite')
     modules.state.clearSessionContext('/tmp/app-boundary-suite-leader.jsonl')
     assert.equal(messageApplication.isLeaderAttentionPolicySource('question'), true)
@@ -623,32 +973,40 @@ module.exports = {
 
     const team = {
       members: {
-        'team-lead': { role: 'leader' },
-        plan: { role: 'planner' },
+        'team-lead': { role: 'not-a-real-leader-role' },
+        plan: { role: ' Planner ' },
         impl: { role: 'implementer' },
+        blank: { role: '   ' },
       },
     }
-    assert.equal(taskApplication.actorRole(team, 'team-lead'), 'leader')
-    assert.equal(taskApplication.actorRole(team, 'plan'), 'planner')
-    assert.equal(taskApplication.actorRole(team, 'impl'), 'implementer')
-    assert.equal(taskApplication.ensureTaskPrivilege(team, 'team-lead', 'create'), null)
-    assert.equal(taskApplication.ensureTaskPrivilege(team, 'team-lead', 'assign'), null)
-    assert.equal(taskApplication.ensureTaskPrivilege(team, 'team-lead', 'block'), null)
-    assert.equal(taskApplication.ensureTaskPrivilege(team, 'team-lead', 'close'), null)
-    assert.equal(taskApplication.ensureTaskPrivilege(team, 'plan', 'list'), null)
-    assert.equal(taskApplication.ensureTaskPrivilege(team, 'plan', 'progress'), null)
-    assert.ok(taskApplication.ensureTaskPrivilege(team, 'plan', 'note').includes("Task action 'note' is leader-only"), 'removed note action should not be worker-allowed')
-    assert.ok(taskApplication.ensureTaskPrivilege(team, 'plan', 'close').includes("Task action 'close' is leader-only"))
-    assert.equal(taskApplication.ensureTaskPrivilege(team, 'plan', 'report_blocked'), null)
-    assert.ok(taskApplication.ensureTaskPrivilege(team, 'plan', 'create').includes("Task action 'create' is leader-only"))
-    assert.ok(taskApplication.ensureTaskPrivilege(team, 'plan', 'assign').includes("Task action 'assign' is leader-only"))
-    assert.ok(taskApplication.ensureTaskPrivilege(team, 'plan', 'block').includes("Task action 'block' is leader-only"))
-    assert.equal(taskApplication.ensureTaskPrivilege(team, 'impl', 'progress'), null)
-    assert.ok(taskApplication.ensureTaskPrivilege(team, 'impl', 'note').includes("Task action 'note' is leader-only"), 'removed note action should not be worker-allowed')
-    assert.ok(taskApplication.ensureTaskPrivilege(team, 'impl', 'close').includes("Task action 'close' is leader-only"))
-    assert.equal(taskApplication.ensureTaskPrivilege(team, 'impl', 'report_blocked'), null)
-    assert.ok(taskApplication.ensureTaskPrivilege(team, 'impl', 'assign').includes("Task action 'assign' is leader-only"))
-    assert.equal(taskApplication.ensureTaskPrivilege(team, 'impl', 'assign') === null, false)
+    assert.equal(taskPermissions.actorRole(team, 'team-lead'), 'leader', 'team-lead name should always resolve as leader')
+    assert.equal(taskPermissions.actorRole(team, 'plan'), 'planner', 'roles should be trimmed and lowercased')
+    assert.equal(taskPermissions.actorRole(team, 'impl'), 'implementer')
+    assert.equal(taskPermissions.actorRole(team, 'blank'), '', 'blank member role should stay empty before denial fallback')
+    assert.equal(taskPermissions.actorRole(team, 'missing-worker'), '', 'unknown actor role should stay empty before denial fallback')
+    assert.equal(taskApplication.actorRole(team, 'team-lead'), taskPermissions.actorRole(team, 'team-lead'), 'taskApplication should preserve actorRole compatibility re-export')
+    assert.equal(taskApplication.actorRole(team, 'plan'), taskPermissions.actorRole(team, 'plan'), 'taskApplication should preserve normalized actorRole behavior')
+    assert.equal(taskApplication.actorRole(team, 'impl'), taskPermissions.actorRole(team, 'impl'), 'taskApplication should preserve actorRole compatibility re-export')
+    for (const leaderAction of ['create', 'assign', 'block', 'unblock', 'close', 'note']) {
+      assert.equal(taskPermissions.ensureTaskPrivilege(team, 'team-lead', leaderAction), null, `team-lead should bypass privilege denial for ${leaderAction}`)
+      assert.equal(taskApplication.ensureTaskPrivilege(team, 'team-lead', leaderAction), null, `taskApplication re-export should preserve leader privilege for ${leaderAction}`)
+    }
+    for (const workerAllowedAction of ['list', 'show', 'history', 'reports', 'report', 'progress', 'report_done', 'report_blocked']) {
+      assert.equal(taskPermissions.ensureTaskPrivilege(team, 'plan', workerAllowedAction), null, `non-leader should be allowed to ${workerAllowedAction}`)
+      assert.equal(taskApplication.ensureTaskPrivilege(team, 'plan', workerAllowedAction), null, `taskApplication re-export should allow ${workerAllowedAction}`)
+    }
+    for (const leaderOnlyAction of ['create', 'assign', 'block', 'unblock', 'close']) {
+      const denial = taskPermissions.ensureTaskPrivilege(team, 'plan', leaderOnlyAction)
+      assert.ok(denial.includes(`Task action '${leaderOnlyAction}' is leader-only for plan (planner). Allowed for non-leaders: list/show/history/reports/report/progress/report_done/report_blocked`), `${leaderOnlyAction} denial text should remain exact`)
+      assert.equal(taskApplication.ensureTaskPrivilege(team, 'plan', leaderOnlyAction), denial, `taskApplication re-export should preserve ${leaderOnlyAction} denial text`)
+    }
+    assert.ok(taskPermissions.ensureTaskPrivilege(team, 'plan', 'note').includes("Task action 'note' is leader-only"), 'removed note action should not be worker-allowed')
+    assert.ok(taskApplication.ensureTaskPrivilege(team, 'plan', 'note').includes("Task action 'note' is leader-only"), 'removed note action should not be worker-allowed through compatibility re-export')
+    assert.ok(taskPermissions.ensureTaskPrivilege(team, 'impl', 'note').includes("Task action 'note' is leader-only"), 'removed note action should not be implementer-allowed')
+    assert.ok(taskPermissions.ensureTaskPrivilege(team, 'impl', 'assign').includes("Task action 'assign' is leader-only"))
+    assert.equal(taskPermissions.ensureTaskPrivilege(team, 'impl', 'assign') === null, false)
+    assert.ok(taskPermissions.ensureTaskPrivilege(team, 'blank', 'create').includes("Task action 'create' is leader-only for blank (worker)."), 'blank role denial should use worker fallback')
+    assert.ok(taskPermissions.ensureTaskPrivilege(team, 'missing-worker', 'create').includes("Task action 'create' is leader-only for missing-worker (worker)."), 'unknown actor denial should use worker fallback')
 
     const emptyCompletion = taskFormatting.buildImplementationCompletionNote()
     assert.ok(emptyCompletion.includes('Files changed:'))
@@ -3168,6 +3526,9 @@ module.exports = {
     assert.ok(boundaryScriptSource.includes('app/messageReceiveApplication.ts'), 'boundary checker should guard receive app use case')
     assert.ok(boundaryScriptSource.includes('app/messageApplication.ts'), 'boundary checker should guard send app use case')
     assert.ok(boundaryScriptSource.includes('app/taskApplication.ts'), 'boundary checker should guard task app use case')
+    assert.ok(boundaryScriptSource.includes('app/taskMutationCommands.ts'), 'boundary checker should guard task mutation command store/side-effect boundaries')
+    assert.ok(boundaryScriptSource.includes('app/taskReportWorkflow.ts'), 'boundary checker should guard task report workflow store/side-effect boundaries')
+    assert.ok(boundaryScriptSource.includes('app/taskSideEffects.ts'), 'boundary checker should guard task-local side-effect execution boundaries')
     assert.ok(boundaryScriptSource.includes('app/messageTypes.ts'), 'boundary checker should guard send app input types')
     assert.ok(boundaryScriptSource.includes('app/taskTypes.ts'), 'boundary checker should guard task app input types')
     assert.ok(boundaryScriptSource.includes('app/types.ts'), 'boundary checker should guard app dependency types')
