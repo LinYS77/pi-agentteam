@@ -160,7 +160,7 @@ export function renderCockpitQueueLines(
     const kind = item.kind === 'task' ? theme.fg('accent', 'task') : theme.fg('warning', 'mail')
     const subject = item.kind === 'task'
       ? `${item.task.id} ${short(item.task.title, 28)}`
-      : `${mailboxTypeIcon(mailboxType(item.message))} ${short(item.message.summary ?? item.message.text, 31)}`
+      : `${mailboxTypeIcon(mailboxType(item.message))} ${short(item.message.summary ?? '(no summary)', 31)}`
     const attention = item.attention.length > 0 ? item.attention.join(theme.fg('dim', ' · ')) : theme.fg('dim', 'active')
     const subjectFmt = isSelected ? theme.bold(theme.fg('text', subject)) : theme.fg('text', subject)
     lines.push(`${pointer}  ${padCell(kind, 8)}  ${padCell(subjectFmt, 36)}  ${attention}`)
@@ -202,7 +202,7 @@ export function renderMailboxLines(
     const fromCol = isSelected ? padCell(theme.bold(theme.fg('accent', short(item.from, 14))), 14) : padCell(theme.fg('text', short(item.from, 14)), 14)
 
     const isUnread = isMailboxMessageUnread(item)
-    const summaryText = short(item.summary ?? item.text, 36)
+    const summaryText = short(item.summary ?? '(no summary)', 36)
     const summaryFmt = isUnread ? theme.bold(theme.fg('text', summaryText)) : theme.fg('dim', summaryText)
     const summaryCol = padCell(summaryFmt, 36)
     const attention = [

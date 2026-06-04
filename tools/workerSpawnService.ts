@@ -15,6 +15,7 @@ import { isBridgeFresh } from '../adapters/bridge/index.js'
 import { transitionWorkerFsm } from '../runtime/workerFsm.js'
 import { TEAM_LEAD } from '../internalTypes.js'
 import type { TeamState } from '../internalTypes.js'
+import { runSelectedOutboxEffects } from '../app/outboxSideEffects.js'
 import type { ToolHandlerDeps } from './shared.js'
 import type { SpawnResult, SpawnRollbackCleanup, TeamSpawnInput } from './teamTypes.js'
 import { buildWorkerLaunchCommand, buildWorkerSystemPrompt } from './workerPrompt.js'
@@ -120,22 +121,21 @@ async function requestInitialSpawnDeliveryThroughOutbox(
       },
     },
   })
-  const run = await deps.outboxRunner.runOnce({
+  const selected = await runSelectedOutboxEffects({
     teamName,
     workerId: 'worker-spawn-service',
     effectIds: [effect.effectId],
     limit: 1,
-  })
-  const runResult = run.results.find(item => item.effectId === effect.effectId)
-  const stored = deps.outboxStore.get(teamName, effect.effectId)
-  const value = runResult?.value ?? stored?.result
+  }, deps)
+  const result = selected.byId[effect.effectId]?.result
+  const value = result?.value
   const deliveryRequestId = value && typeof value === 'object' && 'requestId' in value && typeof value.requestId === 'string'
     ? value.requestId
     : undefined
   return {
     deliveryRequestId,
     outboxEffectId: effect.effectId,
-    outboxStatus: stored?.status,
+    outboxStatus: result?.status,
   }
 }
 

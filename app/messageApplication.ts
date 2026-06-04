@@ -6,10 +6,12 @@ import { MESSAGE_TYPES, isMessageType, isTaskReportType, type MessageType, type 
 import { defaultThreadIdForTask, normalizePriority } from '../protocol.js'
 import { TEAM_LEAD, type MailboxMessage, type TeamMessageWakeHint, type TeamState } from '../internalTypes.js'
 import { oneLine } from '../utils.js'
-import { outboxEffectWarningName, outboxHash } from './outbox.js'
+import { outboxHash } from './outbox.js'
 import { resolveMessageRecipients } from './messageRouting.js'
-import type { OutboxRunResult } from './effectRunner.js'
-import { runOutboxOnce } from './effectRunner.js'
+import {
+  mailboxMessageIdForEffect,
+  runSelectedOutboxEffects,
+} from './outboxSideEffects.js'
 import type { MessageApplicationDeps } from './types.js'
 import { taskAssignmentNonActionableReason } from './taskActionability.js'
 import type {
@@ -143,10 +145,6 @@ function formatRoutingSuffix(state: Pick<SendMessagePlanningState, 'routing'>): 
   return ''
 }
 
-function mailboxMessageId(effectId: string): string {
-  return `mailbox-${effectId}`
-}
-
 function compactDiagnosticText(text: string | undefined, max = 120): string | undefined {
   if (!text) return undefined
   const compact = oneLine(text)
@@ -173,40 +171,17 @@ function compactPeerEventText(input: {
   return parts.join(' ')
 }
 
-function appendOutboxWarnings(state: SendMessagePlanningState, run: OutboxRunResult): void {
-  for (const item of run.results) {
-    if (item.ok) continue
-    state.sideEffectWarnings.push({
-      kind: outboxEffectWarningName(item.kind),
-      error: item.error,
-      effectId: item.effectId,
-      outboxKind: item.kind,
-      outboxStatus: item.terminal ? 'failed' : 'pending',
-    })
-  }
-}
-
-async function runOutboxForState(state: SendMessagePlanningState, deps: MessageApplicationDeps, effectIds: string[]): Promise<OutboxRunResult> {
-  const run = await runOutboxOnce({
+async function applyMessageOutboxRun(state: SendMessagePlanningState, deps: MessageApplicationDeps, effectIds: string[]) {
+  const selected = await runSelectedOutboxEffects({
     teamName: state.team.name,
     workerId: 'message-application',
     limit: effectIds.length || 1,
     effectIds,
   }, deps)
-  state.outboxRun = run
-  appendOutboxWarnings(state, run)
-  for (const effectId of effectIds) {
-    const effect = deps.outboxStore.get(state.team.name, effectId)
-    if (!effect) continue
-    state.outboxEffects.push({
-      effectId,
-      kind: effect.kind,
-      status: effect.status,
-      idempotencyKey: effect.idempotencyKey,
-      lastError: effect.lastError,
-    })
-  }
-  return run
+  state.outboxRun = selected.run
+  state.sideEffectWarnings.push(...selected.warnings)
+  state.outboxEffects.push(...selected.records.filter(record => 'kind' in record))
+  return selected
 }
 
 async function deliverMessageToRecipient(
@@ -268,7 +243,7 @@ async function deliverMessageToRecipient(
       teamName: team.name,
       recipient,
       message: {
-        id: mailboxMessageId(`outbox-pending-${mailboxIdempotencyKey}`),
+        id: mailboxMessageIdForEffect(`outbox-pending-${mailboxIdempotencyKey}`),
         from: sender,
         to: recipient,
         text: params.message,
@@ -284,14 +259,13 @@ async function deliverMessageToRecipient(
       },
     },
   })
-  const deterministicMailboxId = mailboxMessageId(mailboxEffect.effectId)
+  const deterministicMailboxId = mailboxMessageIdForEffect(mailboxEffect.effectId)
   mailboxEffect.payload.message.id = deterministicMailboxId
-  const mailboxRun = await runOutboxForState(state, deps, [mailboxEffect.effectId])
-  const mailboxRunResult = mailboxRun.results.find(item => item.effectId === mailboxEffect.effectId)
-  const storedMailboxEffect = deps.outboxStore.get(team.name, mailboxEffect.effectId)
-  const mailboxSucceeded = Boolean(mailboxRunResult?.ok || storedMailboxEffect?.status === 'done')
+  const mailboxSelected = await applyMessageOutboxRun(state, deps, [mailboxEffect.effectId])
+  const mailboxResult = mailboxSelected.byId[mailboxEffect.effectId]?.result
+  const mailboxSucceeded = Boolean(mailboxResult?.ok)
   if (!mailboxSucceeded) {
-    const reason = mailboxRunResult?.error ?? storedMailboxEffect?.lastError ?? 'failed to push mailbox message'
+    const reason = mailboxResult?.error ?? 'failed to push mailbox message'
     wakeDetails.ok = false
     wakeDetails.reason = reason
     wakeDetails.error = reason
@@ -299,7 +273,7 @@ async function deliverMessageToRecipient(
     skippedRecipients.push({ recipient, reason })
     return
   }
-  const sentMessage = (mailboxRunResult?.value ?? storedMailboxEffect?.result ?? { id: deterministicMailboxId }) as NonNullable<SendMessagePlanningState['sentMessages'][string]>
+  const sentMessage = (mailboxResult?.value ?? { id: deterministicMailboxId }) as NonNullable<SendMessagePlanningState['sentMessages'][string]>
   state.sentMessages[recipient] = sentMessage
 
   if (params.taskId) {
@@ -327,7 +301,7 @@ async function deliverMessageToRecipient(
       },
       dependsOn: [mailboxEffect.effectId],
     })
-    await runOutboxForState(state, deps, [taskMessageRefEffect.effectId])
+    await applyMessageOutboxRun(state, deps, [taskMessageRefEffect.effectId])
   }
 
   if (policy.shouldWake) {
@@ -350,18 +324,17 @@ async function deliverMessageToRecipient(
           },
         },
       })
-      const run = await runOutboxForState(state, deps, [attentionEffect.effectId])
-      const result = run.results.find(item => item.effectId === attentionEffect.effectId)
-      const storedAttentionEffect = deps.outboxStore.get(team.name, attentionEffect.effectId)
-      const attentionResultValue = result?.value ?? storedAttentionEffect?.result
-      const deliveryResult = (result?.ok || storedAttentionEffect?.status === 'done') && attentionResultValue
+      const selected = await applyMessageOutboxRun(state, deps, [attentionEffect.effectId])
+      const attentionResult = selected.byId[attentionEffect.effectId]?.result
+      const attentionResultValue = attentionResult?.value
+      const deliveryResult = attentionResult?.ok && attentionResultValue
         ? attentionResultValue as Awaited<ReturnType<typeof deps.requestLeaderAttentionIfNeeded>>
         : {
             ok: false as const,
             recipient,
             wakeHint,
-            reason: result?.error ?? storedAttentionEffect?.lastError ?? 'leader attention side effect failed',
-            error: result?.error ?? storedAttentionEffect?.lastError,
+            reason: attentionResult?.error ?? 'leader attention side effect failed',
+            error: attentionResult?.error,
             method: 'leader_attention_requested' as const,
           }
       wakeDetails.attempted = false
@@ -386,18 +359,17 @@ async function deliverMessageToRecipient(
           },
         },
       })
-      const run = await runOutboxForState(state, deps, [deliveryEffect.effectId])
-      const result = run.results.find(item => item.effectId === deliveryEffect.effectId)
-      const storedDeliveryEffect = deps.outboxStore.get(team.name, deliveryEffect.effectId)
-      const deliveryResultValue = result?.value ?? storedDeliveryEffect?.result
-      const deliveryResult = (result?.ok || storedDeliveryEffect?.status === 'done') && deliveryResultValue
+      const selected = await applyMessageOutboxRun(state, deps, [deliveryEffect.effectId])
+      const selectedDelivery = selected.byId[deliveryEffect.effectId]
+      const deliveryResultValue = selectedDelivery?.result.value
+      const deliveryResult = selectedDelivery?.result.ok && deliveryResultValue
         ? deliveryResultValue as Awaited<ReturnType<typeof deps.requestWorkerDelivery>>
         : {
             ok: false as const,
             recipient,
             wakeHint,
-            reason: result?.error ?? storedDeliveryEffect?.lastError ?? 'worker delivery side effect failed',
-            error: result?.error ?? storedDeliveryEffect?.lastError,
+            reason: selectedDelivery?.result.error ?? 'worker delivery side effect failed',
+            error: selectedDelivery?.result.error,
             method: 'bridge_requested' as const,
           }
       wakeDetails.attempted = false
@@ -411,13 +383,12 @@ async function deliverMessageToRecipient(
         if (typeof requestId === 'string') wakeDetails.requestId = requestId
       }
       if (!wakeDetails.requestId && policy.intent === 'worker_delivery') {
-        const storedDelivery = deps.outboxStore.get(team.name, deliveryEffect.effectId)
-        const storedResult = storedDelivery?.result
+        const storedResult = selectedDelivery?.result.storedEffect?.result
         if (storedResult && typeof storedResult === 'object' && 'requestId' in storedResult) {
           const requestId = (storedResult as { requestId?: unknown }).requestId
           if (typeof requestId === 'string') wakeDetails.requestId = requestId
         }
-        if (!wakeDetails.requestId && storedDelivery) wakeDetails.requestId = deliveryEffect.effectId
+        if (!wakeDetails.requestId && selectedDelivery && 'kind' in selectedDelivery.record) wakeDetails.requestId = deliveryEffect.effectId
       }
     }
   }
@@ -478,7 +449,7 @@ async function appendPeerMessageEvent(state: SendMessagePlanningState, deps: Mes
       },
     },
   })
-  await runOutboxForState(state, deps, [eventEffect.effectId])
+  await applyMessageOutboxRun(state, deps, [eventEffect.effectId])
 }
 
 export async function executeSendMessageApplication(

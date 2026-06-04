@@ -8,19 +8,12 @@ import {
   syncPaneLabelsForTeam,
 } from '../tmux/index.js'
 export { isInsideTmux as isLeaderInsideTmux } from '../../tmux/core.js'
-import { decideMessagePolicy } from '../../core/messagePolicy.js'
-import { isMessageType, isTaskReportType } from '../../core/publicModel.js'
-import {
-  parsePersistedMessageType,
-  normalizePriority,
-} from '../../protocol.js'
 import { TEAM_LEAD } from '../../internalTypes.js'
-import type {
-  TeamMessagePriority,
-  TeamMessageType,
-  TeamMessageWakeHint,
-  TeamState,
-} from '../../internalTypes.js'
+import type { TeamState } from '../../internalTypes.js'
+import {
+  leaderMailboxSignalItemFromMailboxMessage,
+  type LeaderMailboxSignalItem,
+} from '../../runtime/leaderMailboxSignalRuntime.js'
 import {
   assertValidOwner,
   classifySpawnTask,
@@ -164,21 +157,7 @@ export function deleteTeamRuntime(team: TeamState, options?: TeamPaneCleanupOpti
 
 export function deliverLeaderMailbox(
   ctx: ExtensionContext,
-): Array<{
-  id: string
-  teamName: string
-  from: string
-  text: string
-  summary?: string
-  type?: TeamMessageType
-  taskId?: string
-  threadId?: string
-  requestId?: string
-  replyTo?: string
-  priority?: TeamMessagePriority
-  wakeHint?: TeamMessageWakeHint
-  createdAt: number
-}> {
+): LeaderMailboxSignalItem[] {
   const teamName = getCurrentTeamName(ctx)
   const memberName = getCurrentMemberName(ctx)
   if (!teamName || memberName !== TEAM_LEAD) return []
@@ -188,27 +167,5 @@ export function deliverLeaderMailbox(
     updateTeamState(team.name, () => team)
   }
   const unread = peekUnreadMailbox(teamName, TEAM_LEAD)
-  return unread.map(msg => {
-    const type = parsePersistedMessageType(msg.type)
-    const decision = type && isTaskReportType(type)
-      ? decideMessagePolicy({ kind: 'task_report', reportType: type, recipientKind: 'leader' })
-      : type && isMessageType(type)
-        ? decideMessagePolicy({ kind: 'message', messageType: type, recipientKind: 'leader' })
-        : undefined
-    return {
-      id: msg.id,
-      teamName,
-      from: msg.from,
-      text: msg.text,
-      summary: msg.summary,
-      type: type ?? undefined,
-      taskId: msg.taskId,
-      threadId: msg.threadId,
-      requestId: msg.requestId,
-      replyTo: msg.replyTo,
-      priority: normalizePriority(msg.priority),
-      wakeHint: msg.wakeHint ?? decision?.wakeHint ?? 'none',
-      createdAt: msg.createdAt,
-    }
-  })
+  return unread.map(msg => leaderMailboxSignalItemFromMailboxMessage(teamName, msg))
 }

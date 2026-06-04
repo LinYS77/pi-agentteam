@@ -3,6 +3,7 @@ import { truncateToWidth, visibleWidth } from '@earendil-works/pi-tui'
 import { bridgeLeaseMismatchReason, getBridgeLease, staleBridge } from '../state/bridgeStore.js'
 import { BRIDGE_PACKAGE_VERSION, BRIDGE_PROTOCOL_VERSION } from '../adapters/bridge/index.js'
 import type {
+  LeaderMailboxItem,
   PanelData,
   PanelSelectionView,
   TeamPanelState,
@@ -139,6 +140,33 @@ function renderPanelActivitySummary(activity: ReturnType<typeof taskHistorySumma
   return `event ${activity.id} ${activity.displayType} — ${activity.summary || '-'} (by ${short(activity.by, 18)})`
 }
 
+function compactMailboxSummary(message: LeaderMailboxItem): string {
+  const summary = message.summary?.trim()
+  return (summary ? summary : '(no summary)').replace(/\n/g, ' ')
+}
+
+function mailboxMetadataString(message: LeaderMailboxItem, key: string): string | undefined {
+  const value = message.metadata?.[key]
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed ? trimmed : undefined
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return undefined
+}
+
+function renderMailboxReadBoundaryFields(
+  theme: ExtensionContext['ui']['theme'],
+  message: LeaderMailboxItem,
+): string[] {
+  const lines: string[] = []
+  const reportId = mailboxMetadataString(message, 'reportId')
+  if (reportId) lines.push(renderDetailField(theme, 'Report', `agentteam_task action=report reportId=${reportId}`, 'dim'))
+  lines.push(renderDetailField(theme, 'Full text', 'agentteam_receive({ markRead: true })', 'dim'))
+  lines.push(renderDetailField(theme, 'Panel', 'compact only; does not mark delivered/read', 'dim'))
+  return lines
+}
+
 function renderTaskHistorySummaryFields(
   theme: ExtensionContext['ui']['theme'],
   history: ReturnType<typeof taskHistorySummary>,
@@ -269,7 +297,7 @@ function renderGlobalDetailLines(
         const latestType = mailboxType(latest)
         detailLines.push('')
         detailLines.push(renderDetailSection(theme, 'Latest attention'))
-        detailLines.push(...renderDetailBlock(theme, `Latest mail attention · ${latestType} · ${latest.from}`, latest.summary ?? latest.text, 44, latestType === 'report_blocked' ? 'error' : 'text'))
+        detailLines.push(...renderDetailBlock(theme, `Latest mail attention · ${latestType} · ${latest.from}`, compactMailboxSummary(latest), 44, latestType === 'report_blocked' ? 'error' : 'text'))
       } else {
         const latestBlocked = tasks
           .filter(task => task.status === 'blocked' || (task.status !== 'done' && !task.owner))
@@ -354,7 +382,7 @@ function renderDetailLines(
       detailLines.push(renderDetailField(theme, 'Time', new Date(message.createdAt).toLocaleTimeString(), 'text'))
       detailLines.push(renderDetailField(theme, 'References', `${message.taskId ?? '-'} / ${message.threadId ?? '-'}`, 'text'))
       detailLines.push(renderDetailField(theme, 'Attention', selectedCockpitItem.attention.join(' · ') || 'active', selectedCockpitItem.attention.length > 0 ? 'warning' : 'dim'))
-      const summary = (message.summary ?? message.text ?? '(none)').replace(/\n/g, ' ')
+      const summary = compactMailboxSummary(message)
       detailLines.push('')
       detailLines.push(renderDetailSection(theme, 'Content'))
       detailLines.push(renderDetailField(theme, 'Summary', short(summary, Math.max(12, textWidth - 16)), 'text'))
@@ -476,23 +504,25 @@ function renderDetailLines(
     detailLines.push(`📬 ${theme.fg(mailboxTypeColor(type), mailboxTypeIcon(type))} ${theme.bold(theme.fg(mailboxTypeColor(type), type))}  ${theme.fg('dim', `from `)}${theme.fg('accent', selectedMailbox.from)}`)
     detailLines.push('')
     detailLines.push(renderDetailSection(theme, 'Routing'))
+    detailLines.push(renderDetailField(theme, 'Message', selectedMailbox.id, 'dim'))
     detailLines.push(renderDetailField(theme, 'Time', new Date(selectedMailbox.createdAt).toLocaleTimeString(), 'text'))
     detailLines.push(renderDetailField(theme, 'References', `${selectedMailbox.taskId ?? '-'} / ${selectedMailbox.threadId ?? '-'}`, 'text'))
+    detailLines.push(renderDetailField(theme, 'Priority', selectedMailbox.priority ?? '-', 'text'))
+    detailLines.push(renderDetailField(theme, 'Wake', selectedMailbox.wakeHint ?? '-', 'text'))
+    if (selectedMailbox.requestId) detailLines.push(renderDetailField(theme, 'Request', selectedMailbox.requestId, 'dim'))
+    if (selectedMailbox.replyTo) detailLines.push(renderDetailField(theme, 'Reply to', selectedMailbox.replyTo, 'dim'))
+    detailLines.push(...renderMailboxReadBoundaryFields(theme, selectedMailbox))
     
+    const summary = compactMailboxSummary(selectedMailbox)
     if (state.isDetailExpanded) {
       detailLines.push('')
       detailLines.push(renderDetailSeparator(theme, textWidth))
       detailLines.push(renderDetailSection(theme, 'Content'))
-      detailLines.push(...renderDetailBlock(theme, 'Summary', selectedMailbox.summary ?? '(none)', textWidth, 'text'))
-      detailLines.push('')
-      detailLines.push(...renderDetailBlock(theme, 'Text', selectedMailbox.text || '(none)', textWidth, 'text'))
+      detailLines.push(...renderDetailBlock(theme, 'Summary', summary, textWidth, 'text'))
     } else {
-      const summary = (selectedMailbox.summary ?? '(none)').replace(/\n/g, ' ')
       detailLines.push('')
       detailLines.push(renderDetailSection(theme, 'Content'))
       detailLines.push(renderDetailField(theme, 'Summary', short(summary, Math.max(12, textWidth - 16)), 'text'))
-      const text = (selectedMailbox.text || '(none)').replace(/\n/g, ' ')
-      detailLines.push(renderDetailField(theme, 'Text', short(text, Math.max(12, textWidth - 16)), 'text'))
     }
     if (state.isDetailExpanded) {
       detailLines.push('')

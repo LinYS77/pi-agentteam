@@ -25,6 +25,7 @@ module.exports = {
     const taskMutationCommands = env.helpers.requireDist('app/taskMutationCommands.js')
     const taskReportWorkflow = env.helpers.requireDist('app/taskReportWorkflow.js')
     const taskSideEffects = env.helpers.requireDist('app/taskSideEffects.js')
+    const outboxSideEffects = env.helpers.requireDist('app/outboxSideEffects.js')
     const taskFormatting = env.helpers.requireDist('app/taskFormatting.js')
     const corePublicModel = env.helpers.requireDist('core/publicModel.js')
     const coreMessagePolicy = env.helpers.requireDist('core/messagePolicy.js')
@@ -190,8 +191,13 @@ module.exports = {
     const workerSpawnSource = env.helpers.readSource('tools/workerSpawnService.ts')
     assert.ok(!workerSpawnSource.includes('../state/outboxStore.js'), 'worker spawn service should use injected outbox store port')
     assert.ok(!workerSpawnSource.includes('../app/effectRunner.js'), 'worker spawn service should use injected outbox runner port')
-    assert.ok(workerSpawnSource.includes('deps.outboxStore.enqueue') && workerSpawnSource.includes('deps.outboxStore.get'), 'worker spawn initial delivery should use injected outbox store')
-    assert.ok(workerSpawnSource.includes('deps.outboxRunner.runOnce'), 'worker spawn initial delivery should run through injected outbox runner')
+    assert.ok(workerSpawnSource.includes('../app/outboxSideEffects.js'), 'worker spawn initial delivery should use shared outbox side-effects module')
+    assert.ok(workerSpawnSource.includes('deps.outboxStore.enqueue'), 'worker spawn initial delivery should still enqueue through injected outbox store')
+    assert.ok(workerSpawnSource.includes('runSelectedOutboxEffects'), 'worker spawn initial delivery should run through shared selected outbox runner')
+    assert.equal(workerSpawnSource.includes('deps.outboxRunner.runOnce'), false, 'worker spawn initial delivery should no longer call outboxRunner.runOnce directly')
+    assert.equal(workerSpawnSource.includes('runOutboxOnce'), false, 'worker spawn service should not call low-level outbox runner directly')
+    assert.ok(workerSpawnSource.includes("workerId: 'worker-spawn-service'"), 'worker spawn initial delivery should preserve worker-spawn-service outbox worker id')
+    assert.ok(workerSpawnSource.includes("'spawn-initial-worker-delivery'"), 'worker spawn initial delivery should preserve current idempotency key prefix')
     const sharedToolDepsSource = env.helpers.readSource('tools/shared.ts')
     assert.ok(sharedToolDepsSource.includes('outboxRunner: OutboxRunnerPort'), 'tool deps should expose a narrow outbox runner port')
     const bridgeStoreSource = env.helpers.readSource('state/bridgeStore.ts')
@@ -223,6 +229,7 @@ module.exports = {
     const appTaskMutationCommandsSource = env.helpers.readSource('app/taskMutationCommands.ts')
     const appTaskReportWorkflowSource = env.helpers.readSource('app/taskReportWorkflow.ts')
     const appTaskSideEffectsSource = env.helpers.readSource('app/taskSideEffects.ts')
+    const appOutboxSideEffectsSource = env.helpers.readSource('app/outboxSideEffects.ts')
     const appTaskCommandSharedSource = env.helpers.readSource('app/taskCommandShared.ts')
     const taskDepsBlock = appTypesSource.slice(appTypesSource.indexOf('export type TaskApplicationDeps'))
     assert.equal(appTaskSource.includes('ExtensionContext'), false, 'app task boundary should not mention Pi ExtensionContext')
@@ -314,19 +321,21 @@ module.exports = {
     }
     assert.equal(typeof taskSideEffects.handleTaskApplicationSideEffects, 'function', 'task side effects module should export handleTaskApplicationSideEffects')
     assert.ok(appTaskSideEffectsSource.includes('function handleTaskApplicationSideEffects'), 'task side effects implementation should live in taskSideEffects')
-    assert.ok(appTaskSideEffectsSource.includes('function runTaskOutboxEffects'), 'task side effects should own task outbox execution helper')
-    assert.ok(appTaskSideEffectsSource.includes('function appendTaskWarnings'), 'task side effects should own warning formatting')
-    assert.ok(appTaskSideEffectsSource.includes('function appendOutboxTaskWarnings'), 'task side effects should own outbox warning mapping')
-    assert.ok(appTaskSideEffectsSource.includes('function mailboxMessageId'), 'task side effects should own deterministic mailbox id helper')
+    assert.equal(appTaskSideEffectsSource.includes('function runTaskOutboxEffects'), false, 'task side effects should use shared selected outbox runner instead of local runner helper')
+    assert.ok(appTaskSideEffectsSource.includes('function appendTaskWarnings'), 'task side effects should own task-specific warning text/result mutation')
+    assert.equal(appTaskSideEffectsSource.includes('function appendOutboxTaskWarnings'), false, 'task side effects should use shared outbox warning mapping instead of local duplicate')
+    assert.equal(appTaskSideEffectsSource.includes('function mailboxMessageId'), false, 'task side effects should use shared deterministic mailbox id helper instead of local duplicate')
     assert.equal(appTaskSource.includes('function handleTaskApplicationSideEffects'), false, 'taskApplication should not implement side-effect runner')
     assert.equal(appTaskSource.includes('function runTaskOutboxEffects'), false, 'taskApplication should not implement outbox runner helper')
     assert.equal(appTaskSource.includes('function appendTaskWarnings'), false, 'taskApplication should not implement side-effect warning formatting')
     assert.equal(appTaskSource.includes('function appendOutboxTaskWarnings'), false, 'taskApplication should not implement outbox warning mapping')
     assert.equal(appTaskSource.includes('function mailboxMessageId'), false, 'taskApplication should not implement deterministic mailbox id helper')
     assert.ok(appTaskSideEffectsSource.includes("workerId: 'task-application'"), 'task side effects should preserve task-application outbox worker id')
-    assert.ok(appTaskSideEffectsSource.includes('`mailbox-${effectId}`'), 'task side effects should preserve deterministic mailbox id format')
+    assert.ok(appTaskSideEffectsSource.includes('mailboxMessageIdForEffect'), 'task side effects should use shared deterministic mailbox id helper')
+    assert.ok(appOutboxSideEffectsSource.includes('`mailbox-${effectId}`'), 'shared outbox side effects should preserve deterministic mailbox id format')
     assert.ok(appTaskSideEffectsSource.includes('deps.outboxStore.enqueue'), 'task side effects should enqueue through injected outboxStore port')
-    assert.ok(appTaskSideEffectsSource.includes('runOutboxOnce'), 'task side effects should execute through injected outbox runner helper')
+    assert.ok(appTaskSideEffectsSource.includes('runSelectedOutboxEffects'), 'task side effects should execute through shared selected outbox runner helper')
+    assert.equal(appTaskSideEffectsSource.includes('runOutboxOnce'), false, 'task side effects should no longer call low-level outbox runner directly')
     assert.ok(appTaskSideEffectsSource.includes('planTaskReportEffects'), 'task side effects should plan leader attention through report effect planner')
     assert.ok(appTaskSideEffectsSource.includes("kind: 'inbox_item_append_requested'"), 'task side effects should enqueue leader mailbox append effect')
     assert.ok(appTaskSideEffectsSource.includes("kind: 'leader_attention_requested'"), 'task side effects should enqueue leader attention effect')
@@ -336,6 +345,115 @@ module.exports = {
       assert.ok(appTaskSideEffectsSource.includes(sideEffectDetailToken), `task side effects should preserve detail/warning token ${sideEffectDetailToken}`)
     }
     assert.equal(appTaskSideEffectsSource.includes("kind: 'task_message_ref_append_requested'"), false, 'task side effects should not introduce TaskMessageRef effects')
+    assert.equal(appOutboxSideEffectsSource.includes('ExtensionContext'), false, 'shared outbox side-effects module should not mention Pi ExtensionContext')
+    assert.equal(appOutboxSideEffectsSource.includes('@earendil-works/pi-coding-agent'), false, 'shared outbox side-effects module should not import Pi APIs')
+    for (const forbiddenOutboxSideEffectsImport of ['../state/', '../runtime/', '../adapters/', '../tmux/']) {
+      assert.equal(appOutboxSideEffectsSource.includes(forbiddenOutboxSideEffectsImport), false, `shared outbox side-effects module should not import ${forbiddenOutboxSideEffectsImport}`)
+    }
+    assert.equal(typeof outboxSideEffects.mailboxMessageIdForEffect, 'function', 'shared outbox side-effects module should export mailboxMessageIdForEffect')
+    assert.equal(typeof outboxSideEffects.outboxWarnings, 'function', 'shared outbox side-effects module should export outboxWarnings')
+    assert.equal(typeof outboxSideEffects.outboxEffectRecord, 'function', 'shared outbox side-effects module should export outboxEffectRecord')
+    assert.equal(typeof outboxSideEffects.outboxResultForEffect, 'function', 'shared outbox side-effects module should export outboxResultForEffect')
+    assert.equal(typeof outboxSideEffects.runSelectedOutboxEffects, 'function', 'shared outbox side-effects module should export runSelectedOutboxEffects')
+    assert.ok(appOutboxSideEffectsSource.includes('OutboxRunnerPort'), 'shared outbox side-effects module should use OutboxRunnerPort type')
+    assert.ok(appOutboxSideEffectsSource.includes('OutboxStorePort'), 'shared outbox side-effects module should use OutboxStorePort type')
+    assert.ok(appOutboxSideEffectsSource.includes('OutboxRunResult'), 'shared outbox side-effects module should use OutboxRunResult type')
+    assert.ok(appOutboxSideEffectsSource.includes('outboxEffectWarningName'), 'shared outbox side-effects module should use existing warning-name helper')
+    assert.ok(appOutboxSideEffectsSource.includes('outboxRunner.runOnce'), 'shared outbox side-effects module should run effects through injected runner port')
+    assert.ok(appOutboxSideEffectsSource.includes('outboxStore.get'), 'shared outbox side-effects module should read effects through injected store port')
+    assert.ok(appTaskSideEffectsSource.includes('./outboxSideEffects.js'), 'task side effects should use shared outbox side-effects module')
+
+    assert.equal(outboxSideEffects.mailboxMessageIdForEffect('outbox-demo'), 'mailbox-outbox-demo', 'mailboxMessageIdForEffect should preserve deterministic mailbox-${effectId} format')
+    assert.deepEqual(outboxSideEffects.outboxWarnings({
+      results: [
+        { effectId: 'mailbox-effect', kind: 'inbox_item_append_requested', ok: false, error: 'mailbox failed', terminal: false },
+        { effectId: 'worker-effect', kind: 'worker_delivery_requested', ok: false, error: 'worker terminal', terminal: true },
+        { effectId: 'leader-effect', kind: 'leader_attention_requested', ok: false, error: 'leader pending' },
+        { effectId: 'ok-effect', kind: 'append_event_requested', ok: true },
+      ],
+    }), [
+      { kind: 'pushMailbox', error: 'mailbox failed', effectId: 'mailbox-effect', outboxKind: 'inbox_item_append_requested', outboxStatus: 'pending' },
+      { kind: 'requestWorkerDelivery', error: 'worker terminal', effectId: 'worker-effect', outboxKind: 'worker_delivery_requested', outboxStatus: 'failed' },
+      { kind: 'requestLeaderAttention', error: 'leader pending', effectId: 'leader-effect', outboxKind: 'leader_attention_requested', outboxStatus: 'pending' },
+    ], 'outboxWarnings should map failed run results to existing warning names/statuses')
+    assert.deepEqual(outboxSideEffects.outboxEffectRecord('stored-effect', {
+      effectId: 'stored-effect',
+      kind: 'leader_attention_requested',
+      status: 'failed',
+      idempotencyKey: 'key:stored-effect',
+      lastError: 'stored failure',
+    }), {
+      effectId: 'stored-effect',
+      kind: 'leader_attention_requested',
+      status: 'failed',
+      idempotencyKey: 'key:stored-effect',
+      lastError: 'stored failure',
+    }, 'outboxEffectRecord should return message/task-compatible details for stored effects')
+    assert.deepEqual(outboxSideEffects.outboxEffectRecord('missing-effect', null), { effectId: 'missing-effect', status: 'pending' }, 'outboxEffectRecord should preserve pending fallback when stored effect is missing')
+    const fallbackResult = outboxSideEffects.outboxResultForEffect({
+      effectId: 'fallback-effect',
+      run: { results: [{ effectId: 'fallback-effect', kind: 'worker_delivery_requested', ok: false, error: 'run failure' }] },
+      storedEffect: {
+        effectId: 'fallback-effect',
+        kind: 'worker_delivery_requested',
+        status: 'done',
+        idempotencyKey: 'key:fallback-effect',
+        result: { requestId: 'stored-request' },
+        lastError: 'stored old error',
+      },
+    })
+    assert.equal(fallbackResult.ok, true, 'outboxResultForEffect should treat stored done effect as success when latest run result is unavailable/failed')
+    assert.deepEqual(fallbackResult.value, { requestId: 'stored-request' }, 'outboxResultForEffect should fall back to stored effect result')
+    assert.equal(fallbackResult.error, 'run failure', 'outboxResultForEffect should preserve latest run error when present')
+    assert.equal(fallbackResult.status, 'done')
+    const selectedRun = {
+      claimed: 2,
+      done: 1,
+      failed: 1,
+      retried: 1,
+      terminalFailed: 0,
+      results: [
+        { effectId: 'selected-mailbox', kind: 'inbox_item_append_requested', ok: true, value: { id: 'run-mailbox' } },
+        { effectId: 'selected-leader', kind: 'leader_attention_requested', ok: false, error: 'leader transient', terminal: false },
+      ],
+    }
+    const selectedInput = { teamName: 'outbox-helper-suite', workerId: 'helper-test', effectIds: ['selected-mailbox', 'selected-leader'], limit: 5, now: 1234 }
+    const originalSelectedEffectIds = [...selectedInput.effectIds]
+    let capturedSelectedRunInput
+    const selectedStoreReads = []
+    const selectedStoredEffects = {
+      'selected-mailbox': { effectId: 'selected-mailbox', kind: 'inbox_item_append_requested', status: 'done', idempotencyKey: 'key:selected-mailbox', result: { id: 'stored-mailbox' } },
+      'selected-leader': { effectId: 'selected-leader', kind: 'leader_attention_requested', status: 'pending', idempotencyKey: 'key:selected-leader', lastError: 'stored leader error' },
+    }
+    const selected = await outboxSideEffects.runSelectedOutboxEffects(selectedInput, {
+      outboxRunner: {
+        runOnce: async input => {
+          capturedSelectedRunInput = input
+          return selectedRun
+        },
+      },
+      outboxStore: {
+        get: (teamName, effectId) => {
+          selectedStoreReads.push(`${teamName}:${effectId}`)
+          return selectedStoredEffects[effectId] ?? null
+        },
+      },
+    })
+    assert.deepEqual(selectedInput.effectIds, originalSelectedEffectIds, 'runSelectedOutboxEffects should not mutate caller effectIds')
+    assert.deepEqual(capturedSelectedRunInput, selectedInput, 'runSelectedOutboxEffects should pass selected run input through injected runner')
+    assert.equal(selected.run, selectedRun, 'runSelectedOutboxEffects should return raw runner result')
+    assert.deepEqual(selectedStoreReads, ['outbox-helper-suite:selected-mailbox', 'outbox-helper-suite:selected-leader'], 'runSelectedOutboxEffects should read back selected effect records through store')
+    assert.equal(selected.records.length, 2, 'runSelectedOutboxEffects should return one record per selected effect')
+    assert.equal(selected.records[0].effectId, 'selected-mailbox')
+    assert.equal(selected.records[0].status, 'done')
+    assert.equal(selected.records[0].idempotencyKey, 'key:selected-mailbox')
+    assert.deepEqual(selected.warnings, [{ kind: 'requestLeaderAttention', error: 'leader transient', effectId: 'selected-leader', outboxKind: 'leader_attention_requested', outboxStatus: 'pending' }], 'runSelectedOutboxEffects should include mapped warnings from raw run')
+    assert.equal(selected.byId['selected-mailbox'].record.status, 'done')
+    assert.equal(selected.byId['selected-mailbox'].result.ok, true)
+    assert.deepEqual(selected.byId['selected-mailbox'].result.value, { id: 'run-mailbox' }, 'run result value should take precedence over stored result')
+    assert.equal(selected.byId['selected-leader'].record.status, 'pending')
+    assert.equal(selected.byId['selected-leader'].result.error, 'leader transient')
+    assert.equal(selected.byId['missing-effect'], undefined, 'runSelectedOutboxEffects byId should only contain selected/readback effect ids')
     assert.equal(appTaskReportWorkflowSource.includes('ExtensionContext'), false, 'task report workflow module should not mention Pi ExtensionContext')
     assert.equal(appTaskReportWorkflowSource.includes('@earendil-works/pi-coding-agent'), false, 'task report workflow module should not import Pi APIs')
     for (const forbiddenTaskReportWorkflowImport of ['../state/taskStore.js', '../state/teamStore.js', '../state/outboxStore.js', '../runtime/', '../adapters/', '../tmux/']) {
@@ -413,7 +531,22 @@ module.exports = {
     assert.ok(appMessageSource.includes('executeSendMessageApplication'), 'app message boundary should expose the send use-case')
     assert.ok(appMessageSource.includes('planTaskReportEffects'), 'app message boundary should expose report attention/effect planning for task reports')
     assert.ok(appMessageSource.includes("kind: 'task_message_ref_append_requested'"), 'task-bound send should build refs through TaskMessageRef outbox effect')
+    assert.ok(appMessageSource.includes("workerId: 'message-application'"), 'message send outbox workflow should preserve message-application worker id')
+    assert.ok(appMessageSource.includes('./outboxSideEffects.js'), 'message send workflow should use shared outbox side-effects module')
+    assert.ok(appMessageSource.includes('mailboxMessageIdForEffect'), 'message send workflow should use shared deterministic mailbox helper')
+    assert.ok(appMessageSource.includes('runSelectedOutboxEffects'), 'message send workflow should use shared selected outbox runner')
+    assert.equal(appMessageSource.includes('function mailboxMessageId'), false, 'message send workflow should not keep local deterministic mailbox helper')
+    assert.equal(appMessageSource.includes('function appendOutboxWarnings'), false, 'message send workflow should not keep local outbox warning mapper')
+    assert.equal(appMessageSource.includes('function runOutboxForState'), false, 'message send workflow should not keep local low-level selected runner')
+    assert.equal(appMessageSource.includes('runOutboxOnce'), false, 'message send workflow should not call low-level outbox runner directly')
+    for (const messageOutboxDetailToken of ['outboxRun', 'outboxEffects', 'side_effect_failed', 'requestWorkerDelivery', 'requestLeaderAttention']) {
+      assert.ok(appMessageSource.includes(messageOutboxDetailToken), `message send outbox workflow should preserve detail/warning token ${messageOutboxDetailToken}`)
+    }
+    assert.equal(messageApplication.outboxEffectWarningName, undefined, 'message application should not expose outbox warning mapping directly')
+    assert.equal(env.helpers.requireDist('app/outbox.js').outboxEffectWarningName('inbox_item_append_requested'), 'pushMailbox', 'shared outbox warning helper should still map mailbox effects to pushMailbox')
     assert.ok(!appMessageSource.includes('communicationRefMetadata'), 'task-bound send should not build new refs through communicationRefMetadata')
+    assert.equal(fs.existsSync(path.join(env.helpers.extRoot, 'app/outboxSideEffects.ts')), true, 'shared outboxSideEffects primitives should exist')
+    assert.ok(workerSpawnSource.includes('../app/outboxSideEffects.js'), 'worker spawn workflow should use shared outbox side-effects module')
     const effectRunnerSource = env.helpers.readSource('app/effectRunner.ts')
     assert.ok(effectRunnerSource.includes('outboxHandlers'), 'outbox runner should dispatch injected handlers')
     assert.equal(fs.existsSync(path.join(env.helpers.extRoot, 'core/taskNoteModel.ts')), false, 'task note metadata model should be removed')

@@ -370,7 +370,7 @@ function setupRuntimePatches(modules) {
   }
 
   function withOutboxHandlers(overrides = {}) {
-    const hasOutboxRunnerOverride = Object.prototype.hasOwnProperty.call(overrides, 'outboxRunner')
+    const hasOutboxRunnerOverride = Object.prototype.hasOwnProperty.call(overrides, 'outboxRunner') && overrides.outboxRunner !== deps.outboxRunner
     const base = { ...deps, ...overrides }
     const outboxHandlers = modules.outboxEffectHandlers.createFileBackedOutboxEffectHandlers(base)
     const resolved = {

@@ -1,6 +1,9 @@
 import { planTaskReportEffects } from './messageApplication.js'
-import { runOutboxOnce, type OutboxRunResult } from './effectRunner.js'
-import { outboxEffectWarningName, outboxHash } from './outbox.js'
+import { outboxHash } from './outbox.js'
+import {
+  mailboxMessageIdForEffect,
+  runSelectedOutboxEffects,
+} from './outboxSideEffects.js'
 import type { TaskApplicationDeps } from './types.js'
 import type { TaskCommandResult } from './taskTypes.js'
 
@@ -12,43 +15,22 @@ function appendTaskWarnings(result: TaskCommandResult, warnings: NonNullable<Tas
   result.text = `${result.text} (warning: side effect failed: ${warnings.map(item => `${item.kind}${item.error ? ` ${item.error}` : ''}`).join('; ')})`
 }
 
-function appendOutboxTaskWarnings(result: TaskCommandResult, run: OutboxRunResult): void {
-  appendTaskWarnings(result, run.results
-    .filter(item => !item.ok)
-    .map(item => ({
-      kind: outboxEffectWarningName(item.kind),
-      error: item.error,
-      effectId: item.effectId,
-      outboxKind: item.kind,
-      outboxStatus: item.terminal ? 'failed' : 'pending',
-    })))
-}
-
-function mailboxMessageId(effectId: string): string {
-  return `mailbox-${effectId}`
-}
-
-async function runTaskOutboxEffects(
+async function applyTaskOutboxRun(
   result: TaskCommandResult,
   deps: TaskApplicationDeps,
   teamName: string,
   effectIds: string[],
-): Promise<OutboxRunResult> {
-  const run = await runOutboxOnce({
+) {
+  const selected = await runSelectedOutboxEffects({
     teamName,
     workerId: 'task-application',
     limit: effectIds.length || 1,
     effectIds,
   }, deps)
-  result.details.outboxRun = run
-  result.details.outboxEffects = effectIds.map(effectId => {
-    const effect = deps.outboxStore.get(teamName, effectId)
-    return effect
-      ? { effectId, kind: effect.kind, status: effect.status, idempotencyKey: effect.idempotencyKey, lastError: effect.lastError }
-      : { effectId, status: 'pending' }
-  })
-  appendOutboxTaskWarnings(result, run)
-  return run
+  result.details.outboxRun = selected.run
+  result.details.outboxEffects = selected.records
+  appendTaskWarnings(result, selected.warnings)
+  return selected
 }
 
 export async function handleTaskApplicationSideEffects(result: TaskCommandResult, deps: TaskApplicationDeps): Promise<void> {
@@ -76,7 +58,7 @@ export async function handleTaskApplicationSideEffects(result: TaskCommandResult
         },
       },
     })
-    const deterministicMailboxId = mailboxMessageId(mailboxEffect.effectId)
+    const deterministicMailboxId = mailboxMessageIdForEffect(mailboxEffect.effectId)
     mailboxEffect.payload.message.id = deterministicMailboxId
     mailboxOutboxEffectId = mailboxEffect.effectId
     outboxEffectIds.push(mailboxEffect.effectId)
@@ -88,11 +70,10 @@ export async function handleTaskApplicationSideEffects(result: TaskCommandResult
         threadId: pushed.threadId,
       }
     }
-    const run = await runTaskOutboxEffects(result, deps, result.wakeTeam.name, [mailboxEffect.effectId])
-    const mailboxRunResult = run.results.find(item => item.effectId === mailboxEffect.effectId)
-    const storedMailboxEffect = deps.outboxStore.get(result.wakeTeam.name, mailboxEffect.effectId)
-    mailboxDelivered = Boolean(mailboxRunResult?.ok || storedMailboxEffect?.status === 'done')
-    sentLeaderMailboxMessage = (mailboxRunResult?.value ?? storedMailboxEffect?.result) as { id?: string } | undefined
+    const selected = await applyTaskOutboxRun(result, deps, result.wakeTeam.name, [mailboxEffect.effectId])
+    const mailboxResult = selected.byId[mailboxEffect.effectId]?.result
+    mailboxDelivered = Boolean(mailboxResult?.ok)
+    sentLeaderMailboxMessage = mailboxResult?.value as { id?: string } | undefined
     if (!sentLeaderMailboxMessage && mailboxDelivered) sentLeaderMailboxMessage = { id: deterministicMailboxId }
     result.details.leaderMailboxDelivered = mailboxDelivered
     if (mailboxDelivered && leaderMailboxReportId && sentLeaderMailboxMessage?.id) {
@@ -104,7 +85,7 @@ export async function handleTaskApplicationSideEffects(result: TaskCommandResult
       if (refreshed) result.wakeTeam = refreshed
     }
     if (!mailboxDelivered) {
-      const mailboxError = mailboxRunResult?.error ?? deps.outboxStore.get(result.wakeTeam.name, mailboxEffect.effectId)?.lastError ?? 'leader mailbox push failed'
+      const mailboxError = mailboxResult?.error ?? 'leader mailbox push failed'
       result.details.mailboxDeliveryFailed = { recipient: pushed.to, error: mailboxError }
       result.text = `${result.text} (leader mailbox push failed for ${pushed.to}: ${mailboxError})`
     }
@@ -129,9 +110,8 @@ export async function handleTaskApplicationSideEffects(result: TaskCommandResult
       dependsOn: mailboxOutboxEffectId ? [mailboxOutboxEffectId] : [],
     })
     outboxEffectIds.push(attentionEffect.effectId)
-    await runTaskOutboxEffects(result, deps, result.wakeTeam.name, [attentionEffect.effectId])
+    await applyTaskOutboxRun(result, deps, result.wakeTeam.name, [attentionEffect.effectId])
   }
-
 
   if (outboxEffectIds.length > 0) {
     result.details.outboxEffectIds = outboxEffectIds

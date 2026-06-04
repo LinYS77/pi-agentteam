@@ -1,7 +1,6 @@
 import type { TeamState, TeamMessageType } from '../internalTypes.js'
 import type { DeliveryResult } from './deliveryTypes.js'
-import type { OutboxEffectRunnerDeps } from './effectRunner.js'
-import type { MailboxRepositoryPort, OutboxStorePort, TaskHistoryQueryPort, TaskMutationPort, TeamStatePort } from './ports.js'
+import type { MailboxRepositoryPort, OutboxEffectHandlers, OutboxRunnerPort, OutboxStorePort, TaskHistoryQueryPort, TaskMutationPort, TeamStatePort } from './ports.js'
 
 export type DeliveryRequestDeps = {
   requestWorkerDelivery: (
@@ -30,7 +29,11 @@ export type MessageApplicationOutboxStore = ApplicationOutboxStore
 export type TaskApplicationOutboxStore = ApplicationOutboxStore
 export type MessageReceiveMailboxRepository = MailboxRepositoryPort
 
-export type MessageApplicationDeps = Omit<OutboxEffectRunnerDeps, 'outboxStore'> & DeliveryRequestDeps & {
+export type MessageApplicationDeps = DeliveryRequestDeps & {
+  outboxRunner: OutboxRunnerPort
+  // Kept for composition compatibility while workflow callers use outboxRunner.
+  outboxHandlers?: OutboxEffectHandlers
+  now?: () => number
   outboxStore: MessageApplicationOutboxStore
   sanitizeWorkerName: (name: string) => string
 }
@@ -40,7 +43,8 @@ export type MessageReceiveApplicationDeps = {
   taskHistory: Pick<TaskHistoryQueryPort, 'findTaskReport'>
 }
 
-export type TaskApplicationDeps = Omit<OutboxEffectRunnerDeps, 'outboxStore'> & {
+export type TaskApplicationDeps = {
+  outboxRunner: OutboxRunnerPort
   outboxStore: TaskApplicationOutboxStore
   teamState: Pick<TeamStatePort, 'updateTeam'>
   taskMutations: Pick<TaskMutationPort, 'createTask' | 'appendTaskEvent' | 'appendTaskReport' | 'updateTaskReport'>
