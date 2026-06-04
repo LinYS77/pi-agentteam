@@ -4,6 +4,8 @@ const path = require('node:path')
 
 const root = path.resolve(__dirname, '..')
 const removedRootFacadeFiles = [
+  'commands.ts',
+  'tools.ts',
   'state.ts',
   'tmux.ts',
   'runtime.ts',
@@ -13,6 +15,7 @@ const removedRootFacadeFiles = [
   'runtimeRules.ts',
   'runtimeService.ts',
   'runtimeStorage.ts',
+  'runtimeWake.ts',
 ]
 const removedCompatWrapperFiles = [
   'tools/messageDelivery.ts',
@@ -82,6 +85,36 @@ const explicitPackageTopLevelFiles = [
   'utils.ts',
   'workerTurnPrompt.ts',
 ]
+const topLevelTsAllowlist = new Set(explicitPackageTopLevelFiles)
+const stablePublicEntries = [
+  'types.ts',
+  'deliveryPolicy.ts',
+]
+const extensionCompositionEntries = [
+  'index.ts',
+  'api/tools.ts',
+  'api/commands.ts',
+]
+const runtimeAdapterCompatibilityEntries = [
+  'adapters/bridge/index.ts',
+]
+const internalImplementationPrefixes = [
+  'app/',
+  'runtime/',
+  'state/',
+  'teamPanel/',
+  'commands/',
+  'hooks/',
+  'tmux/',
+  'tools/',
+  'adapters/runtime/',
+  'adapters/tmux/',
+]
+const publicSurfaceEntryFiles = [
+  ...extensionCompositionEntries,
+  ...stablePublicEntries,
+  ...runtimeAdapterCompatibilityEntries,
+]
 const packageDirectories = [
   'agents/',
   'api/',
@@ -98,8 +131,10 @@ const packageDirectories = [
 ]
 const publicRuntimeEntries = new Set([
   'types.ts',
+  'deliveryPolicy.ts',
   'api/tools.ts',
   'api/commands.ts',
+  'adapters/bridge/index.ts',
   'tools/message.ts',
   'tools/messageTypes.ts',
   'tools/task.ts',
@@ -113,11 +148,40 @@ const publicSurfaceForbiddenTokens = [
   'MailboxMessage',
   'BridgeLease',
   'DeliveryRequest',
+  'DeliveryRequestStatus',
   'LeaderProjection',
   'OutboxEffect',
+  'OutboxEffectStatus',
   'WorkerFsmStatus',
   'MemberStatus',
   'WORKER_FSM_STATUSES',
+  'DELIVERY_REQUEST_STATUSES',
+  'OUTBOX_EFFECT_STATUSES',
+]
+const stablePublicForbiddenTokens = [
+  ...publicSurfaceForbiddenTokens,
+  'pending_delivery',
+  'queued',
+  'running',
+  'draining',
+  'claimed',
+  'submitted',
+  'projected',
+  'sent',
+  'skipped',
+]
+const stablePublicForbiddenImportTargets = [
+  'internalTypes.ts',
+]
+const stablePublicForbiddenImportPrefixes = [
+  'app/',
+  'runtime/',
+  'state/',
+  'adapters/',
+  'teamPanel/',
+  'commands/',
+  'hooks/',
+  'tmux/',
 ]
 const appBoundaryForbiddenTokens = [
   {
@@ -151,8 +215,23 @@ const contextFreeAppUseCaseForbiddenTokens = [
     message: 'context-free app use cases must leave Pi status invalidation to tools/adapters',
   },
 ]
-const removedRootFacadeImportPattern = /from ['"](?:\.\/|\.\.\/)(?:state|tmux|runtime|runtimeBridge|runtimeDelivery|runtimePanes|runtimeRules|runtimeService|runtimeStorage)\.js['"]/
+const removedRootFacadeImportPattern = /from ['"](?:\.\/|\.\.\/)(?:commands|tools|state|tmux|runtime|runtimeBridge|runtimeDelivery|runtimePanes|runtimeRules|runtimeService|runtimeStorage|runtimeWake)\.js['"]/
 const directBridgeRequestToken = 'create' + 'BridgeDeliveryRequest'
+const removedTerminalTransportTokens = [
+  'sendPromptToPane',
+  'sendEnterToPane',
+  'runTmuxWorkerWake',
+  'wakeUsesTmux',
+  'tmux_fallback',
+  'pane_paste',
+  'markMailboxMessagesWakeAttempted',
+  'wakeAttemptedAt',
+  'wakeAttemptCount',
+  'set-buffer',
+  'paste-buffer',
+  'send-keys',
+  'runtimeWake',
+]
 const completedPortBoundaryRules = [
   {
     rel: 'app/effectRunner.ts',
@@ -493,20 +572,92 @@ function readJson(rel) {
 function packageFilesViolations(pkg) {
   const files = pkg.files ?? []
   const violations = []
+  if (!Array.isArray(files) || files.length === 0) violations.push('package.json: files must be an explicit runtime packaging allow-list')
+  if (pkg.pi?.extensions?.length !== 1 || pkg.pi.extensions[0] !== './index.ts') violations.push("package.json: pi.extensions must remain ['./index.ts']")
+  for (const field of ['exports', 'main', 'types']) {
+    if (Object.prototype.hasOwnProperty.call(pkg, field)) violations.push(`package.json: must not add ${field} without explicit compatibility/export-map decision`)
+  }
+  for (const lifecycleScript of ['preinstall', 'install', 'postinstall', 'prepare']) {
+    if (Object.prototype.hasOwnProperty.call(pkg.scripts ?? {}, lifecycleScript)) violations.push(`package.json: must not add lifecycle script ${lifecycleScript}`)
+  }
   if (files.includes('*.ts')) violations.push('package.json: files must not include broad *.ts package surface')
+  if (files.includes('**/*.ts')) violations.push('package.json: files must not include broad **/*.ts package surface')
+  for (const localOrTempEntry of ['docs/', 'scripts/', 'tests/', 'tmp/', 'temp/', 'data/', 'dist/', 'node_modules/', '*.tgz', 'pi-agentteam-*.tgz']) {
+    if (files.includes(localOrTempEntry)) violations.push(`package.json: files must not include local/dev/temp entry ${localOrTempEntry}`)
+  }
   for (const rel of explicitPackageTopLevelFiles) {
     if (!files.includes(rel)) violations.push(`package.json: files missing explicit top-level file ${rel}`)
   }
   for (const dir of packageDirectories) {
     if (!files.includes(dir)) violations.push(`package.json: files missing required directory ${dir}`)
   }
-  for (const rel of ['!/commands.ts', '!/tools.ts', ...removedRootFacadeFiles.map(file => `!${file}`), ...removedCompatWrapperFiles.map(file => `!${file}`), ...removedLegacyTaskNoteFiles.map(file => `!${file}`), '!runtime/teamSideEffects.ts']) {
+  const removedRootFacadePackageExclusions = removedRootFacadeFiles.map(file => (file === 'commands.ts' || file === 'tools.ts') ? `!/${file}` : `!${file}`)
+  for (const rel of [...removedRootFacadePackageExclusions, ...removedCompatWrapperFiles.map(file => `!${file}`), ...removedLegacyTaskNoteFiles.map(file => `!${file}`), '!runtime/teamSideEffects.ts']) {
     if (!files.includes(rel)) violations.push(`package.json: files missing explicit exclusion ${rel}`)
   }
   for (const rel of explicitPackageTopLevelFiles) {
     if (!fs.existsSync(path.join(root, rel))) violations.push(`package.json: included file does not exist: ${rel}`)
   }
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.endsWith('.ts') && !topLevelTsAllowlist.has(entry.name)) {
+      violations.push(`${entry.name}: unexpected top-level TypeScript facade; add an explicit compatibility/deprecation plan and boundary allow-list before introducing it`)
+    }
+  }
   return violations
+}
+
+function publicSurfacePolicyViolations() {
+  const out = []
+  for (const rel of publicSurfaceEntryFiles) {
+    if (!fs.existsSync(path.join(root, rel))) out.push(`${rel}: public-looking surface must remain present unless an explicit compatibility/deprecation plan updates the guard`)
+  }
+  for (const rel of stablePublicEntries) {
+    const source = fs.existsSync(path.join(root, rel)) ? fs.readFileSync(path.join(root, rel), 'utf8') : ''
+    for (const forbiddenTarget of stablePublicForbiddenImportTargets) {
+      if (source.includes(forbiddenTarget.replace(/\.ts$/, '.js'))) out.push(`${rel}: stable public entry must not import ${forbiddenTarget}`)
+    }
+    for (const forbiddenPrefix of stablePublicForbiddenImportPrefixes) {
+      if (source.includes(`from './${forbiddenPrefix}`) || source.includes(`from '../${forbiddenPrefix}`)) out.push(`${rel}: stable public entry must not import internal prefix ${forbiddenPrefix}`)
+    }
+    for (const token of stablePublicForbiddenTokens) {
+      if (wordTokenPattern(token).test(source)) out.push(`${rel}: stable public entry mentions internal token ${token}`)
+    }
+  }
+  const typesSource = fs.existsSync(path.join(root, 'types.ts')) ? fs.readFileSync(path.join(root, 'types.ts'), 'utf8') : ''
+  if (!typesSource.includes('./core/publicModel.js')) out.push('types.ts: stable public vocabulary should depend on core/publicModel')
+  if (/from ['"]\.\/(?!core\/publicModel\.js|core\/teamIdentity\.js)/.test(typesSource)) out.push('types.ts: stable public vocabulary must not grow non-public top-level imports')
+  const deliveryPolicySource = fs.existsSync(path.join(root, 'deliveryPolicy.ts')) ? fs.readFileSync(path.join(root, 'deliveryPolicy.ts'), 'utf8') : ''
+  if (!deliveryPolicySource.includes("AgentTeamDeliveryPolicyName = 'bridge-only'")) out.push('deliveryPolicy.ts: stable public policy helper must remain bridge-only')
+  for (const token of [...removedRuntimeAliasTokens, ...removedTerminalTransportTokens]) {
+    if (deliveryPolicySource.includes(token)) out.push(`deliveryPolicy.ts: stable public policy helper must not mention removed/alternate delivery token ${token}`)
+  }
+  for (const rel of removedRootFacadeFiles) {
+    if (fs.existsSync(path.join(root, rel))) out.push(`${rel}: removed root facade must not be reintroduced without explicit compatibility/deprecation plan`)
+  }
+  const indexSource = fs.existsSync(path.join(root, 'index.ts')) ? fs.readFileSync(path.join(root, 'index.ts'), 'utf8') : ''
+  if (!indexSource.includes('export default function agentTeamExtension')) out.push('index.ts: must remain the default Pi extension entrypoint')
+  if (/^export\s+(?!default\b)/m.test(indexSource)) out.push('index.ts: must not become a broad public barrel or add named exports without explicit decision')
+  const apiToolsSource = fs.existsSync(path.join(root, 'api/tools.ts')) ? fs.readFileSync(path.join(root, 'api/tools.ts'), 'utf8') : ''
+  if (!apiToolsSource.includes('export function registerAgentTeamTools')) out.push('api/tools.ts: extension composition helper export must remain present')
+  if (/^export\s+(?:\{|\*)/m.test(apiToolsSource)) out.push('api/tools.ts: must not grow a broad barrel export without explicit decision')
+  for (const token of ['../state/', '../runtime/', '../tmux/', '../adapters/']) {
+    if (apiToolsSource.includes(token)) out.push(`api/tools.ts: extension composition entry should stay thin and not import ${token}`)
+  }
+  if (!apiToolsSource.includes('../tools/team.js') || !apiToolsSource.includes('../tools/message.js') || !apiToolsSource.includes('../tools/task.js')) out.push('api/tools.ts: extension composition entry should delegate to tools modules')
+  const apiCommandsSource = fs.existsSync(path.join(root, 'api/commands.ts')) ? fs.readFileSync(path.join(root, 'api/commands.ts'), 'utf8') : ''
+  if (!apiCommandsSource.includes('export function registerAgentTeamCommands')) out.push('api/commands.ts: extension composition helper export must remain present')
+  if (/^export\s+(?:\{|\*)/m.test(apiCommandsSource)) out.push('api/commands.ts: must not grow a broad barrel export without explicit decision')
+  for (const token of ['../state/', '../runtime/', '../tmux/', '../adapters/']) {
+    if (apiCommandsSource.includes(token)) out.push(`api/commands.ts: extension composition entry should stay thin and not import ${token}`)
+  }
+  if (!apiCommandsSource.includes('../commands/team.js')) out.push('api/commands.ts: extension composition entry should delegate to commands module')
+  const bridgeIndexSource = fs.existsSync(path.join(root, 'adapters/bridge/index.ts')) ? fs.readFileSync(path.join(root, 'adapters/bridge/index.ts'), 'utf8') : ''
+  if (bridgeIndexSource.includes(directBridgeRequestToken) || bridgeIndexSource.includes('bridgeRequest.js')) out.push('adapters/bridge/index.ts: must not export direct bridge request creation helpers')
+  if (!bridgeIndexSource.includes('../../runtime/bridgeConstants.js') || !bridgeIndexSource.includes('../../runtime/bridgeController.js')) out.push('adapters/bridge/index.ts: runtime adapter compatibility entry should re-export bridge runtime modules')
+  for (const token of removedTerminalTransportTokens) {
+    if (bridgeIndexSource.includes(token)) out.push(`adapters/bridge/index.ts: runtime adapter compatibility entry must not expose terminal/tmux fallback token ${token}`)
+  }
+  return out
 }
 
 function normalizedImportTarget(file, specifier) {
@@ -586,6 +737,7 @@ function dependencyBoundaryViolation(rel, targetRel) {
 const violations = []
 const pkg = readJson('package.json')
 violations.push(...packageFilesViolations(pkg))
+violations.push(...publicSurfacePolicyViolations())
 
 for (const rel of [...removedRootFacadeFiles, ...removedCompatWrapperFiles, ...removedLegacyTaskNoteFiles]) {
   if (fs.existsSync(path.join(root, rel))) {
@@ -612,6 +764,9 @@ for (const file of walk(root)) {
   for (const token of removedRuntimeAliasTokens) {
     if ((token === 'leader_triage_requested' || token === 'leader_triage') && rel === 'state/validation.ts') continue
     if (text.includes(token)) violations.push(`${rel}: contains removed compatibility token ${token}`)
+  }
+  for (const token of removedTerminalTransportTokens) {
+    if (text.includes(token)) violations.push(`${rel}: contains removed terminal/tmux transport fallback token ${token}`)
   }
   for (const token of retiredLegacyTaskNoteTokens) {
     if (legacyTaskNoteCleanupFiles.has(rel) && (token === 'task_note_append_requested' || token === 'TeamTask.notes')) continue

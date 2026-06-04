@@ -1,8 +1,9 @@
-// Public API/model vocabulary surface.
+// Public/stable vocabulary surface.
 //
 // Runtime, persisted store, delivery, projection, and Outbox shapes live in
-// internalTypes.ts or focused app/runtime/state modules. Public consumers should
-// depend on the small vNext vocabulary exported here and from core/publicModel.
+// internalTypes.ts or focused app/runtime/state modules. Packed runtime files are
+// not all stable public API; public consumers should depend on the small vNext
+// vocabulary exported here and from core/publicModel.
 
 import { TEAM_LEAD as CORE_TEAM_LEAD } from './core/teamIdentity.js'
 

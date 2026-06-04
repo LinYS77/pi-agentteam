@@ -38,6 +38,8 @@ pi install npm:pi-agentteam
 
 **Requirements:** [pi](https://github.com/badlogic/pi-mono) ≥ 0.60 · [tmux](https://github.com/tmux/tmux). The leader pi session must run inside tmux.
 
+`pi install npm:pi-agentteam` installs the npm `latest` version. GitHub-only vNext notes in this README can appear before an npm publish is explicitly performed, so do not assume unreleased GitHub changes are available from npm until a package release is published.
+
 ---
 
 ## 🚀 Quick Start
@@ -293,6 +295,23 @@ index.ts              ← Extension entry point
     ├── planner.md
     └── implementer.md
 ```
+
+### Package Surface Tiers
+
+Packed runtime files are not all stable public API. The current package intentionally has no restrictive `exports` map in v0.6.7, so existing deep imports are not newly blocked yet, but only the surfaces below should be treated as stable promises.
+
+- **Public/stable promises**
+  - Pi extension default entrypoint is `package.json#pi.extensions` pointing at `./index.ts`; `index.ts` is the extension facade.
+  - Public collaboration vocabulary and simple public shapes live in `types.ts`.
+  - User-facing Pi tool/command schemas and behavior are the primary product API.
+  - `deliveryPolicy.ts` bridge-only helpers document the supported delivery policy surface.
+- **Compatibility/composition surfaces**
+  - `api/tools.ts` and `api/commands.ts` are extension composition helpers for wiring AgentTeam into a Pi extension; they are kept stable, but they are not a broad end-user API.
+  - `adapters/bridge/index.ts` is a bridge runtime adapter compatibility surface for worker bridge composition, not a broad user API.
+- **Internal/packed-for-runtime paths**
+  - `app/`, `runtime/`, `state/`, `teamPanel/`, `commands/`, `hooks/`, `tmux/`, most `tools/`, `adapters/runtime/`, and `adapters/tmux/` are packed so the extension can run, not because every subpath is stable API.
+  - `package.json#files` is a runtime packaging allow-list, not a promise that every packed subpath is stable API.
+  - `docs/` and `scripts/` remain local-only and excluded from the package by default.
 
 ### Design Principles
 

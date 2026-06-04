@@ -1,3 +1,8 @@
+// Bridge runtime adapter compatibility barrel.
+//
+// Packed so the extension and worker bridge runtime can compose reliably. This
+// is a compatibility surface for bridge orchestration, not a broad user API.
+
 export {
   BRIDGE_CAPABILITIES,
   BRIDGE_HEARTBEAT_MS,

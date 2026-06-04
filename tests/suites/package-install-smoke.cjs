@@ -13,13 +13,20 @@ function walkSourceFiles(root, out = []) {
   return out
 }
 
+function rootPackageTarballs(root) {
+  return fs.readdirSync(root).filter(name => /^pi-agentteam-.*\.tgz$/.test(name)).sort()
+}
+
 function packedFileList(root) {
+  assert.deepEqual(rootPackageTarballs(root), [], 'repo root should not contain pi-agentteam tarballs before package dry-run')
   const packed = spawnSync('npm', ['pack', '--dry-run', '--ignore-scripts', '--json'], {
     cwd: root,
     encoding: 'utf8',
   })
   assert.equal(packed.status, 0, `npm pack dry-run should succeed\n${packed.stdout}\n${packed.stderr}`)
   const parsed = JSON.parse(packed.stdout)
+  assert.equal(parsed[0].entryCount, parsed[0].files.length, 'npm pack dry-run entryCount should match files list length')
+  assert.deepEqual(rootPackageTarballs(root), [], 'npm pack dry-run should not leave pi-agentteam tarballs in repo root')
   return parsed[0].files.map(file => file.path).sort()
 }
 
@@ -32,10 +39,14 @@ module.exports = {
     assert.equal(pkg.name, 'pi-agentteam')
     assert.ok(pkg.pi && Array.isArray(pkg.pi.extensions), 'package.json should declare pi.extensions')
     assert.ok(pkg.pi.extensions.includes('./index.ts'), 'package.json should expose ./index.ts as pi extension entry')
+    assert.equal(Object.prototype.hasOwnProperty.call(pkg, 'exports'), false, 'package.json should not define a restrictive exports map yet')
+    assert.equal(Object.prototype.hasOwnProperty.call(pkg, 'main'), false, 'package.json should characterize current no-main extension package state')
+    assert.equal(Object.prototype.hasOwnProperty.call(pkg, 'types'), false, 'package.json should characterize current no-types extension package state')
 
     const files = pkg.files || []
+    assert.ok(Array.isArray(files) && files.length > 0, 'package files should be an explicit runtime packaging allow-list')
     const packedFiles = packedFileList(root)
-    assert.equal(pkg.version, '0.6.6', 'release package version should match approved v0.6.6 target')
+    assert.equal(pkg.version, '0.6.7', 'release package version should match approved v0.6.7 target')
     assert.equal(pkg.scripts?.test, 'node tests/run.cjs')
     assert.equal(pkg.scripts?.typecheck, 'tsc --noEmit -p tsconfig.json')
     assert.equal(pkg.scripts?.['check:boundaries'], 'node scripts/check-import-boundaries.cjs')
@@ -68,6 +79,10 @@ module.exports = {
     const exampleConfig = JSON.parse(fs.readFileSync(path.join(root, 'config.example.json'), 'utf8'))
     assert.deepEqual(exampleConfig, { agentModels: { planner: null, researcher: null, implementer: null } })
     assert.equal(files.includes('*.ts'), false, 'package files should not expose broad top-level *.ts surface')
+    assert.equal(files.includes('**/*.ts'), false, 'package files should not expose broad recursive *.ts surface')
+    for (const localOrTempEntry of ['docs/', 'scripts/', 'tests/', 'tmp/', 'temp/', 'data/', 'dist/', 'node_modules/', '*.tgz', 'pi-agentteam-*.tgz']) {
+      assert.equal(files.includes(localOrTempEntry), false, `package files should not include local/dev/temp entry ${localOrTempEntry}`)
+    }
     const requiredTopLevelFiles = [
       'index.ts',
       'types.ts',
@@ -89,6 +104,26 @@ module.exports = {
       assert.ok(files.includes(requiredTopLevelFile), `package files should explicitly include required top-level file ${requiredTopLevelFile}`)
       assert.ok(packedFiles.includes(requiredTopLevelFile), `npm pack dry-run should include required top-level file ${requiredTopLevelFile}`)
     }
+    for (const requiredPackageEntry of [
+      'agents/',
+      'api/',
+      'app/',
+      'adapters/',
+      'commands/',
+      'hooks/',
+      'core/',
+      'runtime/',
+      'state/',
+      'teamPanel/',
+      'tmux/',
+      'tools/',
+      'config.example.json',
+      'tsconfig.json',
+      'README.md',
+      'LICENSE',
+    ]) {
+      assert.ok(files.includes(requiredPackageEntry), `package files should include runtime packaging allow-list entry ${requiredPackageEntry}`)
+    }
     assert.ok(files.includes('api/'), 'package files should include pi-facing api registration entrypoints')
     assert.ok(files.includes('adapters/'), 'package files should include explicit runtime/tmux adapter entrypoints')
     assert.ok(files.includes('!/commands.ts'), 'package files should explicitly exclude legacy top-level commands registration entrypoint without excluding api/commands.ts')
@@ -104,6 +139,7 @@ module.exports = {
       '!runtimeRules.ts',
       '!runtimeService.ts',
       '!runtimeStorage.ts',
+      '!runtimeWake.ts',
     ]) {
       assert.ok(files.includes(removedRootFacade), `package files should explicitly exclude removed root facade ${removedRootFacade}`)
     }
@@ -149,6 +185,8 @@ module.exports = {
     }
 
     const removedFiles = [
+      'commands.ts',
+      'tools.ts',
       'state.ts',
       'tmux.ts',
       'runtime.ts',
@@ -158,6 +196,7 @@ module.exports = {
       'runtimeRules.ts',
       'runtimeService.ts',
       'runtimeStorage.ts',
+      'runtimeWake.ts',
       'commands/cleanup.ts',
       'tools/messageMirror.ts',
       'tools/taskUtils.ts',
@@ -179,11 +218,14 @@ module.exports = {
     }
     for (const requiredPackedFile of [
       'index.ts',
+      'types.ts',
       'api/tools.ts',
       'api/commands.ts',
+      'deliveryPolicy.ts',
       'app/effectRunner.ts',
       'app/outboxSideEffects.ts',
       'app/deliveryTypes.ts',
+      'adapters/bridge/index.ts',
       'adapters/bridge/delivery.ts',
       'adapters/runtime/session.ts',
       'adapters/tmux/index.ts',
@@ -200,9 +242,25 @@ module.exports = {
     ]) {
       assert.ok(packedFiles.includes(requiredPackedFile), `npm pack dry-run should include required package file ${requiredPackedFile}`)
     }
+    for (const requiredRuntimePackedFile of [
+      'hooks/session.ts',
+      'core/publicModel.ts',
+      'teamPanel/layout.ts',
+      'tmux/core.ts',
+      'tools/shared.ts',
+      'README.md',
+      'LICENSE',
+      'tsconfig.json',
+    ]) {
+      assert.ok(packedFiles.includes(requiredRuntimePackedFile), `npm pack dry-run should include runtime/package support file ${requiredRuntimePackedFile}`)
+    }
     assert.equal(packedFiles.includes('tests/run.cjs'), false, 'npm pack dry-run should not include tests')
     assert.equal(packedFiles.includes('docs/agentteam-refactor-vnext.md'), false, 'npm pack dry-run should not include docs')
     assert.equal(packedFiles.includes('scripts/check-import-boundaries.cjs'), false, 'npm pack dry-run should not include scripts')
+    assert.equal(packedFiles.some(file => file === 'tests' || file.startsWith('tests/')), false, 'npm pack dry-run should not include any tests directory files')
+    assert.equal(packedFiles.some(file => file === 'docs' || file.startsWith('docs/')), false, 'npm pack dry-run should not include any docs directory files')
+    assert.equal(packedFiles.some(file => file === 'scripts' || file.startsWith('scripts/')), false, 'npm pack dry-run should not include any scripts directory files')
+    assert.equal(packedFiles.some(file => file.endsWith('.tgz') || file.startsWith('tmp/') || file.startsWith('temp/')), false, 'npm pack dry-run should not include tarballs or temp files')
 
     const sourceText = [
       ...toolRegistrationFiles,

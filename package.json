@@ -1,6 +1,6 @@
 {
   "name": "pi-agentteam",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "description": "Multi-agent team orchestration for pi — leader-coordinator pattern with researcher, planner, and implementer teammates in tmux panes",
   "keywords": [
     "pi-package",
@@ -54,6 +54,7 @@
     "!runtimeRules.ts",
     "!runtimeService.ts",
     "!runtimeStorage.ts",
+    "!runtimeWake.ts",
     "commands/",
     "hooks/",
     "core/",

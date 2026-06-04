@@ -1,3 +1,9 @@
+// Public/stable bridge-only delivery policy helper surface.
+//
+// AgentTeam currently supports one product delivery policy. These helpers are a
+// compatibility surface for callers that need to inspect/normalize policy names;
+// they do not reintroduce legacy terminal/tmux delivery modes.
+
 export type AgentTeamDeliveryPolicyName = 'bridge-only'
 
 export type AgentTeamDeliveryPolicy = {
