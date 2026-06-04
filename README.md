@@ -38,7 +38,7 @@ pi install npm:pi-agentteam
 
 **Requirements:** [pi](https://github.com/badlogic/pi-mono) ≥ 0.60 · [tmux](https://github.com/tmux/tmux). The leader pi session must run inside tmux.
 
-`pi install npm:pi-agentteam` installs the npm `latest` version. GitHub-only vNext notes in this README can appear before an npm publish is explicitly performed, so do not assume unreleased GitHub changes are available from npm until a package release is published.
+`pi install npm:pi-agentteam` installs the npm `latest` version. GitHub-only vNext notes in this README can appear before an npm publish is explicitly performed, so do not assume unreleased GitHub changes are available from npm until a package release is published. If v0.6.8 is promoted to npm, it may sync npm users from `pi-agentteam@0.6.3` across several GitHub-only releases; see [Package Surface Tiers](#package-surface-tiers) for the release-notes-only compatibility posture.
 
 ---
 
@@ -298,7 +298,7 @@ index.ts              ← Extension entry point
 
 ### Package Surface Tiers
 
-Packed runtime files are not all stable public API. The current package intentionally has no restrictive `exports` map in v0.6.7, so existing deep imports are not newly blocked yet, but only the surfaces below should be treated as stable promises.
+Packed runtime files are not all stable public API. The package intentionally has no restrictive `exports` map at this surface tier, so existing deep imports are not newly blocked yet, but only the surfaces below should be treated as stable promises.
 
 - **Public/stable promises**
   - Pi extension default entrypoint is `package.json#pi.extensions` pointing at `./index.ts`; `index.ts` is the extension facade.
@@ -312,6 +312,18 @@ Packed runtime files are not all stable public API. The current package intentio
   - `app/`, `runtime/`, `state/`, `teamPanel/`, `commands/`, `hooks/`, `tmux/`, most `tools/`, `adapters/runtime/`, and `adapters/tmux/` are packed so the extension can run, not because every subpath is stable API.
   - `package.json#files` is a runtime packaging allow-list, not a promise that every packed subpath is stable API.
   - `docs/` and `scripts/` remain local-only and excluded from the package by default.
+
+#### v0.6.8 npm sync compatibility note
+
+If v0.6.8 is promoted to npm, npm `latest` may jump from `pi-agentteam@0.6.3` to v0.6.8 after several GitHub-only releases. The package comparison against npm `0.6.3` is additive: 8 internal runtime/source files added and 0 packed files removed.
+
+No root compatibility facades/wrappers were added: `commands.ts`, `tools.ts`, `state.ts`, `tmux.ts`, `runtime*.ts`, and `runtimeWake.ts` were not packed in npm `0.6.3` and remain absent. Adding those paths would expand the public-looking surface rather than restore npm `0.6.3` compatibility.
+
+Stable/public entries remain present: `index.ts`, `types.ts`, `deliveryPolicy.ts`, `api/tools.ts`, `api/commands.ts`, and `adapters/bridge/index.ts`. Packed implementation dirs are included so the TypeScript Pi extension can run, but they are not all stable subpath APIs. Unsupported deep imports into internals may need adjustment.
+
+Release notes are the compatibility path for v0.6.8. Targeted shims/wrappers are considered only with concrete external-user evidence for a specific broken import path that existed in npm `0.6.3`; absent that evidence, AgentTeam will not add broad compatibility wrappers.
+
+Public behavior remains behavior-preserving: `agentteam_receive` is the full-text/read boundary; `/team` stays compact/read-mostly and does not mark mailbox read/delivered; delivery stays bridge-only with no terminal-key fallback; AgentTeam does not add autopilot, hidden workers, worker-spawns-worker, automatic downstream task creation, or other downstream automation.
 
 ### Design Principles
 

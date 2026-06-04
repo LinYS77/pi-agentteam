@@ -24,7 +24,7 @@ function packedFileList(root) {
   assert.equal(packed.status, 0, `npm pack dry-run should succeed for public surface characterization\n${packed.stdout}\n${packed.stderr}`)
   const parsed = JSON.parse(packed.stdout)
   assert.equal(parsed[0].name, 'pi-agentteam', 'pack dry-run should inspect pi-agentteam package')
-  assert.equal(parsed[0].version, '0.6.7', 'S0 characterization should track current approved package version')
+  assert.equal(parsed[0].version, '0.6.8', 'S6 readiness should track current approved package version')
   assert.equal(parsed[0].entryCount, parsed[0].files.length, 'npm pack dry-run entryCount should match files list length')
   assert.deepEqual(rootPackageTarballs(root), [], 'npm pack dry-run should not leave pi-agentteam tarballs in repo root')
   return parsed[0].files.map(file => file.path).sort()
@@ -85,7 +85,7 @@ module.exports = {
     const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 
     assert.equal(pkg.name, 'pi-agentteam')
-    assert.equal(pkg.version, '0.6.7', 'v0.6.7 S8 should update current approved release target')
+    assert.equal(pkg.version, '0.6.8', 'v0.6.8 S6 should update current approved release target')
     assert.deepEqual(pkg.pi?.extensions, ['./index.ts'], 'pi extension entry should remain the package facade')
     assert.equal(Object.prototype.hasOwnProperty.call(pkg, 'exports'), false, 'package should not define a restrictive exports map yet')
     assert.equal(Object.prototype.hasOwnProperty.call(pkg, 'main'), false, 'package should characterize current no-main extension package state')
@@ -394,9 +394,11 @@ module.exports = {
       '`docs/` remains local design notes and `scripts/` remains local development helpers; neither directory is included in the npm package `files` list by default.',
       'GitHub-only vNext notes in this README can appear before an npm publish is explicitly performed',
       'do not assume unreleased GitHub changes are available from npm',
+      'If v0.6.8 is promoted to npm, it may sync npm users from `pi-agentteam@0.6.3` across several GitHub-only releases',
+      'release-notes-only compatibility posture',
       '### Package Surface Tiers',
       'Packed runtime files are not all stable public API.',
-      'no restrictive `exports` map in v0.6.7',
+      'package intentionally has no restrictive `exports` map at this surface tier',
       'existing deep imports are not newly blocked yet',
       'Public/stable promises',
       'Pi extension default entrypoint is `package.json#pi.extensions` pointing at `./index.ts`',
@@ -409,6 +411,19 @@ module.exports = {
       'Internal/packed-for-runtime paths',
       '`app/`, `runtime/`, `state/`, `teamPanel/`, `commands/`, `hooks/`, `tmux/`, most `tools/`, `adapters/runtime/`, and `adapters/tmux/` are packed so the extension can run',
       '`package.json#files` is a runtime packaging allow-list, not a promise that every packed subpath is stable API',
+      '#### v0.6.8 npm sync compatibility note',
+      'npm `latest` may jump from `pi-agentteam@0.6.3` to v0.6.8 after several GitHub-only releases',
+      '8 internal runtime/source files added and 0 packed files removed',
+      'No root compatibility facades/wrappers were added',
+      '`commands.ts`, `tools.ts`, `state.ts`, `tmux.ts`, `runtime*.ts`, and `runtimeWake.ts` were not packed in npm `0.6.3` and remain absent',
+      'Stable/public entries remain present: `index.ts`, `types.ts`, `deliveryPolicy.ts`, `api/tools.ts`, `api/commands.ts`, and `adapters/bridge/index.ts`',
+      'Unsupported deep imports into internals may need adjustment',
+      'Release notes are the compatibility path for v0.6.8',
+      'Targeted shims/wrappers are considered only with concrete external-user evidence',
+      'AgentTeam will not add broad compatibility wrappers',
+      '`/team` stays compact/read-mostly and does not mark mailbox read/delivered',
+      'delivery stays bridge-only with no terminal-key fallback',
+      'does not add autopilot, hidden workers, worker-spawns-worker, automatic downstream task creation, or other downstream automation',
     ]) {
       assert.ok(readme.includes(publicPromise), `README should keep existing public promise: ${publicPromise}`)
     }

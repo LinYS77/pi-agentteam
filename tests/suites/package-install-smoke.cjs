@@ -46,7 +46,7 @@ module.exports = {
     const files = pkg.files || []
     assert.ok(Array.isArray(files) && files.length > 0, 'package files should be an explicit runtime packaging allow-list')
     const packedFiles = packedFileList(root)
-    assert.equal(pkg.version, '0.6.7', 'release package version should match approved v0.6.7 target')
+    assert.equal(pkg.version, '0.6.8', 'release package version should match approved v0.6.8 target')
     assert.equal(pkg.scripts?.test, 'node tests/run.cjs')
     assert.equal(pkg.scripts?.typecheck, 'tsc --noEmit -p tsconfig.json')
     assert.equal(pkg.scripts?.['check:boundaries'], 'node scripts/check-import-boundaries.cjs')
