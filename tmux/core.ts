@@ -1,4 +1,18 @@
 import { runTmuxNoThrow, runTmuxNoThrowAsync } from './client.js'
+export {
+  captureTmuxSnapshot,
+  findPaneInSnapshot,
+  listAgentTeamPanesFromSnapshot,
+  paneExistsInSnapshot,
+  parseTmuxPaneSnapshot,
+  resolvePaneBindingFromSnapshot,
+  TMUX_PANE_SNAPSHOT_FORMAT,
+} from './snapshot.js'
+export type {
+  TmuxPaneSnapshotItem,
+  TmuxSnapshot,
+  TmuxSnapshotPaneBinding,
+} from './snapshot.js'
 
 type PaneBinding = {
   paneId: string
