@@ -110,27 +110,64 @@ module.exports = {
     const originalCaptureCurrentPaneBindingForCreate = modules.tmux.captureCurrentPaneBinding
     const originalPaneExistsForCreate = modules.tmux.paneExists
     try {
+      const existingLeaderSessionFile = '/tmp/unsafe-existing-suite-old-leader.jsonl'
+      const existingLeaderCwd = '/tmp/unsafe-existing-suite-existing-cwd'
+      const existingLeaderPaneId = '%still-live-leader'
+      const existingLeaderWindowTarget = 'test:@2'
+      const currentLeaderSessionFile = '/tmp/unsafe-existing-suite-new-leader.jsonl'
+      const currentCwd = '/tmp/unsafe-existing-suite-new-cwd'
+      const currentPaneId = '%current-collision-leader'
       const unattachedExistingTeam = modules.state.createInitialTeamState({
         teamName: 'unsafe-existing-suite',
         description: 'existing team that cannot attach without current pane',
-        leaderSessionFile: '/tmp/unsafe-existing-suite-old-leader.jsonl',
-        leaderCwd: '/tmp/unsafe-existing-suite',
+        leaderSessionFile: existingLeaderSessionFile,
+        leaderCwd: existingLeaderCwd,
       })
-      unattachedExistingTeam.members['team-lead'].paneId = '%still-live-leader'
-      unattachedExistingTeam.members['team-lead'].windowTarget = 'test:@2'
+      unattachedExistingTeam.members['team-lead'].paneId = existingLeaderPaneId
+      unattachedExistingTeam.members['team-lead'].windowTarget = existingLeaderWindowTarget
       modules.state.writeTeamState(unattachedExistingTeam)
-      modules.tmux.paneExists = paneId => paneId === '%still-live-leader' || originalPaneExistsForCreate(paneId)
-      const unsafeCtx = helpers.createCtx('/tmp/unsafe-existing-suite-new', '/tmp/unsafe-existing-suite-new-leader.jsonl', env.notifications)
+      const existingTeamRawBeforeCollision = fs.readFileSync(modules.state.getTeamStatePath('unsafe-existing-suite'), 'utf8')
+      modules.tmux.captureCurrentPaneBinding = () => ({ paneId: currentPaneId, target: 'test:@9' })
+      modules.tmux.paneExists = paneId => paneId === existingLeaderPaneId || originalPaneExistsForCreate(paneId)
+      const unsafeCtx = helpers.createCtx(currentCwd, currentLeaderSessionFile, env.notifications)
       res = await tool('agentteam_create').execute('create-existing-unsafe', {
         team_name: 'unsafe-existing-suite',
         description: 'cannot safely attach',
       }, null, () => {}, unsafeCtx)
-      helpers.assertContains(res.content[0].text, 'Team unsafe-existing-suite already exists and appears to have an active leader pane')
+      helpers.assertContains(res.content[0].text, 'Team unsafe-existing-suite already exists')
       assert.equal(res.details.denied, true)
-      assert.equal(res.details.reason, 'team_exists_not_attached')
-      helpers.assertContains(res.details.recoverInstruction, '/team recover')
-      assert.equal(res.details.existingLeaderPaneId, '%still-live-leader')
-      assert.deepEqual(modules.state.readSessionContext('/tmp/unsafe-existing-suite-new-leader.jsonl'), { teamName: null, memberName: null })
+      const collisionDiagnostic = `${res.content[0].text}\n${JSON.stringify(res.details, null, 2)}`
+      const collisionViolations = []
+      if (res.details.reason === 'team_exists_not_attached') {
+        collisionViolations.push('reason should distinguish active same-name conflict elsewhere, not generic team_exists_not_attached')
+      }
+      if (!['team_name_conflict_active_elsewhere', 'team_exists_active_elsewhere'].includes(res.details.reason)) {
+        collisionViolations.push(`reason should be an active-elsewhere conflict, got ${JSON.stringify(res.details.reason)}`)
+      }
+      for (const [label, value] of [
+        ['existing leader cwd', existingLeaderCwd],
+        ['existing leader session file', existingLeaderSessionFile],
+        ['existing leader windowTarget', existingLeaderWindowTarget],
+        ['existing leader paneId', existingLeaderPaneId],
+        ['current cwd', currentCwd],
+        ['current paneId', currentPaneId],
+      ]) {
+        if (!collisionDiagnostic.includes(value)) {
+          collisionViolations.push(`${label} missing from active collision diagnostic: ${value}`)
+        }
+      }
+      if (!/different\s+(team[_ -]?name|name)/i.test(res.content[0].text)) {
+        collisionViolations.push('text should tell the user to choose a different team_name/name for an active conflict')
+      }
+      if (/\/team recover/i.test(res.content[0].text) && !/stale/i.test(res.content[0].text)) {
+        collisionViolations.push('text may mention /team recover only for a stale existing leader pane')
+      }
+      if (/\/team recover/i.test(res.content[0].text) && !/different\s+(team[_ -]?name|name)/i.test(res.content[0].text)) {
+        collisionViolations.push('text should not present /team recover as the default/only remediation for active conflict')
+      }
+      assert.deepEqual(collisionViolations, [], `active team name collision should include actionable diagnostics\n${collisionDiagnostic}`)
+      assert.deepEqual(modules.state.readSessionContext(currentLeaderSessionFile), { teamName: null, memberName: null })
+      assert.equal(fs.readFileSync(modules.state.getTeamStatePath('unsafe-existing-suite'), 'utf8'), existingTeamRawBeforeCollision, 'active collision must not modify existing team state')
 
       modules.tmux.captureCurrentPaneBinding = () => null
       modules.tmux.paneExists = originalPaneExistsForCreate

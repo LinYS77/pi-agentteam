@@ -54,6 +54,22 @@ module.exports = {
       fs.writeFileSync(path.join(home, 'config.json'), content, 'utf8')
     }
 
+    function assertDefaultV1Config(config, label) {
+      assert.equal(config.version, 1, `${label} should declare version: 1`)
+      assert.ok(config.agents && typeof config.agents === 'object' && !Array.isArray(config.agents), `${label} should contain agents object`)
+      for (const role of ['planner', 'researcher', 'implementer']) {
+        assert.deepEqual(config.agents[role], { model: null }, `${label} should default ${role} model through agents.<role>.model`)
+      }
+      assert.equal(Object.hasOwn(config, 'agentModels'), false, `${label} should not write legacy-only agentModels`)
+    }
+
+    function assertLegacyMigrationDiagnostic(diagnostics, label) {
+      const diagnosticText = diagnostics.map(item => `${item.code}: ${item.message}`).join('\n')
+      assert.match(diagnosticText, /legacy|migrat/i, `${label} should include legacy/migration guidance; diagnostics=${diagnosticText}`)
+    }
+
+    const commandConfigModule = env.helpers.requireDist('commands/config.js')
+
     withHome('missing-config', home => {
       const loaded = configModule.loadAgentConfig({ knownRoles: ['planner', 'researcher', 'implementer'] })
       assert.equal(loaded.path, path.join(home, 'config.json'))
@@ -112,13 +128,93 @@ module.exports = {
       assert.equal(result.configPath, path.join(home, 'config.json'))
       assert.equal(result.configExists, true)
       assert.equal(result.config.agentModels.planner, 'planner-model')
-      assert.equal(result.diagnostics.length, 0)
+      assertLegacyMigrationDiagnostic(result.diagnostics, 'legacy agentModels discovery')
       const planner = result.agents.find(agent => agent.name === 'planner')
       const researcher = result.agents.find(agent => agent.name === 'researcher')
       const implementer = result.agents.find(agent => agent.name === 'implementer')
       assert.equal(planner.model, 'planner-model')
       assert.equal(researcher.model, undefined, 'empty string config should mean default/no override')
       assert.equal(implementer.model, undefined, 'null config should mean default/no override')
+    })
+
+    withHome('v1-config-schema-preferred-over-legacy', home => {
+      writeConfig(home, JSON.stringify({
+        version: 1,
+        agents: {
+          researcher: { model: 'v1-researcher-model' },
+          planner: { model: null },
+          implementer: { model: 'v1-implementer-model' },
+        },
+        agentModels: {
+          researcher: 'legacy-researcher-model',
+          planner: 'legacy-planner-model',
+          implementer: 'legacy-implementer-model',
+        },
+      }))
+
+      const loaded = configModule.loadAgentConfig({ knownRoles: ['planner', 'researcher', 'implementer'] })
+      assert.equal(loaded.exists, true)
+      assert.equal(loaded.config.version, 1, 'loaded config should retain v1 marker')
+      assert.equal(loaded.config.agents.researcher.model, 'v1-researcher-model')
+      assert.equal(loaded.config.agents.planner.model, null)
+      assert.equal(loaded.config.agents.implementer.model, 'v1-implementer-model')
+      assert.equal(loaded.config.agentModels.researcher, 'v1-researcher-model', 'effective legacy compatibility map should be derived from v1 agents and beat legacy agentModels')
+      assert.equal(loaded.config.agentModels.planner, null, 'v1 null model should beat legacy agentModels')
+      assert.equal(loaded.config.agentModels.implementer, 'v1-implementer-model')
+
+      const discovered = agentsModule.discoverAgentsWithDiagnostics()
+      assert.equal(discovered.config.version, 1)
+      assert.equal(discovered.config.agents.researcher.model, 'v1-researcher-model')
+      assert.equal(discovered.config.agentModels.researcher, 'v1-researcher-model')
+      assert.equal(discovered.agents.find(agent => agent.name === 'researcher').model, 'v1-researcher-model')
+      assert.equal(discovered.agents.find(agent => agent.name === 'planner').model, undefined, 'v1 null model should keep planner on default despite legacy fallback value')
+      assert.equal(discovered.agents.find(agent => agent.name === 'implementer').model, 'v1-implementer-model')
+    })
+
+    withHome('legacy-config-show-validate-migration-warning', home => {
+      writeConfig(home, JSON.stringify({ agentModels: { planner: 'legacy-planner-model', researcher: null, implementer: null } }))
+      const loaded = configModule.loadAgentConfig({ knownRoles: ['planner', 'researcher', 'implementer'] })
+      assert.equal(loaded.config.agentModels.planner, 'legacy-planner-model')
+      assertLegacyMigrationDiagnostic(loaded.diagnostics, 'legacy loadAgentConfig')
+
+      const show = commandConfigModule.buildConfigShowText()
+      assert.ok(show.text.includes('- planner: legacy-planner-model'))
+      assert.match(show.text, /legacy|migrat/i, 'config show should include legacy/migration warning for legacy agentModels')
+
+      const validate = commandConfigModule.buildConfigValidateText()
+      assert.match(validate.text, /legacy|migrat/i, 'config validate should include legacy/migration warning for legacy agentModels')
+    })
+
+    withHome('config-init-default-v1-non-overwrite-and-missing-guidance', home => {
+      const bundledExample = configModule.readBundledConfigExample()
+      assertDefaultV1Config(bundledExample, 'bundled config.example.json')
+
+      const missingShow = commandConfigModule.buildConfigShowText()
+      assert.ok(missingShow.text.includes('Exists: no'), 'missing config show should say config does not exist')
+      assert.match(missingShow.text, /config init|bootstrap|create config/i, 'missing config show should guide bootstrap/init')
+      assert.match(missingShow.text, /version|agents\./i, 'missing config show should mention v1/agents schema so fresh users are not left with legacy-only guidance')
+
+      const init = commandConfigModule.initConfigText()
+      assert.equal(init.level, 'info')
+      const configPath = path.join(home, 'config.json')
+      assert.equal(fs.existsSync(configPath), true, 'config init should create missing runtime config')
+      const initialized = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+      assertDefaultV1Config(initialized, '/team config init output')
+
+      const customExisting = {
+        version: 1,
+        agents: {
+          planner: { model: 'custom-existing-planner' },
+          researcher: { model: null },
+          implementer: { model: null },
+        },
+      }
+      fs.writeFileSync(configPath, `${JSON.stringify(customExisting, null, 2)}\n`, 'utf8')
+      const before = fs.readFileSync(configPath, 'utf8')
+      const secondInit = commandConfigModule.initConfigText()
+      assert.equal(secondInit.level, 'warning')
+      assert.match(secondInit.text, /Refusing to overwrite|already exists/i)
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before, 'config init must never overwrite an existing config')
     })
 
     await withHome('spawn-invalid-config-diagnostics', async home => {

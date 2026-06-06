@@ -1,5 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { recordFsStoreEvent } from '../core/profiling.js'
 
 // ---------------------------------------------------------------------------
 // Generic file-system primitives shared by the state submodules.
@@ -72,17 +73,25 @@ function acquireFileLock(filePath: string, timeoutMs = LOCK_TIMEOUT_MS): () => v
 }
 
 export function withFileLock<T>(filePath: string, fn: () => T, timeoutMs = LOCK_TIMEOUT_MS): T {
+  const startedAt = Date.now()
   const release = acquireFileLock(filePath, timeoutMs)
   try {
     return fn()
   } finally {
     release()
+    recordFsStoreEvent({ kind: 'lock', durationMs: Date.now() - startedAt, path: filePath })
   }
 }
 
 export function readJsonFile<T>(filePath: string): T | null {
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T
+    const readStartedAt = Date.now()
+    const payload = fs.readFileSync(filePath, 'utf8')
+    recordFsStoreEvent({ kind: 'read', durationMs: Date.now() - readStartedAt, bytes: Buffer.byteLength(payload, 'utf8'), path: filePath })
+    const parseStartedAt = Date.now()
+    const parsed = JSON.parse(payload) as T
+    recordFsStoreEvent({ kind: 'parse', durationMs: Date.now() - parseStartedAt, bytes: Buffer.byteLength(payload, 'utf8'), path: filePath })
+    return parsed
   } catch {
     return null
   }
@@ -92,9 +101,11 @@ export function writeJsonFile(filePath: string, value: unknown): void {
   ensureDir(path.dirname(filePath))
   const payload = `${JSON.stringify(value, null, 2)}\n`
   const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const writeStartedAt = Date.now()
   try {
     fs.writeFileSync(tempPath, payload, 'utf8')
     fs.renameSync(tempPath, filePath)
+    recordFsStoreEvent({ kind: 'write', durationMs: Date.now() - writeStartedAt, bytes: Buffer.byteLength(payload, 'utf8'), path: filePath })
   } finally {
     try {
       if (fs.existsSync(tempPath)) {

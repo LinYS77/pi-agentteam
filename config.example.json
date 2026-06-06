@@ -1,7 +1,14 @@
 {
-  "agentModels": {
-    "planner": null,
-    "researcher": null,
-    "implementer": null
+  "version": 1,
+  "agents": {
+    "planner": {
+      "model": null
+    },
+    "researcher": {
+      "model": null
+    },
+    "implementer": {
+      "model": null
+    }
   }
 }

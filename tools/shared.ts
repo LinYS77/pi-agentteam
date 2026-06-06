@@ -11,6 +11,8 @@ export type ToolHandlerDeps = MessageApplicationDeps & MessageReceiveApplication
   outboxRunner: OutboxRunnerPort
   sanitizeTeamName: (name: string) => string
   sanitizeWorkerName: (name: string) => string
+  validateNewTeamName: (name: string) => { ok: true; normalized: string } | { ok: false; normalized: string; reason: string; message: string }
+  validateNewWorkerName: (name: string) => { ok: true; normalized: string } | { ok: false; normalized: string; reason: string; message: string }
   normalizeOwnerName: (name: string) => string
   assertValidOwner: (team: TeamState, owner: string) => void
   classifySpawnTask: (task?: string) => { initialTask?: string; bootPrompt?: string }

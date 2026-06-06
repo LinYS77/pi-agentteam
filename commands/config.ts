@@ -53,7 +53,7 @@ export function buildConfigShowText(): { text: string; level: 'info' | 'warning'
     lines.push(`- ${agent.name}: ${formatModel(agent.model)}`)
   }
   if (!discovery.configExists) {
-    lines.push('Run /team config init to create config.json. npm/pi install does not create runtime config.')
+    lines.push('Run /team config init to create config.json using the v1 agents.<role>.model schema. npm/pi install does not create runtime config.')
   }
   lines.push('Changes apply only to future spawns/respawns.')
   return { text: lines.join('\n'), level: summary.level }
@@ -87,7 +87,7 @@ export function initConfigText(): { text: string; level: 'info' | 'warning' | 'e
     }
   }
   const example = readBundledConfigExample()
-  const config = Object.keys(example.agentModels ?? {}).length > 0 ? example : createDefaultAgentConfig()
+  const config = Object.keys(example.agents ?? {}).length > 0 ? example : createDefaultAgentConfig()
   ensureDir(path.dirname(configPath))
   fs.writeFileSync(configPath, stringifyAgentConfig(config), 'utf8')
   return {

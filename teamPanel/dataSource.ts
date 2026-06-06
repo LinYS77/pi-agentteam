@@ -21,7 +21,7 @@ import type {
 
 function prepareTeamForPanel(team: NonNullable<ReturnType<typeof readTeamState>>): void {
   ensureTeamStorageReady(team)
-  if (reconcileTeamPanes(team, { force: true })) {
+  if (reconcileTeamPanes(team)) {
     updateTeamState(team.name, () => team)
   }
 }

@@ -352,6 +352,8 @@ function setupRuntimePatches(modules) {
   const deps = {
     sanitizeTeamName: modules.runtime.sanitizeTeamName,
     sanitizeWorkerName: modules.runtime.sanitizeWorkerName,
+    validateNewTeamName: modules.runtime.validateNewTeamName,
+    validateNewWorkerName: modules.runtime.validateNewWorkerName,
     normalizeOwnerName: modules.runtime.normalizeOwnerName,
     assertValidOwner: modules.runtime.assertValidOwner,
     classifySpawnTask: modules.runtime.classifySpawnTask,

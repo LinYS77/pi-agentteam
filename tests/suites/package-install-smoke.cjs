@@ -77,7 +77,14 @@ module.exports = {
     assert.ok(!pkg.scripts?.prepare, 'package must not run publish-time side effects during local validation')
     assert.ok(fs.existsSync(path.join(root, 'config.example.json')), 'config.example.json should exist at package root')
     const exampleConfig = JSON.parse(fs.readFileSync(path.join(root, 'config.example.json'), 'utf8'))
-    assert.deepEqual(exampleConfig, { agentModels: { planner: null, researcher: null, implementer: null } })
+    assert.deepEqual(exampleConfig, {
+      version: 1,
+      agents: {
+        planner: { model: null },
+        researcher: { model: null },
+        implementer: { model: null },
+      },
+    })
     assert.equal(files.includes('*.ts'), false, 'package files should not expose broad top-level *.ts surface')
     assert.equal(files.includes('**/*.ts'), false, 'package files should not expose broad recursive *.ts surface')
     for (const localOrTempEntry of ['docs/', 'scripts/', 'tests/', 'tmp/', 'temp/', 'data/', 'dist/', 'node_modules/', '*.tgz', 'pi-agentteam-*.tgz']) {

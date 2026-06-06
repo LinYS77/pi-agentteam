@@ -107,7 +107,14 @@ export function discoverAgents() {
       const config = await import(pathToFileURL(path.join(pkgDir, 'config.mjs')).href)
       const discovered = agents.discoverAgents()
       assert.ok(discovered.some(agent => agent.name === 'researcher'), 'real ESM import should load bundled agents via import.meta.url')
-      assert.deepEqual(config.readBundledConfigExample(), { agentModels: { planner: null, researcher: null, implementer: null } }, 'real ESM import should load bundled config example via import.meta.url')
+      assert.deepEqual(config.readBundledConfigExample(), {
+        version: 1,
+        agents: {
+          planner: { model: null },
+          researcher: { model: null },
+          implementer: { model: null },
+        },
+      }, 'real ESM import should load bundled v1 config example via import.meta.url')
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true })
     }

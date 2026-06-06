@@ -35,7 +35,14 @@ module.exports = {
       assert.equal(configPath, path.join(configHome, 'config.json'))
       assert.equal(fs.existsSync(configPath), true, 'config init should create runtime config at PI_AGENTTEAM_HOME')
       const initialized = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-      assert.deepEqual(initialized, { agentModels: { planner: null, researcher: null, implementer: null } })
+      assert.deepEqual(initialized, {
+        version: 1,
+        agents: {
+          planner: { model: null },
+          researcher: { model: null },
+          implementer: { model: null },
+        },
+      })
       assert.ok(env.notifications.at(-1).message.includes(`Created ${configPath}`))
 
       fs.writeFileSync(configPath, JSON.stringify({ agentModels: { planner: 'custom-existing' } }), 'utf8')

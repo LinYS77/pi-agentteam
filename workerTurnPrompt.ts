@@ -50,6 +50,13 @@ function renderAssignedTaskWithMessages(
   return `${taskFacts} — task messages: ${messages.map(formatTaskMessageSignal).join('; ')}`
 }
 
+function reportContractForTaskIds(taskIds: string[]): string {
+  const ids = taskIds.length > 0 ? taskIds : ['<taskId>']
+  const doneCommands = ids.map(id => `agentteam_task action=report_done taskId=${id}`).join('; ')
+  const blockedCommands = ids.map(id => `agentteam_task action=report_blocked taskId=${id}`).join('; ')
+  return `Report contract: finish with ${doneCommands} for the durable completion report; if blocked use ${blockedCommands}. Do not only use natural language to say done/blocked. Progress/history is compact local activity only and does not notify team-lead; final result must use report_done/report_blocked.`
+}
+
 export function assignedTasksForWorker(team: TeamState, memberName: string): TeamState['tasks'][string][] {
   return sortTasksById(Object.values(team.tasks)
     .filter(task => task.owner === memberName && isTaskActionableForWorkerDelivery(task)))
@@ -114,7 +121,11 @@ export function buildWorkerTurnPrompt(
     sections.push(`Instruction: ${oneLine(explicitInstruction)}`)
   }
   if (hasAssignmentMessage(actionableUnreadMessages) || hasExplicitWorkTrigger || hasAssignedTaskTrigger) {
-    sections.push('Do the work now. Use agentteam_send type=inform/question for directed communication, agentteam_task action=report_done for the durable completion report when finished, and report_blocked if blocked. Progress/history is compact local activity only and does not notify team-lead.')
+    const reportTaskIds = [...new Set([
+      ...assigned.map(task => task.id),
+      ...actionableUnreadMessages.map(message => message.taskId).filter((taskId): taskId is string => Boolean(taskId)),
+    ])].sort((a, b) => a.localeCompare(b))
+    sections.push(`Do the work now. Use agentteam_send type=inform/question for directed communication. ${reportContractForTaskIds(reportTaskIds)}`)
   } else if (hasQuestionMessage(actionableUnreadMessages)) {
     sections.push('Answer/respond to the question now. Do not start unrelated task work unless team-lead explicitly assigned it.')
   }

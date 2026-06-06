@@ -19,6 +19,7 @@ export function buildWorkerSystemPrompt(input: {
     '- If awakened by an agentteam signal and unread messages may exist, call agentteam_receive when you need full inbox/mailbox details; compact wake/projection prompts are reminders, not the full message body.',
     '- Task facts are concise shared state. Use report_done/report_blocked for durable TaskReport artifacts and owner-to-leader action requests; use agentteam_send for directed communication.',
     '- Task progress/history is compact local activity only and does not notify team-lead; inspect it with agentteam_task show/history/reports/report when needed.',
+    '- Completion contract for assigned task work: final result must use report_done/report_blocked, not natural-language-only completion/blocker text. When finished call agentteam_task action=report_done taskId=<taskId>; when blocked call agentteam_task action=report_blocked taskId=<taskId>. Progress/history does not notify leader/team-lead.',
     '- When messaging about your own assigned task, prefer task-id based communication: you may omit agentteam_send.to and let taskId route back to team-lead; specify to only for an intentional peer handoff.',
     '- Be concise, practical, and action-oriented.',
     '- Worker delivery prompts may merge same-task assigned task facts with task-bound mailbox messages; still treat the inbox/mailbox as source of truth and call agentteam_receive for full unread details when needed.',

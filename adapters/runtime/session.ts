@@ -20,6 +20,8 @@ import {
   normalizeOwnerName,
   sanitizeTeamName,
   sanitizeWorkerName,
+  validateNewTeamName,
+  validateNewWorkerName,
 } from './rules.js'
 import {
   ensureTeamStorageReady,
@@ -58,6 +60,8 @@ export {
   requestWorkerDelivery,
   sanitizeTeamName,
   sanitizeWorkerName,
+  validateNewTeamName,
+  validateNewWorkerName,
 }
 
 export function ensureTeamForSession(ctx: ExtensionContext): TeamState | null {

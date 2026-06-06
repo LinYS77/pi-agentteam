@@ -9,6 +9,43 @@ export function sanitizeTeamName(name: string): string {
   return sanitizeWorkerName(name)
 }
 
+type NewNameValidationResult =
+  | { ok: true; normalized: string }
+  | { ok: false; normalized: string; reason: 'empty_after_normalization' | 'weak_slug'; message: string }
+
+function isSafeNewSlug(slug: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/.test(slug)
+}
+
+function validateNewName(rawName: string, label: 'Team' | 'Teammate'): NewNameValidationResult {
+  const normalized = sanitizeWorkerName(rawName)
+  if (!normalized) {
+    return {
+      ok: false,
+      normalized,
+      reason: 'empty_after_normalization',
+      message: `${label} name cannot be empty after normalization`,
+    }
+  }
+  if (!isSafeNewSlug(normalized)) {
+    return {
+      ok: false,
+      normalized,
+      reason: 'weak_slug',
+      message: `${label} name must normalize to a safe ASCII slug that starts and ends with a letter or digit. Use a short ASCII name such as ${label === 'Team' ? 'research-team' : 'researcher-one'}.`,
+    }
+  }
+  return { ok: true, normalized }
+}
+
+export function validateNewTeamName(name: string): NewNameValidationResult {
+  return validateNewName(name, 'Team')
+}
+
+export function validateNewWorkerName(name: string): NewNameValidationResult {
+  return validateNewName(name, 'Teammate')
+}
+
 export function normalizeOwnerName(name: string): string {
   const trimmed = name.trim()
   if (!trimmed) return ''

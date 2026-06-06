@@ -221,7 +221,11 @@ export async function spawnWorkerMember(
   assignment: TeamSpawnInput,
   leaderCwd: string,
 ): Promise<SpawnResult> {
-  const workerName = deps.sanitizeWorkerName(assignment.name)
+  const workerNameValidation = deps.validateNewWorkerName(assignment.name)
+  const workerName = workerNameValidation.normalized
+  if (!workerNameValidation.ok) {
+    return { ok: false, text: workerNameValidation.message, memberName: workerName }
+  }
   if (!workerName) {
     return { ok: false, text: 'Teammate name cannot be empty after normalization' }
   }

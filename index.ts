@@ -19,6 +19,8 @@ import {
   requestLeaderAttentionIfNeeded,
   requestWorkerDelivery,
   sanitizeWorkerName,
+  validateNewTeamName,
+  validateNewWorkerName,
 } from './adapters/runtime/session.js'
 import { createRuntimeService } from './adapters/runtime/service.js'
 import {
@@ -92,6 +94,8 @@ export default function agentTeamExtension(pi: ExtensionAPI): void {
   registerAgentTeamTools(pi, {
     sanitizeTeamName,
     sanitizeWorkerName,
+    validateNewTeamName,
+    validateNewWorkerName,
     normalizeOwnerName,
     assertValidOwner,
     classifySpawnTask,

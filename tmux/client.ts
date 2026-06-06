@@ -1,4 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process'
+import { recordTmuxCommand } from '../core/profiling.js'
 
 type TmuxResult = {
   ok: boolean
@@ -69,18 +70,76 @@ class DefaultTmuxClient implements TmuxClient {
 
 let client: TmuxClient = new DefaultTmuxClient()
 
+function commandName(args: string[]): string {
+  return args[0] ?? 'tmux'
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function recordCommand(args: string[], startedAt: number, ok: boolean, error?: unknown): void {
+  recordTmuxCommand({
+    command: commandName(args),
+    args,
+    durationMs: Date.now() - startedAt,
+    ok,
+    ...(error === undefined ? {} : { error: errorMessage(error) }),
+  })
+}
+
+export function withTmuxClientForTests<T>(fakeClient: TmuxClient, fn: () => T | Promise<T>): T | Promise<T> {
+  const previous = client
+  client = fakeClient
+  try {
+    const result = fn()
+    if (result && typeof (result as Promise<T>).then === 'function') {
+      return (result as Promise<T>).finally(() => {
+        client = previous
+      })
+    }
+    client = previous
+    return result
+  } catch (error) {
+    client = previous
+    throw error
+  }
+}
+
 export function runTmux(args: string[], input?: string): string {
-  return client.exec(args, input)
+  const startedAt = Date.now()
+  try {
+    const result = client.exec(args, input)
+    recordCommand(args, startedAt, true)
+    return result
+  } catch (error) {
+    recordCommand(args, startedAt, false, error)
+    throw error
+  }
 }
 
 export function runTmuxNoThrow(args: string[], input?: string): TmuxResult {
-  return client.execNoThrow(args, input)
+  const startedAt = Date.now()
+  const result = client.execNoThrow(args, input)
+  recordCommand(args, startedAt, result.ok, result.ok ? undefined : result.stderr)
+  return result
 }
 
-export function runTmuxAsync(args: string[], input?: string, signal?: AbortSignal): Promise<string> {
-  return client.execAsync(args, input, signal)
+export async function runTmuxAsync(args: string[], input?: string, signal?: AbortSignal): Promise<string> {
+  const startedAt = Date.now()
+  try {
+    const result = await client.execAsync(args, input, signal)
+    recordCommand(args, startedAt, true)
+    return result
+  } catch (error) {
+    recordCommand(args, startedAt, false, error)
+    throw error
+  }
 }
 
-export function runTmuxNoThrowAsync(args: string[], input?: string, signal?: AbortSignal): Promise<TmuxResult> {
-  return client.execNoThrowAsync(args, input, signal)
+export async function runTmuxNoThrowAsync(args: string[], input?: string, signal?: AbortSignal): Promise<TmuxResult> {
+  const startedAt = Date.now()
+  const result = await client.execNoThrowAsync(args, input, signal)
+  recordCommand(args, startedAt, result.ok, result.ok ? undefined : result.stderr)
+  return result
 }

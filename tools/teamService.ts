@@ -75,11 +75,18 @@ export function executeCreateTeam(
       details: { denied: true, reason: 'leader_not_in_tmux' },
     }
   }
-  const teamName = deps.sanitizeTeamName(params.team_name)
+  const teamNameValidation = deps.validateNewTeamName(params.team_name)
+  const teamName = teamNameValidation.normalized
+  if (!teamNameValidation.ok) {
+    return {
+      content: [{ type: 'text' as const, text: teamNameValidation.message }],
+      details: { denied: true, reason: teamNameValidation.reason, normalizedTeamName: teamName },
+    }
+  }
   if (!teamName) {
     return {
       content: [{ type: 'text' as const, text: 'Team name cannot be empty after normalization' }],
-      details: { denied: true },
+      details: { denied: true, reason: 'empty_after_normalization' },
     }
   }
   const sessionFile = getSessionFile(ctx)
@@ -134,20 +141,26 @@ export function executeCreateTeam(
         },
       }
     }
-    const existingLeaderPaneId = existingTeam.members[TEAM_LEAD]?.paneId
+    const existingLeader = existingTeam.members[TEAM_LEAD]
+    const existingLeaderPaneId = existingLeader?.paneId
     if (existingLeaderPaneId && existingLeaderPaneId !== currentPane.paneId && paneExists(existingLeaderPaneId)) {
+      const recoverInstruction = 'Only use /team recover if you have confirmed the existing leader pane is stale.'
       return {
         content: [{
           type: 'text' as const,
-          text: `Team ${teamName} already exists and appears to have an active leader pane. Use /team recover to attach this session as current leader if that pane is stale.`,
+          text: `Team ${teamName} already exists and is active in another leader pane. Choose a different team_name. ${recoverInstruction}`,
         }],
         details: {
           denied: true,
           teamName,
-          reason: 'team_exists_not_attached',
-          recoverInstruction: 'Use /team recover to attach this session as current leader if the existing leader pane is stale.',
-          currentPaneId: currentPane.paneId,
+          reason: 'team_name_conflict_active_elsewhere',
+          recoverInstruction,
+          existingLeaderCwd: existingTeam.leaderCwd ?? existingLeader?.cwd,
+          existingLeaderSessionFile: existingTeam.leaderSessionFile ?? existingLeader?.sessionFile,
+          existingLeaderWindowTarget: existingLeader?.windowTarget,
           existingLeaderPaneId,
+          currentCwd: ctx.cwd,
+          currentPaneId: currentPane.paneId,
         },
       }
     }

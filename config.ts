@@ -33,7 +33,17 @@ export function formatConfigDiagnostic(diagnostic: AgentTeamConfigDiagnostic): s
   return `${diagnostic.level.toUpperCase()} ${diagnostic.code}${where}: ${diagnostic.message}`
 }
 
+export type AgentTeamRoleConfig = {
+  model?: string | null
+}
+
 export type AgentTeamConfig = {
+  version?: number
+  agents?: Record<string, AgentTeamRoleConfig>
+  /**
+   * Legacy schema and effective compatibility map used by existing spawn code.
+   * New persisted configs should prefer version: 1 + agents.<role>.model.
+   */
   agentModels?: Record<string, string | null>
 }
 
@@ -41,7 +51,8 @@ export const DEFAULT_AGENT_MODEL_ROLES = ['planner', 'researcher', 'implementer'
 
 export function createDefaultAgentConfig(): AgentTeamConfig {
   return {
-    agentModels: Object.fromEntries(DEFAULT_AGENT_MODEL_ROLES.map(role => [role, null])),
+    version: 1,
+    agents: Object.fromEntries(DEFAULT_AGENT_MODEL_ROLES.map(role => [role, { model: null }])),
   }
 }
 
@@ -103,6 +114,29 @@ function knownRoleSet(roles?: Iterable<string>): Set<string> | undefined {
   return out
 }
 
+function availableRolesText(roles: Set<string> | undefined): string {
+  return [...(roles ?? [])].sort((a, b) => a.localeCompare(b)).join(', ') || '(none)'
+}
+
+function normalizeModelValue(
+  rawValue: unknown,
+  input: { roleName: string; configPath: string; valuePath: string; diagnostics: AgentTeamConfigDiagnostic[]; codePrefix: 'agentModels' | 'agents' },
+): string | null | undefined {
+  if (rawValue !== null && typeof rawValue !== 'string') {
+    input.diagnostics.push(diagnostic(
+      'warning',
+      `${input.codePrefix}_invalid_value`,
+      `Ignoring ${input.valuePath} in ${input.configPath}: model value must be a string or null.`,
+      input.configPath,
+      input.valuePath,
+    ))
+    return undefined
+  }
+  if (rawValue === null) return null
+  const trimmed = rawValue.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
 function normalizeAgentModels(
   rawAgentModels: unknown,
   roles: Set<string> | undefined,
@@ -121,40 +155,88 @@ function normalizeAgentModels(
     return undefined
   }
 
+  diagnostics.push(diagnostic(
+    'warning',
+    'agentModels_legacy_schema',
+    'Legacy agentModels config is still supported, but migrate to version: 1 with agents.<role>.model.',
+    configPath,
+    'agentModels',
+  ))
+
   const normalized: Record<string, string | null> = {}
   for (const [roleName, rawValue] of Object.entries(rawAgentModels)) {
     const valuePath = `agentModels.${roleName}`
     const unknownRole = Boolean(roles && !roles.has(roleName))
     if (unknownRole) {
-      const available = [...(roles ?? [])].sort((a, b) => a.localeCompare(b)).join(', ') || '(none)'
       diagnostics.push(diagnostic(
         'warning',
         'agentModels_unknown_role',
-        `Ignoring ${valuePath} in ${configPath}: unknown role '${roleName}'. Available roles: ${available}.`,
+        `Ignoring ${valuePath} in ${configPath}: unknown role '${roleName}'. Available roles: ${availableRolesText(roles)}.`,
         configPath,
         valuePath,
       ))
     }
-    if (rawValue !== null && typeof rawValue !== 'string') {
-      diagnostics.push(diagnostic(
-        'warning',
-        'agentModels_invalid_value',
-        `Ignoring ${valuePath} in ${configPath}: value must be a string or null.`,
-        configPath,
-        valuePath,
-      ))
-      continue
-    }
-    if (unknownRole) continue
-    if (rawValue === null) {
-      normalized[roleName] = null
-      continue
-    }
-    const trimmed = rawValue.trim()
-    normalized[roleName] = trimmed.length > 0 ? trimmed : null
+    const normalizedValue = normalizeModelValue(rawValue, { roleName, configPath, valuePath, diagnostics, codePrefix: 'agentModels' })
+    if (normalizedValue === undefined || unknownRole) continue
+    normalized[roleName] = normalizedValue
   }
 
   return normalized
+}
+
+function normalizeAgentsConfig(
+  rawAgents: unknown,
+  roles: Set<string> | undefined,
+  configPath: string,
+  diagnostics: AgentTeamConfigDiagnostic[],
+): { agents?: Record<string, AgentTeamRoleConfig>; agentModels?: Record<string, string | null> } {
+  if (rawAgents === undefined) return {}
+  if (!isObjectRecord(rawAgents)) {
+    diagnostics.push(diagnostic(
+      'warning',
+      'agents_invalid_shape',
+      `Ignoring ${configPath}: agents must be an object whose role values contain model strings or null.`,
+      configPath,
+      'agents',
+    ))
+    return {}
+  }
+
+  const agents: Record<string, AgentTeamRoleConfig> = {}
+  const agentModels: Record<string, string | null> = {}
+  for (const [roleName, rawRoleConfig] of Object.entries(rawAgents)) {
+    const rolePath = `agents.${roleName}`
+    const unknownRole = Boolean(roles && !roles.has(roleName))
+    if (unknownRole) {
+      diagnostics.push(diagnostic(
+        'warning',
+        'agents_unknown_role',
+        `Ignoring ${rolePath} in ${configPath}: unknown role '${roleName}'. Available roles: ${availableRolesText(roles)}.`,
+        configPath,
+        rolePath,
+      ))
+    }
+    if (!isObjectRecord(rawRoleConfig)) {
+      diagnostics.push(diagnostic(
+        'warning',
+        'agents_invalid_shape',
+        `Ignoring ${rolePath} in ${configPath}: role config must be an object with optional model string or null.`,
+        configPath,
+        rolePath,
+      ))
+      continue
+    }
+    const rawModel = rawRoleConfig.model
+    const model = normalizeModelValue(rawModel, { roleName, configPath, valuePath: `${rolePath}.model`, diagnostics, codePrefix: 'agents' })
+    if (model === undefined || unknownRole) continue
+    agents[roleName] = { model }
+    agentModels[roleName] = model
+  }
+
+  return {
+    ...(Object.keys(agents).length > 0 ? { agents } : {}),
+    ...(Object.keys(agentModels).length > 0 ? { agentModels } : {}),
+  }
 }
 
 export function loadAgentConfig(options: LoadAgentConfigOptions = {}): LoadedAgentTeamConfig {
@@ -196,9 +278,13 @@ export function loadAgentConfig(options: LoadAgentConfigOptions = {}): LoadedAge
     return { path: configPath, exists: true, config: {}, diagnostics }
   }
 
-  const agentModels = normalizeAgentModels(parsed.agentModels, roles, configPath, diagnostics)
+  const legacyAgentModels = normalizeAgentModels(parsed.agentModels, roles, configPath, diagnostics)
+  const v1Agents = normalizeAgentsConfig(parsed.agents, roles, configPath, diagnostics)
   const config: AgentTeamConfig = {}
-  if (agentModels) config.agentModels = agentModels
+  if (typeof parsed.version === 'number') config.version = parsed.version
+  if (v1Agents.agents) config.agents = v1Agents.agents
+  const effectiveAgentModels = v1Agents.agentModels ?? legacyAgentModels
+  if (effectiveAgentModels) config.agentModels = effectiveAgentModels
   if (parsed.deliveryMode !== undefined) {
     const rawMode = typeof parsed.deliveryMode === 'string' ? parsed.deliveryMode.trim() : String(parsed.deliveryMode)
     diagnostics.push(diagnostic(
