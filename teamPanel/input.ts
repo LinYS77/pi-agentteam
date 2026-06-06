@@ -3,6 +3,7 @@ import {
   matchesKey,
 } from '@earendil-works/pi-tui'
 import { buildPanelActions } from './actions.js'
+import { panelStateFingerprint } from './fingerprint.js'
 import type { PanelActionScope } from './actions.js'
 import {
   getPanelActiveSelectedIndex,
@@ -49,20 +50,26 @@ function focusOrder(data: PanelData): FocusSection[] {
     : ['cockpit', 'tasks', 'mailbox', 'members']
 }
 
-function setFocus(data: PanelData, state: TeamPanelState, focus: FocusSection): void {
-  if (!focusOrder(data).includes(focus)) return
+function requestRenderIfChanged(state: TeamPanelState, before: string, deps: TeamPanelInputDeps): void {
+  if (panelStateFingerprint(state) !== before) deps.requestRender()
+}
+
+function setFocus(data: PanelData, state: TeamPanelState, focus: FocusSection): boolean {
+  if (!focusOrder(data).includes(focus)) return false
+  const before = panelStateFingerprint(state)
   syncPanelSelectedIndex(state)
   state.focus = focus
   syncPanelActiveIndex(state)
   state.scrollFocus = 'list'
   resetDetailScroll(state)
+  return panelStateFingerprint(state) !== before
 }
 
-function cycleSection(data: PanelData, state: TeamPanelState, direction: 1 | -1): void {
+function cycleSection(data: PanelData, state: TeamPanelState, direction: 1 | -1): boolean {
   const order = focusOrder(data)
   const currentIndex = Math.max(0, order.indexOf(state.focus))
   const nextIndex = (currentIndex + direction + order.length) % order.length
-  setFocus(data, state, order[nextIndex]!)
+  return setFocus(data, state, order[nextIndex]!)
 }
 
 function hotkeyFocus(data: PanelData, input: string): FocusSection | undefined {
@@ -205,31 +212,32 @@ export function handleTeamPanelInput(
   const count = sectionCount(data, state, selection)
 
   if (matchesKey(input, Key.shift(Key.tab)) || matchesKey(input, Key.tab)) {
-    cycleSection(data, state, matchesKey(input, Key.shift(Key.tab)) ? -1 : 1)
-    deps.requestRender()
+    if (cycleSection(data, state, matchesKey(input, Key.shift(Key.tab)) ? -1 : 1)) deps.requestRender()
     return
   }
 
   const hotkeyTarget = hotkeyFocus(data, input)
   if (hotkeyTarget) {
-    setFocus(data, state, hotkeyTarget)
-    deps.requestRender()
+    if (setFocus(data, state, hotkeyTarget)) deps.requestRender()
     return
   }
 
   if (matchesKey(input, Key.right) || input === 'e') {
+    const before = panelStateFingerprint(state)
     state.scrollFocus = 'detail'
-    deps.requestRender()
+    requestRenderIfChanged(state, before, deps)
     return
   }
 
   if (matchesKey(input, Key.left)) {
+    const before = panelStateFingerprint(state)
     state.scrollFocus = 'list'
-    deps.requestRender()
+    requestRenderIfChanged(state, before, deps)
     return
   }
 
   if (matchesKey(input, Key.up)) {
+    const before = panelStateFingerprint(state)
     if (state.scrollFocus === 'detail') {
       state.detailScrollOffset = Math.max(0, state.detailScrollOffset - 1)
     } else {
@@ -237,11 +245,12 @@ export function handleTeamPanelInput(
       syncPanelSelectedIndex(state)
       resetDetailScroll(state)
     }
-    deps.requestRender()
+    requestRenderIfChanged(state, before, deps)
     return
   }
 
   if (matchesKey(input, Key.down)) {
+    const before = panelStateFingerprint(state)
     if (state.scrollFocus === 'detail') {
       state.detailScrollOffset += 1
     } else {
@@ -249,7 +258,7 @@ export function handleTeamPanelInput(
       syncPanelSelectedIndex(state)
       resetDetailScroll(state)
     }
-    deps.requestRender()
+    requestRenderIfChanged(state, before, deps)
     return
   }
 

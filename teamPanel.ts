@@ -7,6 +7,7 @@ import {
   createInitialPanelState,
 } from './teamPanel/viewModel.js'
 import { loadPanelData } from './teamPanel/dataSource.js'
+import { panelDataFingerprint, panelStateFingerprint } from './teamPanel/fingerprint.js'
 import type { TeamPanelResult } from './teamPanel/viewModel.js'
 
 export type { TeamPanelResult } from './teamPanel/viewModel.js'
@@ -17,23 +18,47 @@ export async function openTeamPanel(
 ): Promise<TeamPanelResult | undefined> {
   return ctx.ui.custom<TeamPanelResult | undefined>((tui, theme, _kb, done) => {
     let data = loadPanelData(teamName)
+    let dataFingerprint = panelDataFingerprint(data)
     const panelState = createInitialPanelState()
     clampPanelStateToData(panelState, data)
+    let renderScheduled = false
+    let flushRenderPromise: Promise<void> | null = null
+
+    const requestRenderOnce = () => {
+      if (renderScheduled) return
+      renderScheduled = true
+      flushRenderPromise = Promise.resolve().then(() => {
+        renderScheduled = false
+        flushRenderPromise = null
+        tui.requestRender()
+      })
+    }
+
+    const flushRender = async () => {
+      await flushRenderPromise
+    }
 
     const refresh = () => {
-      data = loadPanelData(teamName)
+      const beforeStateFingerprint = panelStateFingerprint(panelState)
+      const nextData = loadPanelData(teamName)
+      const nextFingerprint = panelDataFingerprint(nextData)
+      data = nextData
       clampPanelStateToData(panelState, data)
-      tui.requestRender()
+      const nextStateFingerprint = panelStateFingerprint(panelState)
+      if (nextFingerprint === dataFingerprint && nextStateFingerprint === beforeStateFingerprint) return
+      dataFingerprint = nextFingerprint
+      requestRenderOnce()
     }
 
     return {
       invalidate() {},
+      flushRender,
       handleInput(input: string) {
         const selection = buildPanelSelectionView(data, panelState)
         handleTeamPanelInput(input, data, panelState, selection, {
           done,
           refresh,
-          requestRender: () => tui.requestRender(),
+          requestRender: requestRenderOnce,
         })
       },
       render(width: number): string[] {
