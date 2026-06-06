@@ -43,18 +43,42 @@ function emptySessionContext(): SessionTeamContext {
   return { teamName: null, memberName: null }
 }
 
+function optionalStringFieldOk(value: unknown): boolean {
+  return value === undefined || value === null || typeof value === 'string'
+}
+
 function isReadableSessionContext(value: SessionTeamContext | null): value is SessionTeamContext {
   if (!value || typeof value !== 'object') return false
   const candidate = value as Partial<SessionTeamContext>
   const teamNameOk = candidate.teamName === null || typeof candidate.teamName === 'string'
   const memberNameOk = candidate.memberName === null || typeof candidate.memberName === 'string'
-  return teamNameOk && memberNameOk
+  return teamNameOk &&
+    memberNameOk &&
+    optionalStringFieldOk(candidate.teamId) &&
+    optionalStringFieldOk(candidate.projectKey) &&
+    optionalStringFieldOk(candidate.identityKey) &&
+    optionalStringFieldOk(candidate.teamSlug)
+}
+
+function addScopedFieldsFromTeam(context: SessionTeamContext): SessionTeamContext {
+  if (!context.teamName || !context.memberName) return context
+  try {
+    const team = findTeamForSessionContext(context)
+    if (!team?.identity) return context
+    defineScopedContextField(context, 'teamId', team.identity.teamId)
+    defineScopedContextField(context, 'projectKey', team.identity.projectKey)
+    defineScopedContextField(context, 'identityKey', `${team.identity.projectKey}:${team.identity.slug}`)
+    defineScopedContextField(context, 'teamSlug', team.identity.slug)
+  } catch {
+    // Keep readSessionContext usable before store configuration; validation/derive will enrich later.
+  }
+  return context
 }
 
 function readSessionContextFile(filePath: string): SessionTeamContext | null {
   try {
     const parsed = readJsonFile<SessionTeamContext>(filePath)
-    return isReadableSessionContext(parsed) ? parsed : null
+    return isReadableSessionContext(parsed) ? addScopedFieldsFromTeam(parsed) : null
   } catch {
     return null
   }
@@ -88,6 +112,52 @@ export function clearSessionContext(sessionFile: string): void {
   invalidateSessionContextCache(sessionFile)
 }
 
+function defineScopedContextField(
+  context: SessionTeamContext,
+  key: keyof Pick<SessionTeamContext, 'teamId' | 'projectKey' | 'identityKey' | 'teamSlug'>,
+  value: string | undefined,
+): void {
+  if (!value) return
+  Object.defineProperty(context, key, {
+    value,
+    enumerable: false,
+    configurable: true,
+    writable: true,
+  })
+}
+
+export function buildSessionContextForTeam(
+  team: TeamState,
+  memberName: string,
+): SessionTeamContext {
+  const context: SessionTeamContext = {
+    teamName: team.name,
+    memberName,
+  }
+  defineScopedContextField(context, 'teamId', team.identity?.teamId)
+  defineScopedContextField(context, 'projectKey', team.identity?.projectKey)
+  defineScopedContextField(context, 'identityKey', team.identity ? `${team.identity.projectKey}:${team.identity.slug}` : undefined)
+  defineScopedContextField(context, 'teamSlug', team.identity?.slug)
+  return context
+}
+
+function findTeamForSessionContext(context: SessionTeamContext): TeamState | null {
+  if (context.teamId) {
+    const byId = listTeams().find(team => team.identity?.teamId === context.teamId || team.name === context.teamId)
+    if (byId) return byId
+  }
+  if (context.projectKey && (context.teamSlug || context.teamName)) {
+    const slug = context.teamSlug ?? context.teamName
+    const byProjectSlug = listTeams().find(team => team.identity?.projectKey === context.projectKey && team.identity?.slug === slug)
+    if (byProjectSlug) return byProjectSlug
+  }
+  if (context.identityKey) {
+    const byIdentityKey = listTeams().find(team => team.identity && `${team.identity.projectKey}:${team.identity.slug}` === context.identityKey)
+    if (byIdentityKey) return byIdentityKey
+  }
+  return context.teamName ? readTeamState(context.teamName) : null
+}
+
 function matchesSessionBinding(
   team: TeamState,
   sessionFile: string,
@@ -107,14 +177,14 @@ function isSessionContextValid(
   context: SessionTeamContext,
 ): boolean {
   if (!context.teamName || !context.memberName) return false
-  const team = readTeamState(context.teamName)
+  const team = findTeamForSessionContext(context)
   if (!team) return false
   return matchesSessionBinding(team, sessionFile, context.memberName)
 }
 
 function findSessionBinding(sessionFile: string): SessionTeamContext {
   const matches: Array<{
-    teamName: string
+    team: TeamState
     memberName: string
     priority: number
     createdAt: number
@@ -123,7 +193,7 @@ function findSessionBinding(sessionFile: string): SessionTeamContext {
   for (const team of listTeams()) {
     if (matchesSessionBinding(team, sessionFile, TEAM_LEAD)) {
       matches.push({
-        teamName: team.name,
+        team,
         memberName: TEAM_LEAD,
         priority: 2,
         createdAt: team.createdAt,
@@ -133,7 +203,7 @@ function findSessionBinding(sessionFile: string): SessionTeamContext {
       if (member.name === TEAM_LEAD) continue
       if (member.sessionFile !== sessionFile) continue
       matches.push({
-        teamName: team.name,
+        team,
         memberName: member.name,
         priority: 1,
         createdAt: member.createdAt,
@@ -146,10 +216,7 @@ function findSessionBinding(sessionFile: string): SessionTeamContext {
   if (!match) {
     return { teamName: null, memberName: null }
   }
-  return {
-    teamName: match.teamName,
-    memberName: match.memberName,
-  }
+  return buildSessionContextForTeam(match.team, match.memberName)
 }
 
 const SESSION_CACHE_TTL_MS = 2000

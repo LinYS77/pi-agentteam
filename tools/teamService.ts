@@ -1,7 +1,9 @@
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
-import { writeSessionContext } from '../state/sessionBinding.js'
+import { buildNewTeamIdentity } from '../core/teamIdentity.js'
+import { buildSessionContextForTeam, readSessionContext, writeSessionContext } from '../state/sessionBinding.js'
 import {
   createInitialTeamState,
+  findTeamByProjectSlug,
   readTeamState,
   updateTeamState,
   writeTeamState,
@@ -23,6 +25,16 @@ function ensureLeaderOnlyOperation(
 ): string | null {
   const actor = deps.currentActor(ctx)
   return actor === TEAM_LEAD ? null : `Only ${TEAM_LEAD} can perform this operation. Current actor: ${actor}`
+}
+
+function teamMatchesRequestedSlug(team: TeamState, slug: string): boolean {
+  return team.name === slug || team.identity?.slug === slug
+}
+
+function hasLeaderSessionBinding(team: TeamState): boolean {
+  if (!team.leaderSessionFile) return false
+  const context = readSessionContext(team.leaderSessionFile)
+  return context.teamName === team.name && context.memberName === TEAM_LEAD
 }
 
 function attachCurrentLeaderToExistingTeam(
@@ -59,7 +71,7 @@ function attachCurrentLeaderToExistingTeam(
     }
   })
   if (!recovered) return null
-  writeSessionContext(sessionFile, { teamName: recovered.name, memberName: TEAM_LEAD })
+  writeSessionContext(sessionFile, buildSessionContextForTeam(recovered, TEAM_LEAD))
   void syncPaneLabelsForTeam(recovered)
   return recovered
 }
@@ -89,10 +101,11 @@ export function executeCreateTeam(
       details: { denied: true, reason: 'empty_after_normalization' },
     }
   }
+  const identity = buildNewTeamIdentity({ rawName: params.team_name, cwd: ctx.cwd })
   const sessionFile = getSessionFile(ctx)
   const currentTeam = deps.ensureTeamForSession(ctx)
   if (currentTeam) {
-    if (currentTeam.name === teamName) {
+    if (teamMatchesRequestedSlug(currentTeam, teamName) && (!currentTeam.identity || currentTeam.identity.projectKey === identity.projectKey)) {
       return {
         content: [{ type: 'text' as const, text: `Team ${teamName} already exists; current session is already attached.` }],
         details: { teamName, alreadyAttached: true, currentTeamName: currentTeam.name },
@@ -106,8 +119,14 @@ export function executeCreateTeam(
       details: { denied: true, reason: 'session_already_attached', teamName, currentTeamName: currentTeam.name },
     }
   }
-  const existingTeam = readTeamState(teamName)
-  const quarantinedExistingTeam = existingTeam ? null : readLatestQuarantineForTeam(teamName)
+  const existingByName = readTeamState(teamName)
+  let existingTeam = findTeamByProjectSlug(identity.projectKey, identity.slug)
+  if (!existingTeam && existingByName?.identity?.slug === identity.slug) {
+    if (existingByName.identity.projectKey === identity.projectKey || !hasLeaderSessionBinding(existingByName)) {
+      existingTeam = existingByName
+    }
+  }
+  const quarantinedExistingTeam = existingByName || existingTeam ? null : readLatestQuarantineForTeam(teamName)
   if (quarantinedExistingTeam) {
     const firstReason = quarantinedExistingTeam.reasons[0]
     const reasonText = firstReason ? firstReason.code : 'unsupported persisted state'
@@ -177,8 +196,11 @@ export function executeCreateTeam(
       details: { teamName, alreadyExists: true, recovered: true },
     }
   }
+  const storageName = existingByName ? identity.teamId : teamName
   const state = createInitialTeamState({
-    teamName,
+    teamName: params.team_name,
+    storageName,
+    identity,
     description: params.description,
     leaderSessionFile: sessionFile,
     leaderCwd: ctx.cwd,
@@ -192,11 +214,11 @@ export function executeCreateTeam(
     }
   }
   writeTeamState(state)
-  writeSessionContext(sessionFile, { teamName, memberName: TEAM_LEAD })
+  writeSessionContext(sessionFile, buildSessionContextForTeam(state, TEAM_LEAD))
   deps.invalidateStatus(ctx)
   return {
     content: [{ type: 'text' as const, text: `Created team ${teamName}` }],
-    details: { teamName },
+    details: { teamName, storageTeamName: state.name, teamId: identity.teamId, projectKey: identity.projectKey },
   }
 }
 

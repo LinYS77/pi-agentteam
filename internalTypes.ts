@@ -5,6 +5,7 @@
 // core/publicModel.ts and should not be presented as public API/tool schema.
 
 import type { MessageType, TaskReportType, TaskStatus } from './core/publicModel.js'
+import type { TeamIdentity } from './core/teamIdentity.js'
 
 export { TEAM_LEAD } from './core/teamIdentity.js'
 
@@ -15,6 +16,10 @@ export type MemberStatus = WorkerFsmStatus
 export type SessionTeamContext = {
   teamName: string | null
   memberName: string | null
+  teamId?: string | null
+  projectKey?: string | null
+  identityKey?: string | null
+  teamSlug?: string | null
 }
 
 export type TeamMember = {
@@ -131,6 +136,7 @@ export type TaskMessageRef = {
 export type TeamState = {
   version: 1
   name: string
+  identity?: TeamIdentity
   description?: string
   createdAt: number
   leaderSessionFile?: string

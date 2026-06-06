@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import { getBridgeLease } from '../state/bridgeStore.js'
 import { getWorkerSessionPath } from '../state/paths.js'
-import { clearSessionContext, writeSessionContext } from '../state/sessionBinding.js'
+import { buildSessionContextForTeam, clearSessionContext, writeSessionContext } from '../state/sessionBinding.js'
 import { removeMember, upsertMember, updateMemberStatus, updateTeamState } from '../state/teamStore.js'
 import {
   createTeammatePane,
@@ -275,7 +275,7 @@ export async function spawnWorkerMember(
       bridgeLastError: 'waiting for bridge handshake',
     })
   })
-  writeSessionContext(sessionFile, { teamName: team.name, memberName: workerName })
+  writeSessionContext(sessionFile, buildSessionContextForTeam(team, workerName))
 
   let pane: Awaited<ReturnType<typeof createTeammatePane>>
   try {

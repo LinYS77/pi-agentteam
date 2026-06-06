@@ -1,6 +1,6 @@
 import { isMailboxMessageUnread } from '../messageLifecycle.js'
 import type { PanelActionMenu, PanelData, PanelSelectionView, TeamPanelState } from './viewModel.js'
-import { getPanelActiveSelectedIndex, hasPaneLostAttention, hasUnreadBlockedReportAttention, mailboxType, taskHistorySummary } from './viewModel.js'
+import { getPanelActiveSelectedIndex, hasPaneLostAttention, hasUnreadBlockedReportAttention, mailboxType, taskHistorySummary, teamDisplayName, teamProjectDisambiguator } from './viewModel.js'
 import {
   compactAttentionSummaryParts,
   foldCompactAttentionParts,
@@ -260,8 +260,13 @@ export function renderGlobalTeamLines(
     const absolute = teamsWindow.offset + i
     const isSelected = state.focus === 'teams' && absolute === selectedIndex
     const pointer = isSelected ? theme.fg('accent', '›') : ' '
-    const name = isSelected ? theme.bold(theme.fg('accent', short(team.name, 24))) : theme.fg('text', short(team.name, 24))
-    lines.push(`${pointer}  ${padCell(name, 24)} ${theme.fg('dim', '│')} ${teamStatusLine(theme, team, data.teamSummaries[team.name])}`)
+    const displayName = teamDisplayName(team)
+    const disambiguator = teamProjectDisambiguator(team)
+    const nameText = short(displayName, 24)
+    const name = isSelected ? theme.bold(theme.fg('accent', nameText)) : theme.fg('text', nameText)
+    const storageSuffix = team.name !== displayName ? ` · key ${team.name}` : ''
+    lines.push(`${pointer}  ${padCell(name, 24)} ${theme.fg('dim', '│')} ${teamStatusLine(theme, team, data.teamSummaries[team.name])}${theme.fg('dim', storageSuffix)}`)
+    lines.push(theme.fg('dim', `     project ${disambiguator}`))
   }
   const hiddenBelow = data.teams.length - (teamsWindow.offset + teamsWindow.items.length)
   if (hiddenBelow > 0) lines.push(theme.fg('dim', `… ${hiddenBelow} below`))

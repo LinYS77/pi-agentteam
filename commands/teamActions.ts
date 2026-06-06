@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { getMailboxPath } from '../state/paths.js'
-import { clearSessionContext, writeSessionContext } from '../state/sessionBinding.js'
+import { buildSessionContextForTeam, clearSessionContext, writeSessionContext } from '../state/sessionBinding.js'
 import { listTeams, readTeamState, removeMember, updateTeamState } from '../state/teamStore.js'
 import { readLatestQuarantineForTeam } from '../state/validation.js'
 import { getCurrentTeamName, getSessionFile } from '../session.js'
@@ -239,10 +239,7 @@ export function recoverTeamAsCurrentLeader(
     return null
   }
 
-  writeSessionContext(sessionFile, {
-    teamName: recovered.name,
-    memberName: TEAM_LEAD,
-  })
+  writeSessionContext(sessionFile, buildSessionContextForTeam(recovered, TEAM_LEAD))
   void syncPaneLabelsForTeam(recovered)
   deps.invalidateStatus(ctx)
   ctx.ui.notify(`Recovered team ${recovered.name} as current leader`, 'info')

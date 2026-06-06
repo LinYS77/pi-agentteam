@@ -105,6 +105,18 @@ export type GlobalPanelData = {
 
 export type PanelData = AttachedPanelData | GlobalPanelData
 
+export function teamDisplayName(team: TeamState): string {
+  return team.identity?.displayName || team.name
+}
+
+export function teamSlug(team: TeamState): string {
+  return team.identity?.slug || team.name
+}
+
+export function teamProjectDisambiguator(team: TeamState): string {
+  return team.leaderCwd || team.identity?.projectKey || team.name
+}
+
 export type TeamPanelState = {
   focus: FocusSection
   /** Legacy active-row alias retained while input/render slices move to per-tab state. */

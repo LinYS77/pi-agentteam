@@ -1,5 +1,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import type { TeamIdentity } from '../core/teamIdentity.js'
+import { buildNewTeamIdentity } from '../core/teamIdentity.js'
 import type { TeamMember, TeamState } from '../internalTypes.js'
 import { TEAM_LEAD } from '../internalTypes.js'
 import { readJsonFile, writeJsonFile, withFileLock } from './fsStore.js'
@@ -27,9 +29,17 @@ export function createInitialTeamState(input: {
   description?: string
   leaderSessionFile?: string
   leaderCwd: string
+  identity?: TeamIdentity
+  storageName?: string
 }): TeamState {
   const now = Date.now()
-  const teamName = sanitizeName(input.teamName)
+  const teamName = sanitizeName(input.storageName ?? input.teamName)
+  let identity = input.identity
+  try {
+    identity = identity ?? buildNewTeamIdentity({ rawName: input.teamName, cwd: input.leaderCwd })
+  } catch {
+    identity = undefined
+  }
   const leader: TeamMember = {
     name: TEAM_LEAD,
     role: 'leader',
@@ -42,6 +52,7 @@ export function createInitialTeamState(input: {
   return {
     version: 1,
     name: teamName,
+    identity,
     description: input.description,
     createdAt: now,
     leaderSessionFile: input.leaderSessionFile,
@@ -197,6 +208,10 @@ export function listTeams(): TeamState[] {
   }
   results.sort((a, b) => b.createdAt - a.createdAt || a.name.localeCompare(b.name))
   return results
+}
+
+export function findTeamByProjectSlug(projectKey: string, slug: string): TeamState | null {
+  return listTeams().find(team => team.identity?.projectKey === projectKey && team.identity?.slug === slug) ?? null
 }
 
 export function upsertMember(

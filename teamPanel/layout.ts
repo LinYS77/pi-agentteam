@@ -9,7 +9,7 @@ import type {
   TeamPanelState,
   TeamRuntimeDiagnostics,
 } from './viewModel.js'
-import { buildTeamAttentionSummary, mailboxType, taskHistorySummary } from './viewModel.js'
+import { buildTeamAttentionSummary, mailboxType, taskHistorySummary, teamDisplayName, teamProjectDisambiguator, teamSlug } from './viewModel.js'
 import {
   basename,
   drawBox,
@@ -263,7 +263,8 @@ function renderGlobalDetailLines(
       const leader = team.members['team-lead']
       const summary = data.teamSummaries[team.name]
       const mailbox = data.teamMailboxes[team.name]
-      detailLines.push(`🤝 ${theme.bold(theme.fg('text', team.name))}`)
+      const displayName = teamDisplayName(team)
+      detailLines.push(`🤝 ${theme.bold(theme.fg('text', displayName))}`)
       detailLines.push('')
       const offlineCount = teammates.filter(member => projectMemberHealth(member) === 'offline').length
       const idleCount = teammates.filter(member => projectMemberHealth(member) === 'idle').length
@@ -289,6 +290,12 @@ function renderGlobalDetailLines(
       }
       detailLines.push('')
       detailLines.push(renderDetailSection(theme, 'Identity'))
+      detailLines.push(renderDetailField(theme, 'Display', displayName, 'text'))
+      detailLines.push(renderDetailField(theme, 'Slug', teamSlug(team), 'dim'))
+      detailLines.push(renderDetailField(theme, 'Storage key', team.name, 'dim'))
+      detailLines.push(renderDetailField(theme, 'Project cwd', teamProjectDisambiguator(team), 'dim'))
+      if (team.identity?.projectKey) detailLines.push(renderDetailField(theme, 'Project key', team.identity.projectKey, 'dim'))
+      if (team.identity?.teamId) detailLines.push(renderDetailField(theme, 'Team id', team.identity.teamId, 'dim'))
       detailLines.push(renderDetailField(theme, 'Leader pane', leader?.paneId ?? 'missing', leader?.paneId ? 'text' : 'warning'))
       detailLines.push(renderDetailField(theme, 'Created', new Date(team.createdAt).toLocaleString(), 'text'))
 
