@@ -1,6 +1,11 @@
 export type FsProfileEventKind = 'lock' | 'read' | 'parse' | 'write'
 
-export type TmuxProfileInput = {
+export type ProfileAttribution = {
+  caller?: string
+  category?: string
+}
+
+export type TmuxProfileInput = ProfileAttribution & {
   command: string
   args?: string[]
   durationMs: number
@@ -19,7 +24,11 @@ type FsStoreProfileSummary = {
   writeCount: number
   totalWriteMs: number
   bytesWritten: number
-  events: Array<{
+  stateReadCount: number
+  stateWriteCount: number
+  mailboxProjectionReadCount: number
+  teamStateReadCount: number
+  events: Array<ProfileAttribution & {
     kind: FsProfileEventKind
     durationMs: number
     bytes?: number
@@ -33,7 +42,7 @@ type TmuxProfileSummary = {
   failureCount: number
   totalDurationMs: number
   commandNames: string[]
-  events: Array<{
+  events: Array<ProfileAttribution & {
     kind: 'command'
     command: string
     args: string[]
@@ -55,7 +64,7 @@ export type PanelReadModelProfileCounts = {
 
 export type PanelProfileEventKind = 'dataLoad' | 'readModelBuild'
 
-export type PanelProfileInput = PanelReadModelProfileCounts & {
+export type PanelProfileInput = ProfileAttribution & PanelReadModelProfileCounts & {
   kind: PanelProfileEventKind
   mode: PanelProfileMode
   durationMs: number
@@ -94,6 +103,10 @@ function emptyFsStoreSummary(): FsStoreProfileSummary {
     writeCount: 0,
     totalWriteMs: 0,
     bytesWritten: 0,
+    stateReadCount: 0,
+    stateWriteCount: 0,
+    mailboxProjectionReadCount: 0,
+    teamStateReadCount: 0,
     events: [],
   }
 }
@@ -183,6 +196,31 @@ function safeCount(value: number | undefined): number | undefined {
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0
 }
 
+function safeProfileText(value: string | undefined, fallback: string): string {
+  const trimmed = value?.trim()
+  return trimmed || fallback
+}
+
+function profileCategoryFromPath(filePath?: string): string {
+  if (!filePath) return 'state:unknown'
+  if (filePath.endsWith('/team.json') || filePath.endsWith('\\team.json')) return 'state:team'
+  if (filePath.includes('/inboxes/') || filePath.includes('\\inboxes\\')) return 'state:mailboxProjection'
+  if (filePath.endsWith('/runtime.json') || filePath.endsWith('\\runtime.json')) return 'state:runtime'
+  if (filePath.endsWith('/outbox.json') || filePath.endsWith('\\outbox.json')) return 'state:outbox'
+  if (filePath.endsWith('/outbox-diagnostics.json') || filePath.endsWith('\\outbox-diagnostics.json')) return 'state:outboxDiagnostics'
+  return 'state:file'
+}
+
+function incrementFsRepositoryCounters(kind: FsProfileEventKind, category: string): void {
+  if (kind === 'read') {
+    summary.fsStore.stateReadCount += 1
+    if (category === 'state:mailboxProjection') summary.fsStore.mailboxProjectionReadCount += 1
+    if (category === 'state:team') summary.fsStore.teamStateReadCount += 1
+  } else if (kind === 'write') {
+    summary.fsStore.stateWriteCount += 1
+  }
+}
+
 function panelCounts(input: PanelReadModelProfileCounts): PanelReadModelProfileCounts {
   return {
     ...(input.teamCount !== undefined ? { teamCount: safeCount(input.teamCount) } : {}),
@@ -193,7 +231,7 @@ function panelCounts(input: PanelReadModelProfileCounts): PanelReadModelProfileC
   }
 }
 
-export function recordFsStoreEvent(input: {
+export function recordFsStoreEvent(input: ProfileAttribution & {
   kind: FsProfileEventKind
   durationMs: number
   bytes?: number
@@ -202,12 +240,17 @@ export function recordFsStoreEvent(input: {
   if (!isProfilingEnabled()) return
   const durationMs = safeDurationMs(input.durationMs)
   const bytes = safeBytes(input.bytes)
+  const category = safeProfileText(input.category, profileCategoryFromPath(input.path))
+  const caller = safeProfileText(input.caller, 'state.fsStore')
   summary.fsStore.events.push({
     kind: input.kind,
     durationMs,
+    caller,
+    category,
     ...(input.bytes !== undefined ? { bytes } : {}),
     ...(input.path ? { path: input.path } : {}),
   })
+  incrementFsRepositoryCounters(input.kind, category)
   if (input.kind === 'lock') {
     summary.fsStore.lockCount += 1
     summary.fsStore.totalLockMs += durationMs
@@ -242,6 +285,8 @@ export function recordTmuxCommand(input: TmuxProfileInput): void {
     args,
     durationMs,
     ok: input.ok,
+    caller: safeProfileText(input.caller, 'tmux.client'),
+    category: safeProfileText(input.category, 'runtime:tmux'),
     ...(input.error ? { error: input.error } : {}),
   })
 }
@@ -254,6 +299,8 @@ export function recordPanelProfileEvent(input: PanelProfileInput): void {
     kind: input.kind,
     mode: input.mode,
     durationMs,
+    caller: safeProfileText(input.caller, input.kind === 'dataLoad' ? 'teamPanel.dataSource' : 'teamPanel.readModel'),
+    category: safeProfileText(input.category, input.kind === 'dataLoad' ? 'panel:dataLoad' : 'panel:readModel'),
     ...counts,
   }
   summary.panel.events.push(event)

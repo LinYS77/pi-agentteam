@@ -8,9 +8,12 @@ import type {
   TeamState,
   TeamTask,
 } from '../internalTypes.js'
-import { taskHistoryDisplaySummary, type TaskHistoryDisplaySummary } from '../state/taskHistoryReadModel.js'
 import type { QuarantinedTeamSummary } from '../state/validation.js'
-import { recordPanelProfileEvent } from '../runtime/profiling.js'
+import {
+  defaultPanelReadModelServices,
+  type PanelReadModelServices,
+  type TaskHistoryDisplaySummary,
+} from './readModelServices.js'
 
 export type PanelMailboxItem = {
   id: string
@@ -170,7 +173,11 @@ export function toPanelMemberModel(member: TeamMember): PanelMemberModel {
   }
 }
 
-export function toPanelTaskModel(team: TeamState, task: TeamTask): PanelTaskModel {
+export function toPanelTaskModel(
+  team: TeamState,
+  task: TeamTask,
+  services: PanelReadModelServices = defaultPanelReadModelServices,
+): PanelTaskModel {
   return {
     id: task.id,
     title: task.title,
@@ -180,20 +187,23 @@ export function toPanelTaskModel(team: TeamState, task: TeamTask): PanelTaskMode
     blockedBy: [...task.blockedBy],
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
-    history: taskHistoryDisplaySummary(team, task.id),
+    history: services.taskHistorySummary(team, task.id),
   }
 }
 
-export function toPanelTeamModel(team: TeamState, mode: 'attached' | 'global' = 'attached'): PanelTeamModel {
+export function toPanelTeamModel(
+  team: TeamState,
+  mode: 'attached' | 'global' = 'attached',
+  services: PanelReadModelServices = defaultPanelReadModelServices,
+): PanelTeamModel {
   const startedAt = Date.now()
   const members = Object.fromEntries(
     Object.entries(team.members).map(([name, member]) => [name, toPanelMemberModel(member)]),
   )
   const tasks = Object.fromEntries(
-    Object.entries(team.tasks).map(([taskId, task]) => [taskId, toPanelTaskModel(team, task)]),
+    Object.entries(team.tasks).map(([taskId, task]) => [taskId, toPanelTaskModel(team, task, services)]),
   )
-  recordPanelProfileEvent({
-    kind: 'readModelBuild',
+  services.recordReadModelBuild({
     mode,
     durationMs: Date.now() - startedAt,
     teamCount: 1,

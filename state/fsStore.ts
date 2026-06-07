@@ -2,6 +2,17 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { recordFsStoreEvent } from '../core/profiling.js'
 
+const FS_STORE_PROFILE_CALLER = 'state.fsStore'
+
+function profileCategoryForPath(filePath: string): string {
+  if (filePath.endsWith('/team.json') || filePath.endsWith('\\team.json')) return 'state:team'
+  if (filePath.includes('/inboxes/') || filePath.includes('\\inboxes\\')) return 'state:mailboxProjection'
+  if (filePath.endsWith('/runtime.json') || filePath.endsWith('\\runtime.json')) return 'state:runtime'
+  if (filePath.endsWith('/outbox.json') || filePath.endsWith('\\outbox.json')) return 'state:outbox'
+  if (filePath.endsWith('/outbox-diagnostics.json') || filePath.endsWith('\\outbox-diagnostics.json')) return 'state:outboxDiagnostics'
+  return 'state:file'
+}
+
 // ---------------------------------------------------------------------------
 // Generic file-system primitives shared by the state submodules.
 // ---------------------------------------------------------------------------
@@ -79,7 +90,7 @@ export function withFileLock<T>(filePath: string, fn: () => T, timeoutMs = LOCK_
     return fn()
   } finally {
     release()
-    recordFsStoreEvent({ kind: 'lock', durationMs: Date.now() - startedAt, path: filePath })
+    recordFsStoreEvent({ kind: 'lock', durationMs: Date.now() - startedAt, path: filePath, caller: FS_STORE_PROFILE_CALLER, category: profileCategoryForPath(filePath) })
   }
 }
 
@@ -87,10 +98,11 @@ export function readJsonFile<T>(filePath: string): T | null {
   try {
     const readStartedAt = Date.now()
     const payload = fs.readFileSync(filePath, 'utf8')
-    recordFsStoreEvent({ kind: 'read', durationMs: Date.now() - readStartedAt, bytes: Buffer.byteLength(payload, 'utf8'), path: filePath })
+    const category = profileCategoryForPath(filePath)
+    recordFsStoreEvent({ kind: 'read', durationMs: Date.now() - readStartedAt, bytes: Buffer.byteLength(payload, 'utf8'), path: filePath, caller: FS_STORE_PROFILE_CALLER, category })
     const parseStartedAt = Date.now()
     const parsed = JSON.parse(payload) as T
-    recordFsStoreEvent({ kind: 'parse', durationMs: Date.now() - parseStartedAt, bytes: Buffer.byteLength(payload, 'utf8'), path: filePath })
+    recordFsStoreEvent({ kind: 'parse', durationMs: Date.now() - parseStartedAt, bytes: Buffer.byteLength(payload, 'utf8'), path: filePath, caller: FS_STORE_PROFILE_CALLER, category })
     return parsed
   } catch {
     return null
@@ -105,7 +117,7 @@ export function writeJsonFile(filePath: string, value: unknown): void {
   try {
     fs.writeFileSync(tempPath, payload, 'utf8')
     fs.renameSync(tempPath, filePath)
-    recordFsStoreEvent({ kind: 'write', durationMs: Date.now() - writeStartedAt, bytes: Buffer.byteLength(payload, 'utf8'), path: filePath })
+    recordFsStoreEvent({ kind: 'write', durationMs: Date.now() - writeStartedAt, bytes: Buffer.byteLength(payload, 'utf8'), path: filePath, caller: FS_STORE_PROFILE_CALLER, category: profileCategoryForPath(filePath) })
   } finally {
     try {
       if (fs.existsSync(tempPath)) {

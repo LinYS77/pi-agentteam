@@ -1,54 +1,40 @@
 import type { AppendTaskEventInput, AppendTaskReportInput, TaskHistoryQueryPort, TaskMutationPort, TeamStatePort, UpdateTaskReportInput } from '../../app/ports.js'
-import { createTask } from '../../state/taskStore.js'
-import { readTeamState, updateTeamState } from '../../state/teamStore.js'
-import {
-  appendTaskEvent,
-  appendTaskReport,
-  updateTaskReport,
-} from '../../state/taskHistory.js'
-import {
-  findTaskReport,
-  latestTaskActivity,
-  latestTaskReport,
-  taskEventsForTask,
-  taskHistoryCounts,
-  taskHistorySummary,
-  taskMessageRefsForTask,
-  taskReportsForTask,
-} from '../../state/taskHistoryReadModel.js'
 import type { TeamState } from '../../internalTypes.js'
+import { fileBackedStateRepository, type StateRepository } from '../../state/repository.js'
+
+const stateRepository: StateRepository = fileBackedStateRepository
 
 export const fileBackedTeamStatePort: TeamStatePort = {
-  readTeam: readTeamState,
-  updateTeam: updateTeamState,
+  readTeam: stateRepository.readTeamState,
+  updateTeam: stateRepository.updateTeamState,
 }
 
 function appendTaskEventPort(team: TeamState, input: AppendTaskEventInput) {
-  return appendTaskEvent(team, input)
+  return stateRepository.appendTaskEvent(team, input)
 }
 
 function appendTaskReportPort(team: TeamState, input: AppendTaskReportInput) {
-  return appendTaskReport(team, input)
+  return stateRepository.appendTaskReport(team, input)
 }
 
 function updateTaskReportPort(team: TeamState, reportId: string, patch: UpdateTaskReportInput) {
-  return updateTaskReport(team, reportId, patch)
+  return stateRepository.updateTaskReport(team, reportId, patch)
 }
 
 export const fileBackedTaskMutationPort: Pick<TaskMutationPort, 'createTask' | 'appendTaskEvent' | 'appendTaskReport' | 'updateTaskReport'> = {
-  createTask,
+  createTask: stateRepository.createTask,
   appendTaskEvent: appendTaskEventPort,
   appendTaskReport: appendTaskReportPort,
   updateTaskReport: updateTaskReportPort,
 }
 
 export const fileBackedTaskHistoryQueryPort: TaskHistoryQueryPort = {
-  taskReportsForTask,
-  taskEventsForTask,
-  taskMessageRefsForTask,
-  latestTaskReport,
-  latestTaskActivity,
-  taskHistoryCounts,
-  taskHistorySummary,
-  findTaskReport,
+  taskReportsForTask: stateRepository.taskReportsForTask,
+  taskEventsForTask: stateRepository.taskEventsForTask,
+  taskMessageRefsForTask: stateRepository.taskMessageRefsForTask,
+  latestTaskReport: stateRepository.latestTaskReport,
+  latestTaskActivity: stateRepository.latestTaskActivity,
+  taskHistoryCounts: stateRepository.taskHistoryCounts,
+  taskHistorySummary: stateRepository.taskHistorySummary,
+  findTaskReport: stateRepository.findTaskReport,
 }

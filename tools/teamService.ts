@@ -1,23 +1,16 @@
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { buildNewTeamIdentity } from '../core/teamIdentity.js'
-import { buildSessionContextForTeam, readSessionContext, writeSessionContext } from '../state/sessionBinding.js'
-import {
-  createInitialTeamState,
-  findTeamByProjectSlug,
-  readTeamState,
-  updateTeamState,
-  writeTeamState,
-} from '../state/teamStore.js'
-import { readLatestQuarantineForTeam } from '../state/validation.js'
+import { fileBackedRuntimeRepository, type PaneBinding, type RuntimeRepository } from '../runtime/repository.js'
+import { fileBackedStateRepository, type StateRepository } from '../state/repository.js'
 import { getSessionFile } from '../session.js'
-import { captureCurrentPaneBinding, paneExists, syncPaneLabelsForTeam } from '../adapters/tmux/index.js'
 import { TEAM_LEAD } from '../internalTypes.js'
 import type { TeamState } from '../internalTypes.js'
 import type { ToolHandlerDeps } from './shared.js'
 import type { TeamCreateInput, TeamSpawnInput } from './teamTypes.js'
 import { spawnWorkerMember } from './workerSpawnService.js'
 
-type PaneBinding = NonNullable<ReturnType<typeof captureCurrentPaneBinding>>
+const stateRepository: StateRepository = fileBackedStateRepository
+const runtimeRepository: RuntimeRepository = fileBackedRuntimeRepository
 
 function ensureLeaderOnlyOperation(
   deps: ToolHandlerDeps,
@@ -33,7 +26,7 @@ function teamMatchesRequestedSlug(team: TeamState, slug: string): boolean {
 
 function hasLeaderSessionBinding(team: TeamState): boolean {
   if (!team.leaderSessionFile) return false
-  const context = readSessionContext(team.leaderSessionFile)
+  const context = stateRepository.readSessionContext(team.leaderSessionFile)
   return context.teamName === team.name && context.memberName === TEAM_LEAD
 }
 
@@ -44,7 +37,7 @@ function attachCurrentLeaderToExistingTeam(
   currentPane: PaneBinding,
 ): TeamState | null {
   const now = Date.now()
-  const recovered = updateTeamState(team.name, latest => {
+  const recovered = stateRepository.updateTeamState(team.name, latest => {
     latest.leaderSessionFile = sessionFile
     latest.leaderCwd = cwd
     const previousLeader = latest.members[TEAM_LEAD]
@@ -71,8 +64,8 @@ function attachCurrentLeaderToExistingTeam(
     }
   })
   if (!recovered) return null
-  writeSessionContext(sessionFile, buildSessionContextForTeam(recovered, TEAM_LEAD))
-  void syncPaneLabelsForTeam(recovered)
+  stateRepository.writeSessionContext(sessionFile, stateRepository.buildSessionContextForTeam(recovered, TEAM_LEAD))
+  void runtimeRepository.syncPaneLabelsForTeam(recovered)
   return recovered
 }
 
@@ -119,14 +112,14 @@ export function executeCreateTeam(
       details: { denied: true, reason: 'session_already_attached', teamName, currentTeamName: currentTeam.name },
     }
   }
-  const existingByName = readTeamState(teamName)
-  let existingTeam = findTeamByProjectSlug(identity.projectKey, identity.slug)
+  const existingByName = stateRepository.readTeamState(teamName)
+  let existingTeam = stateRepository.findTeamByProjectSlug(identity.projectKey, identity.slug)
   if (!existingTeam && existingByName?.identity?.slug === identity.slug) {
     if (existingByName.identity.projectKey === identity.projectKey || !hasLeaderSessionBinding(existingByName)) {
       existingTeam = existingByName
     }
   }
-  const quarantinedExistingTeam = existingByName || existingTeam ? null : readLatestQuarantineForTeam(teamName)
+  const quarantinedExistingTeam = existingByName || existingTeam ? null : stateRepository.readLatestQuarantineForTeam(teamName)
   if (quarantinedExistingTeam) {
     const firstReason = quarantinedExistingTeam.reasons[0]
     const reasonText = firstReason ? firstReason.code : 'unsupported persisted state'
@@ -145,7 +138,7 @@ export function executeCreateTeam(
     }
   }
   if (existingTeam) {
-    const currentPane = captureCurrentPaneBinding()
+    const currentPane = runtimeRepository.captureCurrentPaneBinding()
     if (!currentPane) {
       return {
         content: [{
@@ -162,7 +155,7 @@ export function executeCreateTeam(
     }
     const existingLeader = existingTeam.members[TEAM_LEAD]
     const existingLeaderPaneId = existingLeader?.paneId
-    if (existingLeaderPaneId && existingLeaderPaneId !== currentPane.paneId && paneExists(existingLeaderPaneId)) {
+    if (existingLeaderPaneId && existingLeaderPaneId !== currentPane.paneId && runtimeRepository.paneExists(existingLeaderPaneId)) {
       const recoverInstruction = 'Only use /team recover if you have confirmed the existing leader pane is stale.'
       return {
         content: [{
@@ -197,7 +190,7 @@ export function executeCreateTeam(
     }
   }
   const storageName = existingByName ? identity.teamId : teamName
-  const state = createInitialTeamState({
+  const state = stateRepository.createInitialTeamState({
     teamName: params.team_name,
     storageName,
     identity,
@@ -205,7 +198,7 @@ export function executeCreateTeam(
     leaderSessionFile: sessionFile,
     leaderCwd: ctx.cwd,
   })
-  const currentPane = captureCurrentPaneBinding()
+  const currentPane = runtimeRepository.captureCurrentPaneBinding()
   if (currentPane) {
     state.members[TEAM_LEAD] = {
       ...state.members[TEAM_LEAD]!,
@@ -213,8 +206,8 @@ export function executeCreateTeam(
       windowTarget: currentPane.target,
     }
   }
-  writeTeamState(state)
-  writeSessionContext(sessionFile, buildSessionContextForTeam(state, TEAM_LEAD))
+  stateRepository.writeTeamState(state)
+  stateRepository.writeSessionContext(sessionFile, stateRepository.buildSessionContextForTeam(state, TEAM_LEAD))
   deps.invalidateStatus(ctx)
   return {
     content: [{ type: 'text' as const, text: `Created team ${teamName}` }],

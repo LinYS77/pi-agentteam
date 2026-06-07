@@ -1,12 +1,13 @@
 import type {
   MailboxMessage,
+  TeamMember,
   TeamState,
   TaskEvent,
   TaskMessageRef,
   TaskReport,
   TeamTask,
 } from '../internalTypes.js'
-import type { TaskHistoryCounts, TaskHistorySummary } from '../state/taskHistoryReadModel.js'
+import type { TaskHistoryCounts, TaskHistoryDisplaySummary, TaskHistoryReportDisplay, TaskHistorySummary } from '../state/taskHistoryReadModel.js'
 export type { TaskHistoryCounts, TaskHistorySummary } from '../state/taskHistoryReadModel.js'
 import type {
   OutboxClaimInput,
@@ -58,6 +59,108 @@ export type MailboxRepositoryPort = {
   readMailbox(teamName: string, memberName: string): MailboxMessage[]
   markDelivered(teamName: string, memberName: string, ids: string[]): void
   markRead(teamName: string, memberName: string, ids: string[]): void
+}
+
+export type RepositoryMailboxProjectionItem = Pick<MailboxMessage,
+  | 'id'
+  | 'from'
+  | 'to'
+  | 'summary'
+  | 'type'
+  | 'taskId'
+  | 'threadId'
+  | 'requestId'
+  | 'replyTo'
+  | 'priority'
+  | 'wakeHint'
+  | 'metadata'
+  | 'createdAt'
+  | 'deliveredAt'
+  | 'readAt'
+>
+
+export type RepositoryLeaderMailboxProjection = {
+  total: number
+  unread: number
+  items: RepositoryMailboxProjectionItem[]
+  latestAttention?: RepositoryMailboxProjectionItem
+}
+
+export type RepositoryTeamPanelMember = Pick<TeamMember,
+  | 'name'
+  | 'role'
+  | 'model'
+  | 'sessionFile'
+  | 'status'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'paneId'
+  | 'windowTarget'
+  | 'lastWakeReason'
+  | 'lastError'
+  | 'bridgeAvailable'
+  | 'bridgeVersion'
+  | 'bridgeLastSeenAt'
+  | 'bridgeLastDeliveryAt'
+  | 'bridgeLastError'
+  | 'bridgeWorkRequestedAt'
+  | 'bridgeWorkRequestCount'
+>
+
+export type RepositoryTeamPanelTask = Pick<TeamTask,
+  | 'id'
+  | 'title'
+  | 'description'
+  | 'status'
+  | 'owner'
+  | 'blockedBy'
+  | 'createdAt'
+  | 'updatedAt'
+> & {
+  history: TaskHistoryDisplaySummary
+}
+
+export type RepositoryTeamPanelModel = {
+  version: TeamState['version']
+  name: string
+  identity?: TeamState['identity']
+  description?: string
+  createdAt: number
+  leaderCwd: string
+  leaderSessionFile?: string
+  members: Record<string, RepositoryTeamPanelMember>
+  tasks: Record<string, RepositoryTeamPanelTask>
+  nextTaskSeq: number
+  revision?: number
+  memberTombstones?: Record<string, number>
+}
+
+export type StateRepositoryPort = {
+  readTeamPanelModel(teamName: string): RepositoryTeamPanelModel | null
+  readLeaderMailboxProjection(teamName: string): RepositoryLeaderMailboxProjection
+  readTaskReportSummary(teamName: string, reportId: string): TaskHistoryReportDisplay | undefined
+  writeTeamMutation(teamName: string, updater: TeamStateUpdater): TeamState | null
+}
+
+export type RuntimeRepositoryPaneSnapshotItem = {
+  paneId: string
+  target: string
+  label: string
+  currentCommand: string
+}
+
+export type RuntimeRepositorySnapshot = {
+  capturedAt: number
+  panes: RuntimeRepositoryPaneSnapshotItem[]
+  byPaneId: Record<string, RuntimeRepositoryPaneSnapshotItem>
+  ok?: boolean
+  error?: string
+}
+
+export type RuntimeRepositoryPort = {
+  withRuntimeSnapshot<T>(handler: (snapshot: RuntimeRepositorySnapshot) => T): T
+  listAgentTeamPanes(snapshot?: RuntimeRepositorySnapshot): RuntimeRepositoryPaneSnapshotItem[]
+  reconcileTeamPanes(team: TeamState, options?: { force?: boolean; mode?: 'light' | 'force'; snapshot?: RuntimeRepositorySnapshot }): boolean
 }
 
 export type OutboxStorePort = {

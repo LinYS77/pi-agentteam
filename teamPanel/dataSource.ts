@@ -1,76 +1,78 @@
-import { ensureTeamStorageReady, reconcileTeamPanes } from '../adapters/runtime/session.js'
-import { isMailboxMessageUnread } from '../messageLifecycle.js'
-import { captureTmuxSnapshot, listAgentTeamPanes, listAgentTeamPanesFromSnapshot } from '../adapters/tmux/index.js'
-import { readMailbox } from '../state/mailboxStore.js'
-import { listTeams, readTeamState, updateTeamState } from '../state/teamStore.js'
-import { listQuarantinedTeams } from '../state/validation.js'
-import { summarizeOutboxEffects } from '../app/outboxDiagnostics.js'
-import { listOutboxEffects } from '../state/outboxStore.js'
-import { readOutboxDiagnosticsStore } from '../state/outboxDiagnosticsStore.js'
 import { TEAM_LEAD } from '../internalTypes.js'
 import { recordPanelProfileEvent } from '../runtime/profiling.js'
-import { toPanelMailboxItem, toPanelTeamModel } from './readModel.js'
+import { fileBackedRuntimeRepository, type RuntimeRepository } from '../runtime/repository.js'
+import { fileBackedStateRepository, type StateRepository } from '../state/repository.js'
 import { buildTeamAttentionSummary, hasUnreadBlockedReportAttention } from './viewModel.js'
-import type { TmuxSnapshot } from '../tmux/snapshot.js'
 import type {
   AttachedPanelData,
   GlobalPanelData,
   GlobalTeamMailboxProjection,
   PanelData,
+  PanelMailboxItem,
+  PanelTeamModel,
   TeamAttentionSummary,
   TeamRuntimeDiagnostics,
 } from './viewModel.js'
 
-const defaultListAgentTeamPanes = listAgentTeamPanes
-
-function mergeSnapshotPanes(snapshot: TmuxSnapshot, panes: ReturnType<typeof listAgentTeamPanes>): TmuxSnapshot {
-  if (panes.length === 0) return snapshot
-  const byPaneId: TmuxSnapshot['byPaneId'] = { ...snapshot.byPaneId }
-  const order = snapshot.panes.map(pane => pane.paneId)
-  for (const pane of panes) {
-    if (!byPaneId[pane.paneId]) order.push(pane.paneId)
-    byPaneId[pane.paneId] = pane
-  }
-  return {
-    capturedAt: snapshot.capturedAt,
-    panes: order.map(paneId => byPaneId[paneId]!).filter(Boolean),
-    byPaneId,
-    ok: true,
-  }
+type PanelDataSourceDeps = {
+  stateRepository: StateRepository
+  runtimeRepository: RuntimeRepository
 }
 
-function captureGlobalPanelSnapshot(): TmuxSnapshot {
-  const snapshot = captureTmuxSnapshot()
-  const listAgentTeamPanesWasPatched = listAgentTeamPanes !== defaultListAgentTeamPanes
-  if (!listAgentTeamPanesWasPatched) return snapshot
-  return mergeSnapshotPanes(snapshot, listAgentTeamPanes())
+const defaultDeps: PanelDataSourceDeps = {
+  stateRepository: fileBackedStateRepository,
+  runtimeRepository: fileBackedRuntimeRepository,
 }
 
-function prepareTeamForPanel(team: NonNullable<ReturnType<typeof readTeamState>>, options?: { snapshot?: TmuxSnapshot }): void {
-  ensureTeamStorageReady(team)
-  if (reconcileTeamPanes(team, options?.snapshot ? { mode: 'light', snapshot: options.snapshot } : undefined)) {
-    updateTeamState(team.name, () => team)
-  }
+function toPanelMailboxItem(message: PanelMailboxItem): PanelMailboxItem {
+  return { ...message }
 }
 
-function outboxDiagnosticsSummary(teamName: string) {
-  return summarizeOutboxEffects(listOutboxEffects(teamName), readOutboxDiagnosticsStore(teamName))
-}
-
-function loadAttachedPanelData(teamName: string): AttachedPanelData | null {
-  const startedAt = Date.now()
-  const team = readTeamState(teamName)
+function prepareTeamForPanel(
+  deps: PanelDataSourceDeps,
+  teamName: string,
+  mode: 'attached' | 'global',
+  options?: Parameters<RuntimeRepository['prepareTeamForPanel']>[1],
+): PanelTeamModel | null {
+  const team = deps.stateRepository.readTeamForPanel(teamName)
   if (!team) return null
-  prepareTeamForPanel(team)
-  const panelTeam = toPanelTeamModel(team, 'attached')
+  if (deps.runtimeRepository.prepareTeamForPanel(team, options)) {
+    deps.stateRepository.writeTeamMutation(team.name, () => team)
+  }
+  const readModelStartedAt = Date.now()
+  const panelTeam = deps.stateRepository.readTeamPanelModel(team.name)
+  if (panelTeam) {
+    recordPanelProfileEvent({
+      kind: 'readModelBuild',
+      mode,
+      durationMs: Date.now() - readModelStartedAt,
+      teamCount: 1,
+      memberCount: Object.keys(panelTeam.members).length,
+      taskCount: Object.keys(panelTeam.tasks).length,
+    })
+  }
+  return panelTeam
+}
+
+function loadAttachedPanelData(teamName: string, deps: PanelDataSourceDeps): AttachedPanelData | null {
+  const startedAt = Date.now()
+  const panelTeam = prepareTeamForPanel(deps, teamName, 'attached')
+  if (!panelTeam) return null
   const members = Object.values(panelTeam.members)
     .filter(member => member.name !== TEAM_LEAD)
     .sort((a, b) => a.name.localeCompare(b.name))
   const tasks = Object.values(panelTeam.tasks).sort((a, b) => a.id.localeCompare(b.id))
-  const mailbox = readMailbox(teamName, TEAM_LEAD)
-    .map(toPanelMailboxItem)
+  const mailbox = deps.stateRepository.readLeaderMailboxProjection(panelTeam.name)
+    .items.map(toPanelMailboxItem)
     .sort((a, b) => b.createdAt - a.createdAt)
-  const data: AttachedPanelData = { mode: 'attached', team: panelTeam, members, tasks, mailbox, outboxDiagnostics: outboxDiagnosticsSummary(team.name) }
+  const data: AttachedPanelData = {
+    mode: 'attached',
+    team: panelTeam,
+    members,
+    tasks,
+    mailbox,
+    outboxDiagnostics: deps.stateRepository.readOutboxDiagnosticsSummary(panelTeam.name),
+  }
   recordPanelProfileEvent({
     kind: 'dataLoad',
     mode: 'attached',
@@ -84,59 +86,64 @@ function loadAttachedPanelData(teamName: string): AttachedPanelData | null {
   return data
 }
 
-function loadGlobalPanelData(): GlobalPanelData {
+function loadGlobalPanelData(deps: PanelDataSourceDeps): GlobalPanelData {
   const startedAt = Date.now()
-  const teams = listTeams()
-  const panelTeams: GlobalPanelData['teams'] = []
-  const snapshot = captureGlobalPanelSnapshot()
-  const teamSummaries: Record<string, TeamAttentionSummary> = {}
-  const teamMailboxes: Record<string, GlobalTeamMailboxProjection> = {}
-  const teamDiagnostics: Record<string, TeamRuntimeDiagnostics> = {}
-  const knownPaneIds = new Set<string>()
-  for (const team of teams) {
-    prepareTeamForPanel(team, { snapshot })
-    for (const member of Object.values(team.members)) {
-      if (member.paneId) knownPaneIds.add(member.paneId)
+  return deps.runtimeRepository.withRuntimeSnapshot(snapshot => {
+    const panelTeams: GlobalPanelData['teams'] = []
+    const teamSummaries: Record<string, TeamAttentionSummary> = {}
+    const teamMailboxes: Record<string, GlobalTeamMailboxProjection> = {}
+    const teamDiagnostics: Record<string, TeamRuntimeDiagnostics> = {}
+    const knownPaneIds = new Set<string>()
+    for (const teamName of deps.stateRepository.listTeamPanelNames()) {
+      const panelTeam = prepareTeamForPanel(deps, teamName, 'global', { mode: 'light', snapshot })
+      if (!panelTeam) continue
+      for (const member of Object.values(panelTeam.members)) {
+        if (member.paneId) knownPaneIds.add(member.paneId)
+      }
+      const mailboxProjection = deps.stateRepository.readLeaderMailboxProjection(panelTeam.name)
+      const leaderMailboxItems = mailboxProjection.items.map(toPanelMailboxItem)
+      panelTeams.push(panelTeam)
+      teamSummaries[panelTeam.name] = buildTeamAttentionSummary(panelTeam, leaderMailboxItems)
+      teamMailboxes[panelTeam.name] = {
+        total: mailboxProjection.total,
+        unread: mailboxProjection.unread,
+        blocked: leaderMailboxItems.filter(hasUnreadBlockedReportAttention).length,
+        latestAttention: mailboxProjection.latestAttention ? toPanelMailboxItem(mailboxProjection.latestAttention) : undefined,
+      }
+      teamDiagnostics[panelTeam.name] = { outbox: deps.stateRepository.readOutboxDiagnosticsSummary(panelTeam.name) }
     }
-    const leaderMailbox = readMailbox(team.name, TEAM_LEAD)
-    const latestAttention = leaderMailbox
-      .filter(item => isMailboxMessageUnread(item))
-      .sort((a, b) => b.createdAt - a.createdAt)[0]
-    const panelTeam = toPanelTeamModel(team, 'global')
-    const leaderMailboxItems = leaderMailbox.map(toPanelMailboxItem)
-    panelTeams.push(panelTeam)
-    teamSummaries[team.name] = buildTeamAttentionSummary(panelTeam, leaderMailboxItems)
-    teamMailboxes[team.name] = {
-      total: leaderMailbox.length,
-      unread: leaderMailbox.filter(isMailboxMessageUnread).length,
-      blocked: leaderMailboxItems.filter(hasUnreadBlockedReportAttention).length,
-      latestAttention: latestAttention ? toPanelMailboxItem(latestAttention) : undefined,
+
+    const orphanPanes = deps.runtimeRepository.listAgentTeamPanes(snapshot.ok === false ? undefined : snapshot)
+      .filter(pane => !knownPaneIds.has(pane.paneId))
+      .sort((a, b) => a.paneId.localeCompare(b.paneId))
+
+    const data: GlobalPanelData = {
+      mode: 'global',
+      teams: panelTeams,
+      teamSummaries,
+      teamMailboxes,
+      teamDiagnostics,
+      quarantinedTeams: deps.stateRepository.listQuarantinedTeams(),
+      orphanPanes,
     }
-    teamDiagnostics[team.name] = { outbox: outboxDiagnosticsSummary(team.name) }
-  }
-
-  const orphanPanes = (snapshot.ok === false ? listAgentTeamPanes() : listAgentTeamPanesFromSnapshot(snapshot))
-    .filter(pane => !knownPaneIds.has(pane.paneId))
-    .sort((a, b) => a.paneId.localeCompare(b.paneId))
-
-  const data: GlobalPanelData = { mode: 'global', teams: panelTeams, teamSummaries, teamMailboxes, teamDiagnostics, quarantinedTeams: listQuarantinedTeams(), orphanPanes }
-  recordPanelProfileEvent({
-    kind: 'dataLoad',
-    mode: 'global',
-    durationMs: Date.now() - startedAt,
-    teamCount: panelTeams.length,
-    taskCount: panelTeams.reduce((sum, team) => sum + Object.keys(team.tasks).length, 0),
-    memberCount: panelTeams.reduce((sum, team) => sum + Object.values(team.members).filter(member => member.name !== TEAM_LEAD).length, 0),
-    mailboxProjectionCount: Object.values(teamMailboxes).reduce((sum, mailbox) => sum + mailbox.total, 0),
-    orphanPaneCount: orphanPanes.length,
+    recordPanelProfileEvent({
+      kind: 'dataLoad',
+      mode: 'global',
+      durationMs: Date.now() - startedAt,
+      teamCount: panelTeams.length,
+      taskCount: panelTeams.reduce((sum, team) => sum + Object.keys(team.tasks).length, 0),
+      memberCount: panelTeams.reduce((sum, team) => sum + Object.values(team.members).filter(member => member.name !== TEAM_LEAD).length, 0),
+      mailboxProjectionCount: Object.values(teamMailboxes).reduce((sum, mailbox) => sum + mailbox.total, 0),
+      orphanPaneCount: orphanPanes.length,
+    })
+    return data
   })
-  return data
 }
 
-export function loadPanelData(teamName?: string | null): PanelData {
+export function loadPanelData(teamName?: string | null, deps: PanelDataSourceDeps = defaultDeps): PanelData {
   if (teamName) {
-    const attached = loadAttachedPanelData(teamName)
+    const attached = loadAttachedPanelData(teamName, deps)
     if (attached) return attached
   }
-  return loadGlobalPanelData()
+  return loadGlobalPanelData(deps)
 }
