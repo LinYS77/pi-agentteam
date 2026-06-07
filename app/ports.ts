@@ -1,5 +1,8 @@
 import type {
   MailboxMessage,
+  PlanRun,
+  PlanRunEvent,
+  PlanRunStep,
   TeamMember,
   TeamState,
   TaskEvent,
@@ -8,8 +11,10 @@ import type {
   TeamTask,
 } from '../internalTypes.js'
 import type { TaskHistoryCounts, TaskHistoryDisplaySummary, TaskHistoryReportDisplay, TaskHistorySummary } from '../state/taskHistoryReadModel.js'
+import type { CompactPlanRunLeaderAttention } from '../state/runVisibilityReadModel.js'
 import type { ReportWatchdogSummary, ReportWatchdogTaskSummary } from '../state/taskReportWatchdogReadModel.js'
 export type { TaskHistoryCounts, TaskHistorySummary } from '../state/taskHistoryReadModel.js'
+export type { CompactPlanRunLeaderAttention } from '../state/runVisibilityReadModel.js'
 export type { ReportWatchdogState, ReportWatchdogSummary, ReportWatchdogTaskSummary } from '../state/taskReportWatchdogReadModel.js'
 import type {
   OutboxClaimInput,
@@ -37,6 +42,65 @@ export type AppendTaskEventInput = Omit<TaskEvent, 'id'>
 export type AppendTaskReportInput = Omit<TaskReport, 'id' | 'reportOnly'>
 export type UpdateTaskReportInput = Partial<Omit<TaskReport, 'id' | 'taskId'>>
 export type AppendTaskMessageRefInput = Omit<TaskMessageRef, 'id'>
+
+export type PlanRunStepSummary = Pick<PlanRunStep,
+  | 'id'
+  | 'index'
+  | 'title'
+  | 'description'
+  | 'owner'
+  | 'taskId'
+  | 'status'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'sourceSummary'
+>
+
+export type PlanRunEventSummary = Pick<PlanRunEvent,
+  | 'id'
+  | 'planRunId'
+  | 'type'
+  | 'by'
+  | 'at'
+  | 'summary'
+  | 'stepIndex'
+  | 'taskId'
+  | 'reportId'
+  | 'pauseReason'
+>
+
+export type PlanRunSummary = Pick<PlanRun,
+  | 'id'
+  | 'status'
+  | 'sourceTaskId'
+  | 'sourceReportId'
+  | 'sourceReportSummary'
+  | 'sourceReportHash'
+  | 'approvedBy'
+  | 'approvedAt'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'currentStepIndex'
+  | 'activeTaskId'
+  | 'pauseReason'
+> & {
+  stepCount: number
+  steps: PlanRunStepSummary[]
+  latestEvent?: PlanRunEventSummary
+}
+
+export type AppendPlanRunEventInput = Omit<PlanRunEvent, 'id'>
+export type PlanRunStateUpdater = (team: TeamState) => void | TeamState
+
+export type PlanRunRepositoryPort = {
+  readPlanRunSummary(teamName: string, planRunId?: string): PlanRunSummary | null
+  listPlanRuns(teamName: string): PlanRunSummary[]
+}
+
+export type PlanRunMutationPort = {
+  writePlanRunMutation(teamName: string, updater: PlanRunStateUpdater): TeamState | null
+  appendPlanRunEvent(teamName: string, input: AppendPlanRunEventInput): PlanRunEvent | null
+}
 
 export type TaskHistoryQueryPort = {
   taskReportsForTask(team: TeamState, taskId: string): TaskReport[]
@@ -97,6 +161,9 @@ export type RepositoryLeaderCoordinationProjection = {
   waitingReportCount: number
   waitingReportTaskIds: string[]
   latestWaitingReportTaskId: string
+  planRunAttentionCount: number
+  planRunAttention: CompactPlanRunLeaderAttention[]
+  latestPlanRunAttentionId: string
 }
 
 export type RepositoryTeamPanelMember = Pick<TeamMember,
@@ -149,7 +216,7 @@ export type RepositoryTeamPanelModel = {
   memberTombstones?: Record<string, number>
 }
 
-export type StateRepositoryPort = {
+export type StateRepositoryPort = PlanRunRepositoryPort & PlanRunMutationPort & {
   readTeamPanelModel(teamName: string): RepositoryTeamPanelModel | null
   readLeaderMailboxProjection(teamName: string): RepositoryLeaderMailboxProjection
   readLeaderCoordinationProjection(teamName: string): RepositoryLeaderCoordinationProjection | null

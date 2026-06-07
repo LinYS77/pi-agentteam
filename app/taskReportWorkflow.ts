@@ -3,6 +3,7 @@ import { TEAM_LEAD } from '../internalTypes.js'
 import { defaultThreadIdForTask } from '../protocol.js'
 import { compactTaskHistorySummary } from '../state/taskHistoryReadModel.js'
 import { planTaskReportAttention } from './messageApplication.js'
+import { observeTaskReportForRuns, type ObservedTaskReportForRun } from './planRunReportObserver.js'
 import {
   appendTaskEventHistory,
   appendTaskReportHistory,
@@ -55,6 +56,7 @@ export function reportDoneTaskCommand(input: TaskCommandContext, taskId: string,
   }
   let leaderWake: TaskCommandResult['leaderWake']
   let leaderMailbox: TaskCommandResult['leaderMailbox']
+  let planRunObservation: ObservedTaskReportForRun | undefined
   const reportAttention = planTaskReportAttention('report_done')
   const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
@@ -95,6 +97,13 @@ export function reportDoneTaskCommand(input: TaskCommandContext, taskId: string,
       reportId: report.id,
       data: { source: 'agentteam_task_dual_write', reportType: 'report_done' },
     })
+    planRunObservation = observeTaskReportForRuns(latest, {
+      taskId: task.id,
+      reportId: report.id,
+      reportType: 'report_done',
+      actor: input.actor,
+      at: transitionAt,
+    })
     if (input.actor !== TEAM_LEAD) {
       leaderMailbox = {
         message: {
@@ -123,7 +132,7 @@ export function reportDoneTaskCommand(input: TaskCommandContext, taskId: string,
   return {
     task,
     text: input.actor === TEAM_LEAD ? `Recorded done report for ${task.id}` : `Reported done for ${task.id} to ${TEAM_LEAD}`,
-    details: { task, reportOnly: true, reporterIsOwner: true },
+    details: { task, reportOnly: true, reporterIsOwner: true, planRun: planRunObservation },
     leaderWake,
     wakeTeam: updated,
     leaderMailbox,
@@ -147,6 +156,7 @@ export function reportBlockedTaskCommand(input: TaskCommandContext, taskId: stri
   }
   let leaderWake: TaskCommandResult['leaderWake']
   let leaderMailbox: TaskCommandResult['leaderMailbox']
+  let planRunObservation: ObservedTaskReportForRun | undefined
   const reportAttention = planTaskReportAttention('report_blocked')
   const updated = requireUpdatedTeam(input.deps.teamState.updateTeam(input.teamName, latest => {
     const task = requireTask(latest, taskId)
@@ -188,6 +198,13 @@ export function reportBlockedTaskCommand(input: TaskCommandContext, taskId: stri
       reportId: report.id,
       data: { source: 'agentteam_task_dual_write', reportType: 'report_blocked', reportedBlockedBy: params.blockedBy ?? [] },
     })
+    planRunObservation = observeTaskReportForRuns(latest, {
+      taskId: task.id,
+      reportId: report.id,
+      reportType: 'report_blocked',
+      actor: input.actor,
+      at: transitionAt,
+    })
     if (input.actor !== TEAM_LEAD) {
       leaderMailbox = {
         message: {
@@ -222,7 +239,7 @@ export function reportBlockedTaskCommand(input: TaskCommandContext, taskId: stri
   return {
     task,
     text: input.actor === TEAM_LEAD ? `Recorded blocked report for ${task.id}` : `Reported blocked status for ${task.id} to ${TEAM_LEAD}`,
-    details: { task, reportOnly: true, reportedBlockedBy: params.blockedBy ?? [], reporterIsOwner: true },
+    details: { task, reportOnly: true, reportedBlockedBy: params.blockedBy ?? [], reporterIsOwner: true, planRun: planRunObservation },
     leaderWake,
     wakeTeam: updated,
     leaderMailbox,

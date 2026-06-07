@@ -1,13 +1,13 @@
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent'
 import type { DeliveryResult } from '../app/deliveryTypes.js'
-import type { MessageApplicationDeps, MessageReceiveApplicationDeps, TaskApplicationDeps } from '../app/types.js'
+import type { MessageApplicationDeps, MessageReceiveApplicationDeps, PlanRunApplicationDeps, TaskApplicationDeps } from '../app/types.js'
 import type { OutboxRunnerPort } from '../app/ports.js'
 import type {
   TeamMessageType,
   TeamState,
 } from '../internalTypes.js'
 
-export type ToolHandlerDeps = MessageApplicationDeps & MessageReceiveApplicationDeps & Pick<TaskApplicationDeps, 'teamState' | 'taskMutations' | 'taskHistory'> & {
+export type ToolHandlerDeps = MessageApplicationDeps & MessageReceiveApplicationDeps & Pick<TaskApplicationDeps, 'teamState' | 'taskMutations' | 'taskHistory'> & Pick<PlanRunApplicationDeps, 'planRuns'> & {
   outboxRunner: OutboxRunnerPort
   sanitizeTeamName: (name: string) => string
   sanitizeWorkerName: (name: string) => string

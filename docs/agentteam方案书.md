@@ -1,7 +1,7 @@
 # AgentTeam v0.5.0 核心重构方案书
 
-> 更新时间：2026-06-04  
-> 版本口径：本文按产品路线 `v0.4.0 → v0.5.0` 编写；仓库当前 `package.json` 版本可能高于该路线口径，本文关注下一次 v0.5 目标形态，而不是历史标签账本。  
+> 更新时间：2026-06-04
+> 版本口径：本文按产品路线 `v0.4.0 → v0.5.0` 编写；仓库当前 `package.json` 版本可能高于该路线口径，本文关注下一次 v0.5 目标形态，而不是历史标签账本。
 > 一句话目标：`v0.5.0 = core refactor + performance baseline + bug burn-down release`。
 
 ---
@@ -343,37 +343,42 @@ runtime/leaderAttention.ts
 
 #### v0.5.0 目标：Approved PlanRun
 
-引入显式 PlanRun 状态：
+v0.4.9 已完成 Approved PlanRun MVP 的基础链路，v0.5.0 在此基础上继续补齐更完整的 pause/resume/cancel 和多步验收能力。当前显式 PlanRun 状态保持 compact：
 
 ```ts
 type PlanRun = {
   id: string
-  sourcePlannerReportId: string
-  approvedByUserAt: number
-  status: 'active' | 'paused' | 'done' | 'blocked'
-  steps: Array<{
-    title: string
-    ownerRole: string
-    acceptance: string
-  }>
+  sourceReportId: string
+  status: 'approved' | 'active' | 'waiting_review' | 'paused' | 'cancelled' | 'done'
   currentStepIndex: number
-  limits: {
-    maxConsecutiveSteps: number
-    maxMinutes?: number
-  }
-  pauseReason?: string
+  activeTaskId?: string
+  pauseReason?: 'report_blocked' | 'question' | 'watchdog' | 'waiting_for_report' | 'leader_paused'
+  steps: Array<{
+    id: string
+    index: number
+    title: string
+    owner?: string
+    taskId?: string
+    status: 'pending' | 'assigned' | 'open' | 'waiting_review' | 'done' | 'blocked' | 'skipped'
+  }>
 }
 ```
 
-PlanRun 规则：
+v0.4.9 MVP 已落地规则：
 
-- 默认无 PlanRun；无用户批准时不自动创建下游任务。
-- 用户必须批准具体 planner report/plan。
-- 每次只推进一个 task。
-- 每步仍由 leader 创建/分配、review report、close/block。
-- report_blocked/question/test failure/no report 立即 pause。
+- `approve` 必须由 leader 明确指定 `sourceReportId` 且 `confirmApproved=true`；approve 只创建 compact PlanRun，不创建 task。
+- `advance(planRunId)` 必须显式调用；每次只创建一个当前 step task，并写 compact assigned TaskEvent。
+- 当前 step task 仍 `open`/`waiting_review`/`blocked` 时，重复 `advance` 被拒绝，不创建第二个 task。
+- owner `report_done` 后 task 仍保持 `open`；PlanRun/step 进入 `waiting_review`，等待 leader review/close 后再显式 advance。
+- owner `report_blocked` 后 task 仍保持 `open`；PlanRun 进入 `paused` 且 `pauseReason=report_blocked`，不自动 block task。
+- `agentteam_task show` 和 leader digest 只显示 compact PlanRun hint，不读取 `TaskReport.text` 或 `MailboxMessage.text`。
+- 不存在 hidden scheduler/autopilot/timer；不自动 advance/close/block/reassign/nudge。
+
+PlanRun 后续规则：
+
+- question/test failure/no report 仍需要继续补齐更细的 pause 检测和恢复交互。
 - 达到 step/time limit 立即 pause。
-- 所有动作写入 task/report/history。
+- 所有动作写入 compact PlanRunEvent/task/report/history。
 - 不允许 worker 创建任务或派发 worker。
 
 #### 主要涉及区域
@@ -397,9 +402,11 @@ teamPanel/layout.ts
 - assignment prompt 清楚要求 owner 最终调用 `report_done/report_blocked`。
 - worker 完成但不 report 的情形可见、可提醒、不会被 leader 伪造 report 掩盖。
 - 无 approved PlanRun 时，不自动创建下游任务。
-- 有 approved PlanRun 时，至少能连续完成两步 implementer task。
-- 每步都有 task/report/close 历史。
-- blocked/question/test failure/no report 立即 pause，并询问用户。
+- `approve` 不创建 task；`advance` 才创建一个 step task。
+- worker `report_done` 后 PlanRun compact `waiting_review` 可在 `agentteam_task show` 和 leader digest 中看到。
+- worker `report_blocked` 后 PlanRun compact `paused/report_blocked` 可在 `agentteam_task show` 和 leader digest 中看到。
+- 每步都有 task/report/PlanRunEvent 历史，且 compact surfaces 不泄漏 full body。
+- blocked/question/test failure/no report pause 继续作为 v0.5 完整链路验收项。
 
 ---
 
@@ -859,21 +866,39 @@ v0.5.0 不做：
 
 ### Slice 6 — Approved PlanRun MVP
 
-目标：用户批准计划后，leader 可受控连续推进。
+目标：用户批准计划后，leader 可受控推进，不引入默认自动执行。
 
-交付：
+v0.4.9 已完成切片：
 
-- PlanRun state。
-- approved-by-user gate。
-- one-step-at-a-time progression。
-- pause/stop conditions。
-- `/team` active/paused PlanRun visibility。
+- Slice A：RED characterization，覆盖 explicit approval、one-step-at-a-time、report-review、compact/full-text boundary、repository/app port seam。
+- Slice B：PlanRun storage/domain/repository/app port skeleton。
+- Slice C：`agentteam_planrun` tool skeleton，包含 `approve/show/list`，`advance/pause/resume/cancel` 先保持 denied stub。
+- Slice D：显式 `advance(planRunId)` 创建一个 step task 和 compact assigned TaskEvent，重复 advance 在 active step 未解决时被拒绝。
+- Slice E：owner `report_done` 让 PlanRun/step 进入 `waiting_review`；owner `report_blocked` 让 PlanRun `paused` 且 `pauseReason=report_blocked`。
+- Slice F：compact visibility 接入 `agentteam_task show` 与 leader digest，并补齐文档/checkpoint 说明。
+
+当前核心行为：
+
+- `approve` 只创建 compact PlanRun，不创建 task、不发送 assignment。
+- `advance` 必须显式 leader 调用，每次最多创建一个当前 step task。
+- `report_done` 不关闭 task，只把 active PlanRun step 标记为 `waiting_review`。
+- `report_blocked` 不 block task，只把 PlanRun compact pause 为 `report_blocked`。
+- `show/list/task show/digest` 不读取或返回 `TaskReport.text`/`MailboxMessage.text`。
+- 不实现 hidden scheduler/autopilot/timer，不自动 advance/close/block/reassign/nudge。
 
 验证：
 
-- without approval：no automation。
-- with approved planner report：step 1 -> report -> review/close -> step 2。
-- blocked/question/test failure/no report pause。
+- `npm test`
+- `npm run typecheck`
+- `npm run -s check:boundaries`
+- `git diff --check`
+- GitHub-only checkpoint：可 commit/tag/push，但不执行 `npm version`、不执行 `npm publish`，不修改 `package.json` version。
+
+后续验收项：
+
+- leader close 后显式 advance 到下一 step 的完整多步链路。
+- question/test failure/watchdog waiting-for-report 的 pause/resume/cancel 交互。
+- `/team` active/paused PlanRun visibility 如需更强 cockpit 集成，可在 compact read-model 中继续扩展。
 
 ### Slice 7 — Release hardening
 
@@ -903,9 +928,11 @@ v0.5.0 不做：
 ```bash
 npm test
 npm run typecheck
-git diff --check
 npm run -s check:boundaries
+git diff --check
 ```
+
+v0.4.x GitHub-only checkpoint 只允许 commit/tag/push；不得执行 `npm version`、不得执行 `npm publish`，也不得为了路线标签改动 `package.json` version。
 
 ### 7.2 v0.5.0 RC 必跑
 
@@ -948,7 +975,7 @@ worker no-report state appears as waiting-for-report attention
 | Tmux Adapter | snapshot/cache 生效；普通 refresh 不逐 member 调 tmux |
 | `/team` Panel | 无持续闪烁；in-place action；debounce/diff 生效 |
 | Task/Report | no-report 可见可提醒；不伪造 report；leader close 仍 required |
-| PlanRun | user-approved；one-step；pause conditions；全程可审计 |
+| PlanRun | user-approved；approve no task；explicit one-step advance；report_done waiting_review；report_blocked paused；compact visibility；全程可审计 |
 | Config | v1 schema；legacy compatibility；first-run bootstrap；effective model 可见 |
 | Performance | baseline + p95 + 相对改善数据齐全 |
 

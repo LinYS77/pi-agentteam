@@ -1,4 +1,5 @@
 import type { TeamState, TeamTask } from '../internalTypes.js'
+import { compactPlanRunTaskHint, formatCompactPlanRunTaskHint } from '../state/runVisibilityReadModel.js'
 import { buildReportWatchdogSummary, type ReportWatchdogTaskSummary } from '../state/taskReportWatchdogReadModel.js'
 import {
   compactTaskActivity,
@@ -145,6 +146,7 @@ export function showTaskCommand(input: TaskReadCommandContext, taskId: string): 
     ? (latestActivity.kind === 'event' ? latestActivity.displayType : latestActivity.type)
     : undefined
   const reportWatchdog = reportWatchdogForTask(input.team, task.id)
+  const planRun = compactPlanRunTaskHint(input.team, task.id)
   const lines = [
     `${task.id} [${task.status}] ${task.title}`,
     `Owner: ${task.owner ?? '-'}`,
@@ -154,6 +156,7 @@ export function showTaskCommand(input: TaskReadCommandContext, taskId: string): 
     `Latest report: ${latestReport ? `${latestReport.id} ${latestReport.type} by ${latestReport.author} — ${latestReport.summary}` : '-'}`,
     `Latest activity: ${latestActivity ? `${latestActivity.kind} ${latestActivity.id} ${latestActivityDisplayType} — ${latestActivity.summary ?? '-'}` : '-'}`,
     formatReportWatchdog(reportWatchdog, task.id),
+    formatCompactPlanRunTaskHint(planRun),
     `Hints: use action=history taskId=${task.id}; action=reports taskId=${task.id}; action=report reportId=<id>`,
   ]
   return {
@@ -165,6 +168,7 @@ export function showTaskCommand(input: TaskReadCommandContext, taskId: string): 
       latestReport,
       latestActivity,
       reportWatchdog,
+      planRun,
       hints: {
         history: { action: 'history', taskId: task.id },
         reports: { action: 'reports', taskId: task.id },

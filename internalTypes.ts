@@ -133,6 +133,86 @@ export type TaskMessageRef = {
   metadata?: Record<string, unknown>
 }
 
+export type PlanRunStatus =
+  | 'approved'
+  | 'active'
+  | 'waiting_review'
+  | 'paused'
+  | 'cancelled'
+  | 'done'
+
+export type PlanRunStepStatus =
+  | 'pending'
+  | 'assigned'
+  | 'open'
+  | 'waiting_review'
+  | 'done'
+  | 'blocked'
+  | 'skipped'
+
+export type PlanRunPauseReason =
+  | 'report_blocked'
+  | 'question'
+  | 'watchdog'
+  | 'waiting_for_report'
+  | 'leader_paused'
+
+export type PlanRunStep = {
+  id: string
+  index: number
+  title: string
+  description: string
+  owner?: string
+  taskId?: string
+  status: PlanRunStepStatus
+  createdAt: number
+  updatedAt: number
+  sourceSummary?: string
+  metadata?: Record<string, unknown>
+}
+
+export type PlanRun = {
+  id: string
+  status: PlanRunStatus
+  sourceTaskId?: string
+  sourceReportId: string
+  sourceReportSummary?: string
+  sourceReportHash?: string
+  approvedBy?: string
+  approvedAt?: number
+  createdAt: number
+  updatedAt: number
+  currentStepIndex: number
+  activeTaskId?: string
+  pauseReason?: PlanRunPauseReason
+  steps: PlanRunStep[]
+  metadata?: Record<string, unknown>
+}
+
+export type PlanRunEventType =
+  | 'approved'
+  | 'advanced'
+  | 'step_task_created'
+  | 'waiting_review'
+  | 'paused'
+  | 'resumed'
+  | 'cancelled'
+  | 'completed'
+
+export type PlanRunEvent = {
+  id: string
+  planRunId: string
+  type: PlanRunEventType
+  by: string
+  at: number
+  summary: string
+  stepIndex?: number
+  taskId?: string
+  reportId?: string
+  pauseReason?: PlanRunPauseReason
+  data?: Record<string, unknown>
+}
+
 export type TeamState = {
   version: 1
   name: string
@@ -147,10 +227,15 @@ export type TeamState = {
   taskReports: Record<string, TaskReport>
   taskEvents: Record<string, TaskEvent>
   taskMessageRefs: Record<string, TaskMessageRef>
+  planRuns?: Record<string, PlanRun>
+  planRunEvents?: Record<string, PlanRunEvent>
+  activePlanRunId?: string
   nextTaskSeq: number
   nextTaskReportSeq: number
   nextTaskEventSeq: number
   nextTaskMessageRefSeq: number
+  nextPlanRunSeq?: number
+  nextPlanRunEventSeq?: number
   revision?: number
   memberTombstones?: Record<string, number>
 }

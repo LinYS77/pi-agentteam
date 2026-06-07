@@ -24,6 +24,9 @@ function fallbackLeaderCoordinationSnapshot(team: TeamState): LeaderCoordination
     waitingReportCount: 0,
     waitingReportTaskIds: [],
     latestWaitingReportTaskId: '',
+    planRunAttentionCount: 0,
+    planRunAttention: [],
+    latestPlanRunAttentionId: '',
   }
 }
 
@@ -38,6 +41,12 @@ function compactTaskIdList(taskIds: string[], limit = 8): string {
   return hidden > 0 ? `${shown.join(',')} (+${hidden} more)` : shown.join(',')
 }
 
+function compactPlanRunDigestLine(item: LeaderCoordinationSnapshot['planRunAttention'][number]): string {
+  const pause = item.pauseReason ? ` pauseReason=${item.pauseReason}` : ''
+  const report = item.latestReportId ? ` report=${item.latestReportId}` : ''
+  return `${item.planRunId} step ${item.stepNumber} ${item.status}/${item.stepStatus} task=${item.taskId}${pause}${report}; next: ${item.nextAction}`
+}
+
 function buildLeaderDigest(team: TeamState, snapshot: LeaderCoordinationSnapshot): string {
   const latestLine = snapshot.latestUnreadMessageId
     ? `Latest unread message id: ${snapshot.latestUnreadMessageId}`
@@ -49,12 +58,19 @@ function buildLeaderDigest(team: TeamState, snapshot: LeaderCoordinationSnapshot
         `- suggested action: agentteam_task action=nudge_report taskId=${snapshot.latestWaitingReportTaskId}`,
       ]
     : ['- report watchdog waiting_for_report count: 0']
+  const planRunLines = snapshot.planRunAttentionCount > 0
+    ? [
+        `- PlanRun attention count: ${snapshot.planRunAttentionCount}`,
+        ...snapshot.planRunAttention.slice(0, 3).map(item => `- PlanRun attention: ${compactPlanRunDigestLine(item)}`),
+      ]
+    : ['- PlanRun attention count: 0']
   return [
     `Leader coordination digest for team ${team.name}:`,
     `- blocked task count: ${snapshot.blockedCount}`,
     `- unread leader mailbox count: ${snapshot.unreadCount}`,
     `- ${latestLine}`,
     ...waitingReportLines,
+    ...planRunLines,
   ].join('\n')
 }
 
@@ -67,7 +83,7 @@ function messageContainsMarker(message: ContextMessage, marker: string): boolean
   if (!Array.isArray(content)) return false
   for (const part of content) {
     if (typeof part !== 'object' || part === null) continue
-    const text = (part as { text?: unknown }).text
+    const text = (part as { text?: unknown })['text']
     if (typeof text === 'string' && text.includes(marker)) {
       return true
     }
@@ -80,7 +96,8 @@ export function computeLeaderDigestKey(
   coordination?: LeaderCoordinationSnapshot,
 ): string {
   const snapshot = coordination ?? buildLeaderCoordinationSnapshot(team)
-  return `${team.name}|blocked:${snapshot.blockedCount}|blockedIds:${snapshot.blockedTaskIds.join(',')}|unread:${snapshot.unreadCount}|latest:${snapshot.latestUnreadMessageId}|waitingReports:${snapshot.waitingReportCount}|waitingReportIds:${snapshot.waitingReportTaskIds.join(',')}`
+  const planRunKey = snapshot.planRunAttention.map(item => `${item.planRunId}:${item.status}:${item.stepIndex}:${item.taskId}:${item.pauseReason ?? ''}:${item.latestReportId ?? ''}`).join(',')
+  return `${team.name}|blocked:${snapshot.blockedCount}|blockedIds:${snapshot.blockedTaskIds.join(',')}|unread:${snapshot.unreadCount}|latest:${snapshot.latestUnreadMessageId}|waitingReports:${snapshot.waitingReportCount}|waitingReportIds:${snapshot.waitingReportTaskIds.join(',')}|planRuns:${snapshot.planRunAttentionCount}|planRunItems:${planRunKey}`
 }
 
 function computeBlockedDeltaSummary(team: TeamState): {
@@ -132,7 +149,7 @@ export function maybeInjectLeaderOrchestrationContext(
   const blocked = computeBlockedDeltaSummary(team)
   const now = Date.now()
 
-  const hasActionableWork = coordination.blockedCount > 0 || coordination.unreadCount > 0 || coordination.waitingReportCount > 0
+  const hasActionableWork = coordination.blockedCount > 0 || coordination.unreadCount > 0 || coordination.waitingReportCount > 0 || coordination.planRunAttentionCount > 0
   if (!hasActionableWork) {
     return {
       digestKey,

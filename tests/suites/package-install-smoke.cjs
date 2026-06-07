@@ -183,6 +183,7 @@ module.exports = {
       'tools/team.ts',
       'tools/message.ts',
       'tools/task.ts',
+      'tools/planRun.ts',
     ]
     for (const file of toolRegistrationFiles) {
       const text = fs.readFileSync(path.join(root, file), 'utf8')
@@ -471,6 +472,7 @@ module.exports = {
       'agentteam_send',
       'agentteam_receive',
       'agentteam_task',
+      'agentteam_planrun',
     ]
 
     for (const name of requiredTools) {
@@ -492,6 +494,13 @@ module.exports = {
     assert.equal(taskTool.parameters.o.limit.kind, 'optional')
     assert.equal(taskTool.parameters.o.all.kind, 'optional')
     assert.equal(taskTool.parameters.o.includeMessages.kind, 'optional')
+
+    const planRunTool = env.pi.__tools.get('agentteam_planrun')
+    assert.deepEqual(planRunTool.parameters.o.action.enum, ['approve', 'show', 'list', 'advance', 'pause', 'resume', 'cancel'])
+    assert.equal(planRunTool.parameters.o.sourceReportId.kind, 'optional')
+    assert.equal(planRunTool.parameters.o.planRunId.kind, 'optional')
+    assert.equal(planRunTool.parameters.o.confirmApproved.kind, 'optional')
+    assert.equal(planRunTool.parameters.o.steps.kind, 'optional')
 
     assert.deepEqual([...env.pi.__commands.keys()].filter(name => name.startsWith('team')), ['team'])
   },

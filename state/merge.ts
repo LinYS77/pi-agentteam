@@ -1,4 +1,6 @@
 import type {
+  PlanRun,
+  PlanRunEvent,
   TaskEvent,
   TaskMessageRef,
   TaskReport,
@@ -43,10 +45,15 @@ export function normalizeTeamState(state: TeamState): TeamState {
     taskReports: recordValue<TaskReport>(state.taskReports),
     taskEvents: recordValue<TaskEvent>(state.taskEvents),
     taskMessageRefs: recordValue<TaskMessageRef>(state.taskMessageRefs),
+    planRuns: recordValue<PlanRun>(state.planRuns),
+    planRunEvents: recordValue<PlanRunEvent>(state.planRunEvents),
+    activePlanRunId: typeof state.activePlanRunId === 'string' ? state.activePlanRunId : undefined,
     nextTaskSeq: nextSeq(state.nextTaskSeq),
     nextTaskReportSeq: nextSeq(state.nextTaskReportSeq),
     nextTaskEventSeq: nextSeq(state.nextTaskEventSeq),
     nextTaskMessageRefSeq: nextSeq(state.nextTaskMessageRefSeq),
+    nextPlanRunSeq: nextSeq(state.nextPlanRunSeq),
+    nextPlanRunEventSeq: nextSeq(state.nextPlanRunEventSeq),
   }
 }
 
@@ -82,11 +89,11 @@ export function mergeTeamEvents(currentEvents: TeamEvent[], incomingEvents: Team
   return [...byId.values()].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id))
 }
 
-function taskHistoryItemTime(item: { at?: number; createdAt?: number }): number {
-  return item.createdAt ?? item.at ?? 0
+function taskHistoryItemTime(item: { at?: number; createdAt?: number; updatedAt?: number }): number {
+  return item.updatedAt ?? item.createdAt ?? item.at ?? 0
 }
 
-function mergeTaskHistoryRecord<T extends { id: string; at?: number; createdAt?: number }>(
+function mergeTaskHistoryRecord<T extends { id: string; at?: number; createdAt?: number; updatedAt?: number }>(
   currentItems: Record<string, T>,
   incomingItems: Record<string, T>,
 ): Record<string, T> {
@@ -180,10 +187,15 @@ export function mergeTeamStates(current: TeamState, incoming: TeamState): TeamSt
     taskReports: mergeTaskHistoryRecord(currentState.taskReports, incomingState.taskReports),
     taskEvents: mergeTaskHistoryRecord(currentState.taskEvents, incomingState.taskEvents),
     taskMessageRefs: mergeTaskMessageRefs(currentState.taskMessageRefs, incomingState.taskMessageRefs),
+    planRuns: mergeTaskHistoryRecord(currentState.planRuns ?? {}, incomingState.planRuns ?? {}),
+    planRunEvents: mergeTaskHistoryRecord(currentState.planRunEvents ?? {}, incomingState.planRunEvents ?? {}),
+    activePlanRunId: incomingState.activePlanRunId ?? currentState.activePlanRunId,
     nextTaskSeq: Math.max(currentState.nextTaskSeq, incomingState.nextTaskSeq),
     nextTaskReportSeq: Math.max(currentState.nextTaskReportSeq, incomingState.nextTaskReportSeq),
     nextTaskEventSeq: Math.max(currentState.nextTaskEventSeq, incomingState.nextTaskEventSeq),
     nextTaskMessageRefSeq: Math.max(currentState.nextTaskMessageRefSeq, incomingState.nextTaskMessageRefSeq),
+    nextPlanRunSeq: Math.max(currentState.nextPlanRunSeq ?? 1, incomingState.nextPlanRunSeq ?? 1),
+    nextPlanRunEventSeq: Math.max(currentState.nextPlanRunEventSeq ?? 1, incomingState.nextPlanRunEventSeq ?? 1),
     revision: Math.max(currentState.revision ?? 0, incomingState.revision ?? 0) + 1,
     memberTombstones: tombstones,
   }

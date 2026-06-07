@@ -1,5 +1,8 @@
 import type {
   MailboxMessage,
+  PlanRun,
+  PlanRunEvent,
+  PlanRunStep,
   SessionTeamContext,
   TaskEvent,
   TaskMessageRef,
@@ -12,6 +15,7 @@ import { TEAM_LEAD } from '../internalTypes.js'
 import { isMailboxMessageUnread } from '../messageLifecycle.js'
 import { summarizeOutboxEffects, type OutboxDiagnosticsSummary } from '../app/outboxDiagnostics.js'
 import { markMailboxMessagesDelivered, markMailboxMessagesRead, readMailbox } from './mailboxStore.js'
+import { compactPlanRunLeaderAttention, type CompactPlanRunLeaderAttention } from './runVisibilityReadModel.js'
 import {
   appendTaskEvent,
   appendTaskReport,
@@ -76,6 +80,9 @@ export type RepositoryLeaderCoordinationProjection = {
   waitingReportCount: number
   waitingReportTaskIds: string[]
   latestWaitingReportTaskId: string
+  planRunAttentionCount: number
+  planRunAttention: CompactPlanRunLeaderAttention[]
+  latestPlanRunAttentionId: string
 }
 
 export type RepositoryTeamPanelMember = Pick<TeamMember,
@@ -128,12 +135,60 @@ export type RepositoryTeamPanelModel = {
   memberTombstones?: Record<string, number>
 }
 
+export type RepositoryPlanRunStepSummary = Pick<PlanRunStep,
+  | 'id'
+  | 'index'
+  | 'title'
+  | 'description'
+  | 'owner'
+  | 'taskId'
+  | 'status'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'sourceSummary'
+>
+
+export type RepositoryPlanRunEventSummary = Pick<PlanRunEvent,
+  | 'id'
+  | 'planRunId'
+  | 'type'
+  | 'by'
+  | 'at'
+  | 'summary'
+  | 'stepIndex'
+  | 'taskId'
+  | 'reportId'
+  | 'pauseReason'
+>
+
+export type RepositoryPlanRunSummary = Pick<PlanRun,
+  | 'id'
+  | 'status'
+  | 'sourceTaskId'
+  | 'sourceReportId'
+  | 'sourceReportSummary'
+  | 'sourceReportHash'
+  | 'approvedBy'
+  | 'approvedAt'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'currentStepIndex'
+  | 'activeTaskId'
+  | 'pauseReason'
+> & {
+  stepCount: number
+  steps: RepositoryPlanRunStepSummary[]
+  latestEvent?: RepositoryPlanRunEventSummary
+}
+
 export type TeamMutationWriter = (team: TeamState) => void | TeamState
+export type PlanRunMutationWriter = (team: TeamState) => void | TeamState
 export type CreateInitialTeamStateInput = Parameters<typeof createInitialTeamState>[0]
 export type CreateRepositoryTaskInput = Parameters<typeof createTask>[1]
 export type AppendRepositoryTaskEventInput = Parameters<typeof appendTaskEvent>[1]
 export type AppendRepositoryTaskReportInput = Parameters<typeof appendTaskReport>[1]
 export type UpdateRepositoryTaskReportInput = Parameters<typeof updateTaskReport>[2]
+export type AppendRepositoryPlanRunEventInput = Omit<PlanRunEvent, 'id'>
 
 export type StateRepository = {
   createInitialTeamState(input: CreateInitialTeamStateInput): TeamState
@@ -167,6 +222,10 @@ export type StateRepository = {
   readLeaderCoordinationProjection(teamName: string): RepositoryLeaderCoordinationProjection | null
   readTaskReportSummary(teamName: string, reportId: string): TaskHistoryReportDisplay | undefined
   readReportWatchdogSummary(teamName: string): ReportWatchdogSummary | null
+  readPlanRunSummary(teamName: string, planRunId?: string): RepositoryPlanRunSummary | null
+  listPlanRuns(teamName: string): RepositoryPlanRunSummary[]
+  writePlanRunMutation(teamName: string, updater: PlanRunMutationWriter): TeamState | null
+  appendPlanRunEvent(teamName: string, input: AppendRepositoryPlanRunEventInput): PlanRunEvent | null
   readOutboxDiagnosticsSummary(teamName: string): OutboxDiagnosticsSummary
   listQuarantinedTeams(): QuarantinedTeamSummary[]
   writeTeamMutation(teamName: string, updater: TeamMutationWriter): TeamState | null
@@ -334,6 +393,7 @@ export function readLeaderCoordinationProjection(teamName: string): RepositoryLe
   const waitingReportTaskIds = buildReportWatchdogSummary(team).tasks
     .filter(task => task.state === 'waiting_for_report' && task.needsNudge)
     .map(task => task.taskId)
+  const planRunAttention = compactPlanRunLeaderAttention(team)
   return {
     teamName,
     blockedCount: blockedTaskIds.length,
@@ -343,6 +403,9 @@ export function readLeaderCoordinationProjection(teamName: string): RepositoryLe
     waitingReportCount: waitingReportTaskIds.length,
     waitingReportTaskIds,
     latestWaitingReportTaskId: waitingReportTaskIds[0] ?? '',
+    planRunAttentionCount: planRunAttention.length,
+    planRunAttention,
+    latestPlanRunAttentionId: planRunAttention[0]?.planRunId ?? '',
   }
 }
 
@@ -355,6 +418,115 @@ export function readTaskReportSummary(teamName: string, reportId: string): TaskH
 export function readReportWatchdogSummary(teamName: string): ReportWatchdogSummary | null {
   const team = readTeamState(teamName)
   return team ? buildReportWatchdogSummary(team) : null
+}
+
+function planRunEventTime(event: PlanRunEvent): number {
+  return event.at
+}
+
+function toRepositoryPlanRunStepSummary(step: PlanRunStep): RepositoryPlanRunStepSummary {
+  return {
+    id: step.id,
+    index: step.index,
+    title: step.title,
+    description: step.description,
+    owner: step.owner,
+    taskId: step.taskId,
+    status: step.status,
+    createdAt: step.createdAt,
+    updatedAt: step.updatedAt,
+    sourceSummary: step.sourceSummary,
+  }
+}
+
+function toRepositoryPlanRunEventSummary(event: PlanRunEvent): RepositoryPlanRunEventSummary {
+  return {
+    id: event.id,
+    planRunId: event.planRunId,
+    type: event.type,
+    by: event.by,
+    at: event.at,
+    summary: event.summary,
+    stepIndex: event.stepIndex,
+    taskId: event.taskId,
+    reportId: event.reportId,
+    pauseReason: event.pauseReason,
+  }
+}
+
+function latestPlanRunEvent(team: TeamState, planRunId: string): PlanRunEvent | undefined {
+  return Object.values(team.planRunEvents ?? {})
+    .filter(event => event.planRunId === planRunId)
+    .sort((a, b) => planRunEventTime(b) - planRunEventTime(a) || b.id.localeCompare(a.id))[0]
+}
+
+function toRepositoryPlanRunSummary(team: TeamState, run: PlanRun): RepositoryPlanRunSummary {
+  const latestEvent = latestPlanRunEvent(team, run.id)
+  return {
+    id: run.id,
+    status: run.status,
+    sourceTaskId: run.sourceTaskId,
+    sourceReportId: run.sourceReportId,
+    sourceReportSummary: run.sourceReportSummary,
+    sourceReportHash: run.sourceReportHash,
+    approvedBy: run.approvedBy,
+    approvedAt: run.approvedAt,
+    createdAt: run.createdAt,
+    updatedAt: run.updatedAt,
+    currentStepIndex: run.currentStepIndex,
+    activeTaskId: run.activeTaskId,
+    pauseReason: run.pauseReason,
+    stepCount: run.steps.length,
+    steps: run.steps.map(toRepositoryPlanRunStepSummary),
+    latestEvent: latestEvent ? toRepositoryPlanRunEventSummary(latestEvent) : undefined,
+  }
+}
+
+export function readPlanRunSummary(teamName: string, planRunId?: string): RepositoryPlanRunSummary | null {
+  const team = readTeamState(teamName)
+  if (!team) return null
+  const run = planRunId
+    ? team.planRuns?.[planRunId]
+    : (team.activePlanRunId ? team.planRuns?.[team.activePlanRunId] : Object.values(team.planRuns ?? {})[0])
+  return run ? toRepositoryPlanRunSummary(team, run) : null
+}
+
+export function listPlanRuns(teamName: string): RepositoryPlanRunSummary[] {
+  const team = readTeamState(teamName)
+  if (!team) return []
+  return Object.values(team.planRuns ?? {})
+    .sort((a, b) => b.updatedAt - a.updatedAt || b.id.localeCompare(a.id))
+    .map(run => toRepositoryPlanRunSummary(team, run))
+}
+
+export function writePlanRunMutation(teamName: string, updater: PlanRunMutationWriter): TeamState | null {
+  return updateTeamStateForRepository(teamName, updater)
+}
+
+function formatPlanRunEventId(seqValue: number): string {
+  return `PRE${String(seqValue).padStart(4, '0')}`
+}
+
+function allocatePlanRunEventId(team: TeamState): string {
+  const next = Math.max(1, Math.floor(team.nextPlanRunEventSeq ?? 1))
+  team.nextPlanRunEventSeq = next + 1
+  return formatPlanRunEventId(next)
+}
+
+export function appendPlanRunEvent(teamName: string, input: AppendRepositoryPlanRunEventInput): PlanRunEvent | null {
+  let appended: PlanRunEvent | null = null
+  updateTeamStateForRepository(teamName, team => {
+    const event: PlanRunEvent = {
+      id: allocatePlanRunEventId(team),
+      ...input,
+    }
+    team.planRunEvents = {
+      ...(team.planRunEvents ?? {}),
+      [event.id]: event,
+    }
+    appended = event
+  })
+  return appended
 }
 
 export function readOutboxDiagnosticsSummary(teamName: string): OutboxDiagnosticsSummary {
@@ -400,6 +572,10 @@ export function createStateRepository(): StateRepository {
     readLeaderCoordinationProjection,
     readTaskReportSummary,
     readReportWatchdogSummary,
+    readPlanRunSummary,
+    listPlanRuns,
+    writePlanRunMutation,
+    appendPlanRunEvent,
     readOutboxDiagnosticsSummary,
     listQuarantinedTeams,
     writeTeamMutation,

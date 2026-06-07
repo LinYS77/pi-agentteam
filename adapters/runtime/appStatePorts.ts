@@ -1,4 +1,4 @@
-import type { AppendTaskEventInput, AppendTaskReportInput, TaskHistoryQueryPort, TaskMutationPort, TeamStatePort, UpdateTaskReportInput } from '../../app/ports.js'
+import type { AppendPlanRunEventInput, AppendTaskEventInput, AppendTaskReportInput, PlanRunMutationPort, PlanRunRepositoryPort, TaskHistoryQueryPort, TaskMutationPort, TeamStatePort, UpdateTaskReportInput } from '../../app/ports.js'
 import type { TeamState } from '../../internalTypes.js'
 import { fileBackedStateRepository, type StateRepository } from '../../state/repository.js'
 
@@ -37,4 +37,15 @@ export const fileBackedTaskHistoryQueryPort: TaskHistoryQueryPort = {
   taskHistoryCounts: stateRepository.taskHistoryCounts,
   taskHistorySummary: stateRepository.taskHistorySummary,
   findTaskReport: stateRepository.findTaskReport,
+}
+
+function appendPlanRunEventPort(teamName: string, input: AppendPlanRunEventInput) {
+  return stateRepository.appendPlanRunEvent(teamName, input)
+}
+
+export const fileBackedPlanRunPort: PlanRunRepositoryPort & PlanRunMutationPort = {
+  readPlanRunSummary: stateRepository.readPlanRunSummary,
+  listPlanRuns: stateRepository.listPlanRuns,
+  writePlanRunMutation: stateRepository.writePlanRunMutation,
+  appendPlanRunEvent: appendPlanRunEventPort,
 }

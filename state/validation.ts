@@ -29,6 +29,36 @@ const TASK_EVENT_TYPES = Object.freeze([
   'migrated',
 ] as const satisfies readonly TaskEventType[])
 
+const PLAN_RUN_STATUSES = Object.freeze([
+  'approved',
+  'active',
+  'waiting_review',
+  'paused',
+  'cancelled',
+  'done',
+] as const)
+
+const PLAN_RUN_STEP_STATUSES = Object.freeze([
+  'pending',
+  'assigned',
+  'open',
+  'waiting_review',
+  'done',
+  'blocked',
+  'skipped',
+] as const)
+
+const PLAN_RUN_EVENT_TYPES = Object.freeze([
+  'approved',
+  'advanced',
+  'step_task_created',
+  'waiting_review',
+  'paused',
+  'resumed',
+  'cancelled',
+  'completed',
+] as const)
+
 const OLD_LAYOUT_MARKER_KEYS = Object.freeze([
   'layout',
   'layoutState',
@@ -185,6 +215,54 @@ function pushInvalidTaskEventType(
   }))
 }
 
+function pushInvalidPlanRunStatus(
+  reasons: StateValidationReason[],
+  input: { file: string; path: string; field: string; value: unknown },
+): void {
+  if (input.value === undefined) return
+  if (typeof input.value === 'string' && (PLAN_RUN_STATUSES as readonly string[]).includes(input.value)) return
+  reasons.push(reason({
+    code: 'unsupported_plan_run_status',
+    file: input.file,
+    path: input.path,
+    field: input.field,
+    value: input.value,
+    message: `Unsupported PlanRun status ${valueString(input.value)} in persisted state`,
+  }))
+}
+
+function pushInvalidPlanRunStepStatus(
+  reasons: StateValidationReason[],
+  input: { file: string; path: string; field: string; value: unknown },
+): void {
+  if (input.value === undefined) return
+  if (typeof input.value === 'string' && (PLAN_RUN_STEP_STATUSES as readonly string[]).includes(input.value)) return
+  reasons.push(reason({
+    code: 'unsupported_plan_run_step_status',
+    file: input.file,
+    path: input.path,
+    field: input.field,
+    value: input.value,
+    message: `Unsupported PlanRun step status ${valueString(input.value)} in persisted state`,
+  }))
+}
+
+function pushInvalidPlanRunEventType(
+  reasons: StateValidationReason[],
+  input: { file: string; path: string; field: string; value: unknown },
+): void {
+  if (input.value === undefined) return
+  if (typeof input.value === 'string' && (PLAN_RUN_EVENT_TYPES as readonly string[]).includes(input.value)) return
+  reasons.push(reason({
+    code: 'unsupported_plan_run_event_type',
+    file: input.file,
+    path: input.path,
+    field: input.field,
+    value: input.value,
+    message: `Unsupported PlanRun event type ${valueString(input.value)} in persisted state`,
+  }))
+}
+
 function inspectOldLayoutMarkers(
   reasons: StateValidationReason[],
   value: Record<string, unknown>,
@@ -297,6 +375,48 @@ export function validatePersistedTeamState(raw: unknown, file = 'team.json'): St
         continue
       }
       pushInvalidMessageType(reasons, { file, path: `${refPath}.type`, field: 'type', value: ref.type })
+    }
+  }
+
+  const planRuns = raw.planRuns
+  if (planRuns !== undefined && !isObjectRecord(planRuns)) {
+    reasons.push(reason({ code: 'invalid_plan_runs_shape', file, path: '$.planRuns', field: 'planRuns', value: planRuns, message: 'Team state planRuns must be an object when present' }))
+  } else if (isObjectRecord(planRuns)) {
+    for (const [planRunId, planRun] of Object.entries(planRuns)) {
+      const planRunPath = `$.planRuns.${planRunId}`
+      if (!isObjectRecord(planRun)) {
+        reasons.push(reason({ code: 'invalid_plan_run_shape', file, path: planRunPath, field: planRunId, value: planRun, message: `PlanRun ${planRunId} must be an object` }))
+        continue
+      }
+      inspectOldLayoutMarkers(reasons, planRun, { file, path: planRunPath })
+      pushInvalidPlanRunStatus(reasons, { file, path: `${planRunPath}.status`, field: 'status', value: planRun.status })
+      if (planRun.steps !== undefined && !Array.isArray(planRun.steps)) {
+        reasons.push(reason({ code: 'invalid_plan_run_steps_shape', file, path: `${planRunPath}.steps`, field: 'steps', value: planRun.steps, message: `PlanRun ${planRunId} steps must be an array when present` }))
+      } else if (Array.isArray(planRun.steps)) {
+        planRun.steps.forEach((step, index) => {
+          if (!isObjectRecord(step)) {
+            reasons.push(reason({ code: 'invalid_plan_run_step_shape', file, path: `${planRunPath}.steps[${index}]`, field: String(index), value: step, message: `PlanRun ${planRunId} step ${index} must be an object` }))
+            return
+          }
+          inspectOldLayoutMarkers(reasons, step, { file, path: `${planRunPath}.steps[${index}]` })
+          pushInvalidPlanRunStepStatus(reasons, { file, path: `${planRunPath}.steps[${index}].status`, field: 'status', value: step.status })
+        })
+      }
+    }
+  }
+
+  const planRunEvents = raw.planRunEvents
+  if (planRunEvents !== undefined && !isObjectRecord(planRunEvents)) {
+    reasons.push(reason({ code: 'invalid_plan_run_events_shape', file, path: '$.planRunEvents', field: 'planRunEvents', value: planRunEvents, message: 'Team state planRunEvents must be an object when present' }))
+  } else if (isObjectRecord(planRunEvents)) {
+    for (const [eventId, event] of Object.entries(planRunEvents)) {
+      const eventPath = `$.planRunEvents.${eventId}`
+      if (!isObjectRecord(event)) {
+        reasons.push(reason({ code: 'invalid_plan_run_event_shape', file, path: eventPath, field: eventId, value: event, message: `PlanRun event ${eventId} must be an object` }))
+        continue
+      }
+      inspectOldLayoutMarkers(reasons, event, { file, path: eventPath })
+      pushInvalidPlanRunEventType(reasons, { file, path: `${eventPath}.type`, field: 'type', value: event.type })
     }
   }
 

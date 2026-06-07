@@ -31,7 +31,7 @@ import {
 import { createOutboxRunner } from './app/effectRunner.js'
 import { createFileBackedOutboxEffectHandlers } from './adapters/runtime/outboxEffectHandlers.js'
 import { fileBackedOutboxStorePort } from './adapters/runtime/outboxStorePort.js'
-import { fileBackedTaskHistoryQueryPort, fileBackedTaskMutationPort, fileBackedTeamStatePort } from './adapters/runtime/appStatePorts.js'
+import { fileBackedPlanRunPort, fileBackedTaskHistoryQueryPort, fileBackedTaskMutationPort, fileBackedTeamStatePort } from './adapters/runtime/appStatePorts.js'
 import { fileBackedMailboxRepositoryPort } from './adapters/runtime/mailboxPorts.js'
 import { registerBeforeAgentStartPolicy } from './policy.js'
 import { registerAgentTeamRenderers } from './renderers.js'
@@ -109,6 +109,7 @@ export default function agentTeamExtension(pi: ExtensionAPI): void {
     teamState: fileBackedTeamStatePort,
     taskMutations: fileBackedTaskMutationPort,
     taskHistory: fileBackedTaskHistoryQueryPort,
+    planRuns: fileBackedPlanRunPort,
     mailboxRepository: fileBackedMailboxRepositoryPort,
     requestWorkerDelivery,
     requestLeaderAttentionIfNeeded,

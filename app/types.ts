@@ -1,6 +1,6 @@
 import type { TeamState, TeamMessageType } from '../internalTypes.js'
 import type { DeliveryResult } from './deliveryTypes.js'
-import type { MailboxRepositoryPort, OutboxEffectHandlers, OutboxRunnerPort, OutboxStorePort, TaskHistoryQueryPort, TaskMutationPort, TeamStatePort } from './ports.js'
+import type { MailboxRepositoryPort, OutboxEffectHandlers, OutboxRunnerPort, OutboxStorePort, PlanRunMutationPort, PlanRunRepositoryPort, TaskHistoryQueryPort, TaskMutationPort, TeamStatePort } from './ports.js'
 
 export type DeliveryRequestDeps = {
   requestWorkerDelivery: (
@@ -51,4 +51,11 @@ export type TaskApplicationDeps = {
   taskHistory: TaskHistoryQueryPort
   normalizeOwnerName: (name: string) => string
   assertValidOwner: (team: TeamState, owner: string) => void
+}
+
+export type PlanRunApplicationDeps = {
+  planRuns: PlanRunRepositoryPort & PlanRunMutationPort
+  taskMutations: Pick<TaskMutationPort, 'createTask' | 'appendTaskEvent'>
+  taskHistory: Pick<TaskHistoryQueryPort, 'findTaskReport'>
+  now?: () => number
 }
