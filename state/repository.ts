@@ -17,6 +17,7 @@ import {
   appendTaskReport,
   updateTaskReport,
 } from './taskHistory.js'
+import { buildReportWatchdogSummary, type ReportWatchdogSummary, type ReportWatchdogTaskSummary } from './taskReportWatchdogReadModel.js'
 import {
   displayTaskReport,
   findTaskReport,
@@ -66,6 +67,17 @@ export type RepositoryLeaderMailboxProjection = {
   latestAttention?: RepositoryMailboxProjectionItem
 }
 
+export type RepositoryLeaderCoordinationProjection = {
+  teamName: string
+  blockedCount: number
+  blockedTaskIds: string[]
+  unreadCount: number
+  latestUnreadMessageId: string
+  waitingReportCount: number
+  waitingReportTaskIds: string[]
+  latestWaitingReportTaskId: string
+}
+
 export type RepositoryTeamPanelMember = Pick<TeamMember,
   | 'name'
   | 'role'
@@ -98,6 +110,7 @@ export type RepositoryTeamPanelTask = Pick<TeamTask,
   | 'updatedAt'
 > & {
   history: TaskHistoryDisplaySummary
+  watchdog?: ReportWatchdogTaskSummary
 }
 
 export type RepositoryTeamPanelModel = {
@@ -151,7 +164,9 @@ export type StateRepository = {
   readTeamPanelModel(teamName: string): RepositoryTeamPanelModel | null
   listTeamPanelNames(): string[]
   readLeaderMailboxProjection(teamName: string): RepositoryLeaderMailboxProjection
+  readLeaderCoordinationProjection(teamName: string): RepositoryLeaderCoordinationProjection | null
   readTaskReportSummary(teamName: string, reportId: string): TaskHistoryReportDisplay | undefined
+  readReportWatchdogSummary(teamName: string): ReportWatchdogSummary | null
   readOutboxDiagnosticsSummary(teamName: string): OutboxDiagnosticsSummary
   listQuarantinedTeams(): QuarantinedTeamSummary[]
   writeTeamMutation(teamName: string, updater: TeamMutationWriter): TeamState | null
@@ -200,7 +215,11 @@ function toRepositoryTeamPanelMember(member: TeamMember): RepositoryTeamPanelMem
   }
 }
 
-function toRepositoryTeamPanelTask(team: TeamState, task: TeamTask): RepositoryTeamPanelTask {
+function toRepositoryTeamPanelTask(
+  team: TeamState,
+  task: TeamTask,
+  watchdogByTaskId: Map<string, ReportWatchdogTaskSummary>,
+): RepositoryTeamPanelTask {
   return {
     id: task.id,
     title: task.title,
@@ -211,6 +230,7 @@ function toRepositoryTeamPanelTask(team: TeamState, task: TeamTask): RepositoryT
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     history: taskHistoryDisplaySummary(team, task.id),
+    watchdog: watchdogByTaskId.get(task.id),
   }
 }
 
@@ -256,6 +276,7 @@ export function readTeamForPanel(teamName: string): TeamState | null {
 }
 
 function toRepositoryTeamPanelModel(team: TeamState): RepositoryTeamPanelModel {
+  const watchdogByTaskId = new Map(buildReportWatchdogSummary(team).tasks.map(watchdog => [watchdog.taskId, watchdog]))
   return {
     version: team.version,
     name: team.name,
@@ -268,7 +289,7 @@ function toRepositoryTeamPanelModel(team: TeamState): RepositoryTeamPanelModel {
       Object.entries(team.members).map(([name, member]) => [name, toRepositoryTeamPanelMember(member)]),
     ),
     tasks: Object.fromEntries(
-      Object.entries(team.tasks).map(([taskId, task]) => [taskId, toRepositoryTeamPanelTask(team, task)]),
+      Object.entries(team.tasks).map(([taskId, task]) => [taskId, toRepositoryTeamPanelTask(team, task, watchdogByTaskId)]),
     ),
     nextTaskSeq: team.nextTaskSeq,
     revision: team.revision,
@@ -285,6 +306,13 @@ export function listTeamPanelNames(): string[] {
   return listTeams().map(team => team.name)
 }
 
+function blockedTaskIdsForLeaderCoordination(team: TeamState): string[] {
+  return Object.values(team.tasks)
+    .filter(task => task.status === 'blocked')
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map(task => task.id)
+}
+
 export function readLeaderMailboxProjection(teamName: string): RepositoryLeaderMailboxProjection {
   const items = readMailbox(teamName, TEAM_LEAD)
     .map(toRepositoryMailboxProjectionItem)
@@ -298,10 +326,35 @@ export function readLeaderMailboxProjection(teamName: string): RepositoryLeaderM
   }
 }
 
+export function readLeaderCoordinationProjection(teamName: string): RepositoryLeaderCoordinationProjection | null {
+  const team = readTeamState(teamName)
+  if (!team) return null
+  const blockedTaskIds = blockedTaskIdsForLeaderCoordination(team)
+  const mailbox = readLeaderMailboxProjection(teamName)
+  const waitingReportTaskIds = buildReportWatchdogSummary(team).tasks
+    .filter(task => task.state === 'waiting_for_report' && task.needsNudge)
+    .map(task => task.taskId)
+  return {
+    teamName,
+    blockedCount: blockedTaskIds.length,
+    blockedTaskIds,
+    unreadCount: mailbox.unread,
+    latestUnreadMessageId: mailbox.latestAttention?.id ?? '',
+    waitingReportCount: waitingReportTaskIds.length,
+    waitingReportTaskIds,
+    latestWaitingReportTaskId: waitingReportTaskIds[0] ?? '',
+  }
+}
+
 export function readTaskReportSummary(teamName: string, reportId: string): TaskHistoryReportDisplay | undefined {
   const team = readTeamState(teamName)
   const report = team?.taskReports[reportId]
   return report ? displayTaskReport(report) : undefined
+}
+
+export function readReportWatchdogSummary(teamName: string): ReportWatchdogSummary | null {
+  const team = readTeamState(teamName)
+  return team ? buildReportWatchdogSummary(team) : null
 }
 
 export function readOutboxDiagnosticsSummary(teamName: string): OutboxDiagnosticsSummary {
@@ -344,7 +397,9 @@ export function createStateRepository(): StateRepository {
     readTeamPanelModel,
     listTeamPanelNames,
     readLeaderMailboxProjection,
+    readLeaderCoordinationProjection,
     readTaskReportSummary,
+    readReportWatchdogSummary,
     readOutboxDiagnosticsSummary,
     listQuarantinedTeams,
     writeTeamMutation,

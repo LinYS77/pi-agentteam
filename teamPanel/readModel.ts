@@ -12,6 +12,7 @@ import type { QuarantinedTeamSummary } from '../state/validation.js'
 import {
   defaultPanelReadModelServices,
   type PanelReadModelServices,
+  type ReportWatchdogTaskSummary,
   type TaskHistoryDisplaySummary,
 } from './readModelServices.js'
 
@@ -65,6 +66,7 @@ export type PanelTaskModel = Pick<TeamTask,
   | 'updatedAt'
 > & {
   history: TaskHistoryDisplaySummary
+  watchdog?: ReportWatchdogTaskSummary
 }
 
 export type PanelTeamModel = {
@@ -188,6 +190,7 @@ export function toPanelTaskModel(
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     history: services.taskHistorySummary(team, task.id),
+    watchdog: services.taskWatchdogSummary(team, task.id),
   }
 }
 

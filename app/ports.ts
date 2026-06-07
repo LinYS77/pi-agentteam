@@ -8,7 +8,9 @@ import type {
   TeamTask,
 } from '../internalTypes.js'
 import type { TaskHistoryCounts, TaskHistoryDisplaySummary, TaskHistoryReportDisplay, TaskHistorySummary } from '../state/taskHistoryReadModel.js'
+import type { ReportWatchdogSummary, ReportWatchdogTaskSummary } from '../state/taskReportWatchdogReadModel.js'
 export type { TaskHistoryCounts, TaskHistorySummary } from '../state/taskHistoryReadModel.js'
+export type { ReportWatchdogState, ReportWatchdogSummary, ReportWatchdogTaskSummary } from '../state/taskReportWatchdogReadModel.js'
 import type {
   OutboxClaimInput,
   OutboxCompleteInput,
@@ -86,6 +88,17 @@ export type RepositoryLeaderMailboxProjection = {
   latestAttention?: RepositoryMailboxProjectionItem
 }
 
+export type RepositoryLeaderCoordinationProjection = {
+  teamName: string
+  blockedCount: number
+  blockedTaskIds: string[]
+  unreadCount: number
+  latestUnreadMessageId: string
+  waitingReportCount: number
+  waitingReportTaskIds: string[]
+  latestWaitingReportTaskId: string
+}
+
 export type RepositoryTeamPanelMember = Pick<TeamMember,
   | 'name'
   | 'role'
@@ -118,6 +131,7 @@ export type RepositoryTeamPanelTask = Pick<TeamTask,
   | 'updatedAt'
 > & {
   history: TaskHistoryDisplaySummary
+  watchdog?: ReportWatchdogTaskSummary
 }
 
 export type RepositoryTeamPanelModel = {
@@ -138,7 +152,9 @@ export type RepositoryTeamPanelModel = {
 export type StateRepositoryPort = {
   readTeamPanelModel(teamName: string): RepositoryTeamPanelModel | null
   readLeaderMailboxProjection(teamName: string): RepositoryLeaderMailboxProjection
+  readLeaderCoordinationProjection(teamName: string): RepositoryLeaderCoordinationProjection | null
   readTaskReportSummary(teamName: string, reportId: string): TaskHistoryReportDisplay | undefined
+  readReportWatchdogSummary(teamName: string): ReportWatchdogSummary | null
   writeTeamMutation(teamName: string, updater: TeamStateUpdater): TeamState | null
 }
 

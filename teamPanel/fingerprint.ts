@@ -117,6 +117,13 @@ export function panelDataFingerprint(data: PanelData): string {
       updatedAt: task.updatedAt,
       blockedBy: task.blockedBy,
       history: taskHistoryCounts(data.team, task.id),
+      watchdog: task.watchdog ? {
+        state: task.watchdog.state,
+        needsNudge: task.watchdog.needsNudge,
+        latestAssignmentAt: task.watchdog.latestAssignmentAt,
+        latestOwnerReportAt: task.watchdog.latestOwnerReportAt,
+        workerStatus: task.watchdog.workerStatus,
+      } : undefined,
     })),
     mailbox: data.mailbox.map(item => ({
       id: item.id,

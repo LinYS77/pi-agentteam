@@ -1,4 +1,5 @@
 import type { TeamState, TeamTask } from '../internalTypes.js'
+import { buildReportWatchdogSummary, type ReportWatchdogTaskSummary } from '../state/taskReportWatchdogReadModel.js'
 import {
   compactTaskActivity,
   compactTaskReport,
@@ -121,6 +122,20 @@ function formatMaybeList(values: string[]): string {
   return values.length ? values.join(', ') : '-'
 }
 
+function formatMaybeNumber(value: number | undefined): string {
+  return value === undefined ? '-' : String(value)
+}
+
+function reportWatchdogForTask(team: TeamState, taskId: string): ReportWatchdogTaskSummary | undefined {
+  return buildReportWatchdogSummary(team).tasks.find(task => task.taskId === taskId)
+}
+
+function formatReportWatchdog(watchdog: ReportWatchdogTaskSummary | undefined, taskId: string): string {
+  if (!watchdog) return 'Report watchdog: -'
+  const nudgeHint = watchdog.needsNudge ? `; hint agentteam_task action=nudge_report taskId=${taskId}` : ''
+  return `Report watchdog: state=${watchdog.state}; owner=${watchdog.owner}; workerStatus=${watchdog.workerStatus ?? '-'}; needsNudge=${watchdog.needsNudge}; latestAssignmentAt=${formatMaybeNumber(watchdog.latestAssignmentAt)}; latestOwnerReportAt=${formatMaybeNumber(watchdog.latestOwnerReportAt)}${nudgeHint}`
+}
+
 export function showTaskCommand(input: TaskReadCommandContext, taskId: string): TaskCommandResult {
   const task = requireTask(input.team, taskId)
   const summary = taskHistoryCompactSummary(input.team, task.id)
@@ -129,6 +144,7 @@ export function showTaskCommand(input: TaskReadCommandContext, taskId: string): 
   const latestActivityDisplayType = latestActivity
     ? (latestActivity.kind === 'event' ? latestActivity.displayType : latestActivity.type)
     : undefined
+  const reportWatchdog = reportWatchdogForTask(input.team, task.id)
   const lines = [
     `${task.id} [${task.status}] ${task.title}`,
     `Owner: ${task.owner ?? '-'}`,
@@ -137,6 +153,7 @@ export function showTaskCommand(input: TaskReadCommandContext, taskId: string): 
     `History counts: reports ${summary.reports}, events ${summary.events}, messageRefs ${summary.messageRefs}`,
     `Latest report: ${latestReport ? `${latestReport.id} ${latestReport.type} by ${latestReport.author} — ${latestReport.summary}` : '-'}`,
     `Latest activity: ${latestActivity ? `${latestActivity.kind} ${latestActivity.id} ${latestActivityDisplayType} — ${latestActivity.summary ?? '-'}` : '-'}`,
+    formatReportWatchdog(reportWatchdog, task.id),
     `Hints: use action=history taskId=${task.id}; action=reports taskId=${task.id}; action=report reportId=<id>`,
   ]
   return {
@@ -147,6 +164,7 @@ export function showTaskCommand(input: TaskReadCommandContext, taskId: string): 
       counts: { reports: summary.reports, events: summary.events, messageRefs: summary.messageRefs },
       latestReport,
       latestActivity,
+      reportWatchdog,
       hints: {
         history: { action: 'history', taskId: task.id },
         reports: { action: 'reports', taskId: task.id },

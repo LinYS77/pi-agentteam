@@ -4,6 +4,7 @@ import {
   mailboxMessageIdForEffect,
   runSelectedOutboxEffects,
 } from './outboxSideEffects.js'
+import { defaultThreadIdForTask } from '../protocol.js'
 import type { TaskApplicationDeps } from './types.js'
 import type { TaskCommandResult } from './taskTypes.js'
 
@@ -40,6 +41,80 @@ export async function handleTaskApplicationSideEffects(result: TaskCommandResult
   let mailboxOutboxEffectId: string | undefined
   let leaderMailboxReportId: string | undefined
   const outboxEffectIds: string[] = []
+
+  if (result.ownerNudge && result.wakeTeam) {
+    const pushed = result.ownerNudge.message
+    const mailboxEffect = deps.outboxStore.enqueue({
+      teamName: result.wakeTeam.name,
+      kind: 'inbox_item_append_requested',
+      idempotencyKey: ['task-owner-nudge-mailbox', result.wakeTeam.name, pushed.taskId ?? '', pushed.to, outboxHash(pushed.summary ?? ''), outboxHash(pushed.text)].join(':'),
+      payload: {
+        teamName: result.wakeTeam.name,
+        recipient: result.ownerNudge.recipient,
+        message: {
+          ...pushed,
+          id: 'mailbox-pending',
+          metadata: { ...(pushed.metadata ?? {}), outboxSource: 'taskApplication' },
+        },
+      },
+    })
+    const deterministicMailboxId = mailboxMessageIdForEffect(mailboxEffect.effectId)
+    mailboxEffect.payload.message.id = deterministicMailboxId
+    outboxEffectIds.push(mailboxEffect.effectId)
+    const mailboxSelected = await applyTaskOutboxRun(result, deps, result.wakeTeam.name, [mailboxEffect.effectId])
+    const mailboxResult = mailboxSelected.byId[mailboxEffect.effectId]?.result
+    const mailboxDelivered = Boolean(mailboxResult?.ok)
+    result.details.ownerNudgeMailboxDelivered = mailboxDelivered
+    result.details.ownerNudgeMailboxMessageId = deterministicMailboxId
+    if (!mailboxDelivered) {
+      const mailboxError = mailboxResult?.error ?? 'owner nudge mailbox push failed'
+      result.details.ownerNudgeMailboxDeliveryFailed = { recipient: result.ownerNudge.recipient, error: mailboxError }
+      result.text = `${result.text} (owner nudge mailbox push failed for ${result.ownerNudge.recipient}: ${mailboxError})`
+    } else if (pushed.taskId) {
+      const refEffect = deps.outboxStore.enqueue({
+        teamName: result.wakeTeam.name,
+        kind: 'task_message_ref_append_requested',
+        idempotencyKey: ['task-owner-nudge-message-ref', result.wakeTeam.name, pushed.taskId, deterministicMailboxId].join(':'),
+        payload: {
+          teamName: result.wakeTeam.name,
+          taskId: pushed.taskId,
+          mailboxMessageId: deterministicMailboxId,
+          from: pushed.from,
+          to: pushed.to,
+          type: pushed.type ?? 'question',
+          threadId: pushed.threadId ?? defaultThreadIdForTask(pushed.taskId),
+          summary: pushed.summary,
+          priority: pushed.priority,
+          wakeHint: pushed.wakeHint,
+          metadata: { source: 'agentteam_task_nudge_report', compact: true },
+        },
+        dependsOn: [mailboxEffect.effectId],
+      })
+      outboxEffectIds.push(refEffect.effectId)
+      await applyTaskOutboxRun(result, deps, result.wakeTeam.name, [refEffect.effectId])
+    }
+    const deliveryEffect = deps.outboxStore.enqueue({
+      teamName: result.wakeTeam.name,
+      kind: 'worker_delivery_requested',
+      idempotencyKey: ['task-owner-nudge-delivery', result.wakeTeam.name, result.ownerNudge.recipient, deterministicMailboxId].join(':'),
+      payload: {
+        teamName: result.wakeTeam.name,
+        memberName: result.ownerNudge.recipient,
+        explicitTask: pushed.taskId,
+        options: {
+          messageIds: [deterministicMailboxId],
+          requestedBy: pushed.from,
+          reason: 'report watchdog nudge',
+          wakeHint: pushed.wakeHint,
+        },
+      },
+      dependsOn: [mailboxEffect.effectId],
+    })
+    outboxEffectIds.push(deliveryEffect.effectId)
+    const deliverySelected = await applyTaskOutboxRun(result, deps, result.wakeTeam.name, [deliveryEffect.effectId])
+    const deliveryResult = deliverySelected.byId[deliveryEffect.effectId]?.result
+    result.details.ownerNudgeDelivery = deliveryResult?.value ?? { ok: deliveryResult?.ok ?? false, error: deliveryResult?.error }
+  }
 
   if (result.leaderMailbox && result.wakeTeam) {
     const pushed = result.leaderMailbox.message

@@ -242,6 +242,7 @@ module.exports = {
       './taskMutationCommands.js',
       './taskPermissions.js',
       './taskReadCommands.js',
+      './taskReportNudge.js',
       './taskReportWorkflow.js',
       './taskSideEffects.js',
       './taskTypes.js',
@@ -344,7 +345,8 @@ module.exports = {
     for (const sideEffectDetailToken of ['leaderMailboxDelivered', 'mailboxDeliveryFailed', 'outboxRun', 'outboxEffects', 'outboxEffectIds', 'side_effect_failed']) {
       assert.ok(appTaskSideEffectsSource.includes(sideEffectDetailToken), `task side effects should preserve detail/warning token ${sideEffectDetailToken}`)
     }
-    assert.equal(appTaskSideEffectsSource.includes("kind: 'task_message_ref_append_requested'"), false, 'task side effects should not introduce TaskMessageRef effects')
+    assert.ok(appTaskSideEffectsSource.includes("kind: 'task_message_ref_append_requested'"), 'task nudge side effects should append compact TaskMessageRef audit through outbox')
+    assert.ok(appTaskSideEffectsSource.includes('agentteam_task_nudge_report'), 'task nudge TaskMessageRef audit should identify the nudge source')
     assert.equal(appOutboxSideEffectsSource.includes('ExtensionContext'), false, 'shared outbox side-effects module should not mention Pi ExtensionContext')
     assert.equal(appOutboxSideEffectsSource.includes('@earendil-works/pi-coding-agent'), false, 'shared outbox side-effects module should not import Pi APIs')
     for (const forbiddenOutboxSideEffectsImport of ['../state/', '../runtime/', '../adapters/', '../tmux/']) {
@@ -1120,7 +1122,7 @@ module.exports = {
     assert.equal(taskApplication.actorRole(team, 'team-lead'), taskPermissions.actorRole(team, 'team-lead'), 'taskApplication should preserve actorRole compatibility re-export')
     assert.equal(taskApplication.actorRole(team, 'plan'), taskPermissions.actorRole(team, 'plan'), 'taskApplication should preserve normalized actorRole behavior')
     assert.equal(taskApplication.actorRole(team, 'impl'), taskPermissions.actorRole(team, 'impl'), 'taskApplication should preserve actorRole compatibility re-export')
-    for (const leaderAction of ['create', 'assign', 'block', 'unblock', 'close', 'note']) {
+    for (const leaderAction of ['create', 'assign', 'block', 'unblock', 'close', 'nudge_report', 'note']) {
       assert.equal(taskPermissions.ensureTaskPrivilege(team, 'team-lead', leaderAction), null, `team-lead should bypass privilege denial for ${leaderAction}`)
       assert.equal(taskApplication.ensureTaskPrivilege(team, 'team-lead', leaderAction), null, `taskApplication re-export should preserve leader privilege for ${leaderAction}`)
     }
@@ -1128,7 +1130,7 @@ module.exports = {
       assert.equal(taskPermissions.ensureTaskPrivilege(team, 'plan', workerAllowedAction), null, `non-leader should be allowed to ${workerAllowedAction}`)
       assert.equal(taskApplication.ensureTaskPrivilege(team, 'plan', workerAllowedAction), null, `taskApplication re-export should allow ${workerAllowedAction}`)
     }
-    for (const leaderOnlyAction of ['create', 'assign', 'block', 'unblock', 'close']) {
+    for (const leaderOnlyAction of ['create', 'assign', 'block', 'unblock', 'close', 'nudge_report']) {
       const denial = taskPermissions.ensureTaskPrivilege(team, 'plan', leaderOnlyAction)
       assert.ok(denial.includes(`Task action '${leaderOnlyAction}' is leader-only for plan (planner). Allowed for non-leaders: list/show/history/reports/report/progress/report_done/report_blocked`), `${leaderOnlyAction} denial text should remain exact`)
       assert.equal(taskApplication.ensureTaskPrivilege(team, 'plan', leaderOnlyAction), denial, `taskApplication re-export should preserve ${leaderOnlyAction} denial text`)

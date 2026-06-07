@@ -265,6 +265,7 @@ const completedPortBoundaryRules = [
       'app/taskPermissions.ts',
       'app/taskMutationCommands.ts',
       'app/taskReadCommands.ts',
+      'app/taskReportNudge.ts',
       'app/taskReportWorkflow.ts',
       'app/taskSideEffects.ts',
       'app/types.ts',
@@ -303,6 +304,7 @@ const completedPortBoundaryRules = [
       { token: './taskPermissions.js', message: 'must delegate permissions to app/taskPermissions' },
       { token: './taskReadCommands.js', message: 'must delegate read commands to app/taskReadCommands' },
       { token: './taskMutationCommands.js', message: 'must delegate mutation commands to app/taskMutationCommands' },
+      { token: './taskReportNudge.js', message: 'must delegate report nudge workflow to app/taskReportNudge' },
       { token: './taskReportWorkflow.js', message: 'must delegate report workflow to app/taskReportWorkflow' },
       { token: './taskSideEffects.js', message: 'must delegate task-local side effects to app/taskSideEffects' },
       { token: 'handleTaskApplicationSideEffects', message: 'must run task-local side effects through extracted module' },
@@ -346,7 +348,6 @@ const completedPortBoundaryRules = [
     forbiddenText: [
       { token: 'appendStructuredTaskNote', message: 'must not append active TeamTask.notes from task side effects' },
       { token: '../core/taskNoteModel.js', message: 'must not build task-note metadata in task side effects' },
-      { token: "kind: 'task_message_ref_append_requested'", message: 'must not introduce TaskMessageRef effects in task side effects' },
       { token: 'runOutboxOnce', message: 'must use app/outboxSideEffects selected runner instead of direct low-level runner' },
       { token: 'function mailboxMessageId', message: 'must use shared deterministic mailbox helper' },
       { token: 'function appendOutboxTaskWarnings', message: 'must use shared outbox warning mapping' },

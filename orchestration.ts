@@ -1,53 +1,60 @@
 import { TEAM_LEAD } from './internalTypes.js'
-import { unreadMailboxMessages } from './messageLifecycle.js'
-import { readMailbox } from './state/mailboxStore.js'
-import type {
-  MailboxMessage,
-  TeamState,
-  TeamTask,
-} from './internalTypes.js'
+import { fileBackedStateRepository, type RepositoryLeaderCoordinationProjection } from './state/repository.js'
+import type { TeamState } from './internalTypes.js'
 
 export type ContextMessage = { role: string; content: unknown }
 
-function blockedTasks(team: TeamState): TeamTask[] {
+function blockedTaskIds(team: TeamState): string[] {
   return Object.values(team.tasks)
     .filter(task => task.status === 'blocked')
     .sort((a, b) => a.id.localeCompare(b.id))
+    .map(task => task.id)
 }
 
-function unreadLeaderMailbox(team: TeamState): MailboxMessage[] {
-  return unreadMailboxMessages(readMailbox(team.name, TEAM_LEAD))
-    .slice()
-    .sort((a, b) => b.createdAt - a.createdAt)
-}
+export type LeaderCoordinationSnapshot = RepositoryLeaderCoordinationProjection
 
-export type LeaderCoordinationSnapshot = {
-  blockedCount: number
-  blockedTaskIds: string[]
-  unreadCount: number
-  latestUnreadMessageId: string
+function fallbackLeaderCoordinationSnapshot(team: TeamState): LeaderCoordinationSnapshot {
+  const blockedIds = blockedTaskIds(team)
+  return {
+    teamName: team.name,
+    blockedCount: blockedIds.length,
+    blockedTaskIds: blockedIds,
+    unreadCount: 0,
+    latestUnreadMessageId: '',
+    waitingReportCount: 0,
+    waitingReportTaskIds: [],
+    latestWaitingReportTaskId: '',
+  }
 }
 
 export function buildLeaderCoordinationSnapshot(team: TeamState): LeaderCoordinationSnapshot {
-  const blocked = blockedTasks(team)
-  const unread = unreadLeaderMailbox(team)
-  return {
-    blockedCount: blocked.length,
-    blockedTaskIds: blocked.map(task => task.id),
-    unreadCount: unread.length,
-    latestUnreadMessageId: unread[0]?.id ?? '',
-  }
+  return fileBackedStateRepository.readLeaderCoordinationProjection(team.name) ?? fallbackLeaderCoordinationSnapshot(team)
+}
+
+function compactTaskIdList(taskIds: string[], limit = 8): string {
+  if (taskIds.length === 0) return '-'
+  const shown = taskIds.slice(0, limit)
+  const hidden = taskIds.length - shown.length
+  return hidden > 0 ? `${shown.join(',')} (+${hidden} more)` : shown.join(',')
 }
 
 function buildLeaderDigest(team: TeamState, snapshot: LeaderCoordinationSnapshot): string {
   const latestLine = snapshot.latestUnreadMessageId
     ? `Latest unread message id: ${snapshot.latestUnreadMessageId}`
     : 'Latest unread message id: none'
+  const waitingReportLines = snapshot.waitingReportCount > 0
+    ? [
+        `- report watchdog waiting_for_report count: ${snapshot.waitingReportCount}`,
+        `- report watchdog waiting_for_report tasks: ${compactTaskIdList(snapshot.waitingReportTaskIds)}`,
+        `- suggested action: agentteam_task action=nudge_report taskId=${snapshot.latestWaitingReportTaskId}`,
+      ]
+    : ['- report watchdog waiting_for_report count: 0']
   return [
     `Leader coordination digest for team ${team.name}:`,
     `- blocked task count: ${snapshot.blockedCount}`,
     `- unread leader mailbox count: ${snapshot.unreadCount}`,
     `- ${latestLine}`,
+    ...waitingReportLines,
   ].join('\n')
 }
 
@@ -73,7 +80,7 @@ export function computeLeaderDigestKey(
   coordination?: LeaderCoordinationSnapshot,
 ): string {
   const snapshot = coordination ?? buildLeaderCoordinationSnapshot(team)
-  return `${team.name}|blocked:${snapshot.blockedCount}|blockedIds:${snapshot.blockedTaskIds.join(',')}|unread:${snapshot.unreadCount}|latest:${snapshot.latestUnreadMessageId}`
+  return `${team.name}|blocked:${snapshot.blockedCount}|blockedIds:${snapshot.blockedTaskIds.join(',')}|unread:${snapshot.unreadCount}|latest:${snapshot.latestUnreadMessageId}|waitingReports:${snapshot.waitingReportCount}|waitingReportIds:${snapshot.waitingReportTaskIds.join(',')}`
 }
 
 function computeBlockedDeltaSummary(team: TeamState): {
@@ -81,11 +88,11 @@ function computeBlockedDeltaSummary(team: TeamState): {
   blockedFingerprints: string[]
   summary: string
 } {
-  const blocked = blockedTasks(team)
+  const ids = blockedTaskIds(team)
   return {
-    blockedCount: blocked.length,
-    blockedFingerprints: blocked.map(task => task.id),
-    summary: blocked.length > 0 ? `Blocked tasks: ${blocked.length}` : 'No blocked tasks right now.',
+    blockedCount: ids.length,
+    blockedFingerprints: ids,
+    summary: ids.length > 0 ? `Blocked tasks: ${ids.length}` : 'No blocked tasks right now.',
   }
 }
 
@@ -125,7 +132,7 @@ export function maybeInjectLeaderOrchestrationContext(
   const blocked = computeBlockedDeltaSummary(team)
   const now = Date.now()
 
-  const hasActionableWork = coordination.blockedCount > 0 || coordination.unreadCount > 0
+  const hasActionableWork = coordination.blockedCount > 0 || coordination.unreadCount > 0 || coordination.waitingReportCount > 0
   if (!hasActionableWork) {
     return {
       digestKey,

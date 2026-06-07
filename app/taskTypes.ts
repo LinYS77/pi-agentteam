@@ -39,7 +39,8 @@ export type TaskCommandContext = {
   deps: TaskApplicationDeps
 }
 
-export type TaskLeaderMailboxEffect = {
+export type TaskDirectedMailboxEffect = {
+  recipient: string
   message: {
     from: string
     to: string
@@ -53,6 +54,8 @@ export type TaskLeaderMailboxEffect = {
     metadata?: Record<string, unknown>
   }
 }
+
+export type TaskLeaderMailboxEffect = Omit<TaskDirectedMailboxEffect, 'recipient'>
 
 export type TaskSideEffectWarning = {
   kind: string
@@ -72,6 +75,7 @@ export type TaskCommandResult = {
   leaderWake?: LeaderWakeRequest
   wakeTeam?: TeamState
   leaderMailbox?: TaskLeaderMailboxEffect
+  ownerNudge?: TaskDirectedMailboxEffect
 }
 
 export type TaskApplicationContext = {

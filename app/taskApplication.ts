@@ -1,6 +1,7 @@
 import { ensureTaskPrivilege } from './taskPermissions.js'
 import { assignTaskCommand, blockTaskCommand, closeTaskCommand, createTaskCommand, progressTaskCommand, unblockTaskCommand } from './taskMutationCommands.js'
 import { historyTaskCommand, listTasksCommand, reportTaskCommand, reportsTaskCommand, showTaskCommand } from './taskReadCommands.js'
+import { nudgeReportTaskCommand } from './taskReportNudge.js'
 import { reportBlockedTaskCommand, reportDoneTaskCommand } from './taskReportWorkflow.js'
 import { handleTaskApplicationSideEffects } from './taskSideEffects.js'
 import type { TaskApplicationDeps } from './types.js'
@@ -73,6 +74,9 @@ export async function executeTaskApplication(
       break
     case 'report_blocked':
       result = reportBlockedTaskCommand(commandContext, taskId, params)
+      break
+    case 'nudge_report':
+      result = nudgeReportTaskCommand(commandContext, taskId, params)
       break
     default:
       throw new Error(`Unsupported action ${(params as { action: string }).action}`)

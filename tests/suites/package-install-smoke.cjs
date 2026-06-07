@@ -486,7 +486,7 @@ module.exports = {
     assert.ok(messageTool.promptSnippet.includes('TaskMessageRef'), 'send tool should document task-bound refs as TaskMessageRef-backed')
 
     const taskTool = env.pi.__tools.get('agentteam_task')
-    assert.deepEqual(taskTool.parameters.o.action.enum, ['create', 'assign', 'block', 'unblock', 'close', 'progress', 'report_done', 'report_blocked', 'list', 'show', 'history', 'reports', 'report'])
+    assert.deepEqual(taskTool.parameters.o.action.enum, ['create', 'assign', 'block', 'unblock', 'close', 'progress', 'report_done', 'report_blocked', 'nudge_report', 'list', 'show', 'history', 'reports', 'report'])
     assert.deepEqual(taskTool.parameters.o.status.v.enum, ['open', 'blocked', 'done'])
     assert.equal(taskTool.parameters.o.reportId.kind, 'optional')
     assert.equal(taskTool.parameters.o.limit.kind, 'optional')

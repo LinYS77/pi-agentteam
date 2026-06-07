@@ -4,8 +4,10 @@ import {
   taskHistoryDisplaySummary,
   type TaskHistoryDisplaySummary,
 } from '../state/taskHistoryReadModel.js'
+import { buildReportWatchdogSummary, type ReportWatchdogTaskSummary } from '../state/taskReportWatchdogReadModel.js'
 
 export type { TaskHistoryDisplaySummary } from '../state/taskHistoryReadModel.js'
+export type { ReportWatchdogTaskSummary } from '../state/taskReportWatchdogReadModel.js'
 
 export type PanelReadModelMode = 'attached' | 'global'
 
@@ -19,12 +21,16 @@ export type PanelReadModelBuildProfileEvent = {
 
 export type PanelReadModelServices = {
   taskHistorySummary(team: TeamState, taskId: string): TaskHistoryDisplaySummary
+  taskWatchdogSummary(team: TeamState, taskId: string): ReportWatchdogTaskSummary | undefined
   recordReadModelBuild(event: PanelReadModelBuildProfileEvent): void
 }
 
 export function createPanelReadModelServices(): PanelReadModelServices {
   return {
     taskHistorySummary: taskHistoryDisplaySummary,
+    taskWatchdogSummary(team, taskId) {
+      return buildReportWatchdogSummary(team).tasks.find(task => task.taskId === taskId)
+    },
     recordReadModelBuild(event) {
       recordPanelProfileEvent({
         kind: 'readModelBuild',
