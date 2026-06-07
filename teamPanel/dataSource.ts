@@ -8,13 +8,14 @@ import { summarizeOutboxEffects } from '../app/outboxDiagnostics.js'
 import { listOutboxEffects } from '../state/outboxStore.js'
 import { readOutboxDiagnosticsStore } from '../state/outboxDiagnosticsStore.js'
 import { TEAM_LEAD } from '../internalTypes.js'
+import { recordPanelProfileEvent } from '../runtime/profiling.js'
+import { toPanelMailboxItem, toPanelTeamModel } from './readModel.js'
 import { buildTeamAttentionSummary, hasUnreadBlockedReportAttention } from './viewModel.js'
 import type { TmuxSnapshot } from '../tmux/snapshot.js'
 import type {
   AttachedPanelData,
   GlobalPanelData,
   GlobalTeamMailboxProjection,
-  LeaderMailboxItem,
   PanelData,
   TeamAttentionSummary,
   TeamRuntimeDiagnostics,
@@ -57,21 +58,36 @@ function outboxDiagnosticsSummary(teamName: string) {
 }
 
 function loadAttachedPanelData(teamName: string): AttachedPanelData | null {
+  const startedAt = Date.now()
   const team = readTeamState(teamName)
   if (!team) return null
   prepareTeamForPanel(team)
-  const members = Object.values(team.members)
+  const panelTeam = toPanelTeamModel(team, 'attached')
+  const members = Object.values(panelTeam.members)
     .filter(member => member.name !== TEAM_LEAD)
     .sort((a, b) => a.name.localeCompare(b.name))
-  const tasks = Object.values(team.tasks).sort((a, b) => a.id.localeCompare(b.id))
-  const mailbox = (readMailbox(teamName, TEAM_LEAD) as LeaderMailboxItem[])
-    .slice()
+  const tasks = Object.values(panelTeam.tasks).sort((a, b) => a.id.localeCompare(b.id))
+  const mailbox = readMailbox(teamName, TEAM_LEAD)
+    .map(toPanelMailboxItem)
     .sort((a, b) => b.createdAt - a.createdAt)
-  return { mode: 'attached', team, members, tasks, mailbox, outboxDiagnostics: outboxDiagnosticsSummary(team.name) }
+  const data: AttachedPanelData = { mode: 'attached', team: panelTeam, members, tasks, mailbox, outboxDiagnostics: outboxDiagnosticsSummary(team.name) }
+  recordPanelProfileEvent({
+    kind: 'dataLoad',
+    mode: 'attached',
+    durationMs: Date.now() - startedAt,
+    teamCount: 1,
+    taskCount: tasks.length,
+    memberCount: members.length,
+    mailboxProjectionCount: mailbox.length,
+    orphanPaneCount: 0,
+  })
+  return data
 }
 
 function loadGlobalPanelData(): GlobalPanelData {
+  const startedAt = Date.now()
   const teams = listTeams()
+  const panelTeams: GlobalPanelData['teams'] = []
   const snapshot = captureGlobalPanelSnapshot()
   const teamSummaries: Record<string, TeamAttentionSummary> = {}
   const teamMailboxes: Record<string, GlobalTeamMailboxProjection> = {}
@@ -86,12 +102,15 @@ function loadGlobalPanelData(): GlobalPanelData {
     const latestAttention = leaderMailbox
       .filter(item => isMailboxMessageUnread(item))
       .sort((a, b) => b.createdAt - a.createdAt)[0]
-    teamSummaries[team.name] = buildTeamAttentionSummary(team, leaderMailbox)
+    const panelTeam = toPanelTeamModel(team, 'global')
+    const leaderMailboxItems = leaderMailbox.map(toPanelMailboxItem)
+    panelTeams.push(panelTeam)
+    teamSummaries[team.name] = buildTeamAttentionSummary(panelTeam, leaderMailboxItems)
     teamMailboxes[team.name] = {
       total: leaderMailbox.length,
       unread: leaderMailbox.filter(isMailboxMessageUnread).length,
-      blocked: leaderMailbox.filter(hasUnreadBlockedReportAttention).length,
-      latestAttention,
+      blocked: leaderMailboxItems.filter(hasUnreadBlockedReportAttention).length,
+      latestAttention: latestAttention ? toPanelMailboxItem(latestAttention) : undefined,
     }
     teamDiagnostics[team.name] = { outbox: outboxDiagnosticsSummary(team.name) }
   }
@@ -100,7 +119,18 @@ function loadGlobalPanelData(): GlobalPanelData {
     .filter(pane => !knownPaneIds.has(pane.paneId))
     .sort((a, b) => a.paneId.localeCompare(b.paneId))
 
-  return { mode: 'global', teams, teamSummaries, teamMailboxes, teamDiagnostics, quarantinedTeams: listQuarantinedTeams(), orphanPanes }
+  const data: GlobalPanelData = { mode: 'global', teams: panelTeams, teamSummaries, teamMailboxes, teamDiagnostics, quarantinedTeams: listQuarantinedTeams(), orphanPanes }
+  recordPanelProfileEvent({
+    kind: 'dataLoad',
+    mode: 'global',
+    durationMs: Date.now() - startedAt,
+    teamCount: panelTeams.length,
+    taskCount: panelTeams.reduce((sum, team) => sum + Object.keys(team.tasks).length, 0),
+    memberCount: panelTeams.reduce((sum, team) => sum + Object.values(team.members).filter(member => member.name !== TEAM_LEAD).length, 0),
+    mailboxProjectionCount: Object.values(teamMailboxes).reduce((sum, mailbox) => sum + mailbox.total, 0),
+    orphanPaneCount: orphanPanes.length,
+  })
+  return data
 }
 
 export function loadPanelData(teamName?: string | null): PanelData {

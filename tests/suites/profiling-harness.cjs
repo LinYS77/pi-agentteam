@@ -121,6 +121,86 @@ function assertTmuxWrapperSummaryRecorded(summary) {
   }
 }
 
+function assertPanelSummaryEmpty(summary) {
+  assert.ok(summary.panel, 'profiling summary should include panel section')
+  assert.equal(summary.panel.dataLoadCount, 0, 'disabled/no-op panel profiling should not record data loads')
+  assert.equal(summary.panel.readModelBuildCount, 0, 'disabled/no-op panel profiling should not record read-model builds')
+  assert.equal(Array.isArray(summary.panel.events), true, 'panel profiling should expose cloned events array')
+  assert.equal(summary.panel.events.length, 0, 'disabled/no-op panel profiling should not record panel events')
+}
+
+function assertPanelSummaryRecorded(summary) {
+  assert.ok(summary.panel, 'profiling summary should include panel section')
+  assert.ok(summary.panel.dataLoadCount >= 1, `panel should record data load count: ${JSON.stringify(summary.panel)}`)
+  assert.ok(summary.panel.readModelBuildCount >= 1, `panel should record read-model build count: ${JSON.stringify(summary.panel)}`)
+  assert.ok(summary.panel.totalDataLoadMs >= 0, 'panel data load duration should be queryable')
+  assert.ok(summary.panel.totalReadModelBuildMs >= 0, 'panel read-model build duration should be queryable')
+  assert.equal(summary.panel.lastMode, 'attached', `panel lastMode should reflect attached panel load: ${JSON.stringify(summary.panel)}`)
+  assert.ok(summary.panel.byMode.attached.dataLoadCount >= 1, `panel attached mode should count data loads: ${JSON.stringify(summary.panel.byMode)}`)
+  assert.ok(summary.panel.byMode.attached.readModelBuildCount >= 1, `panel attached mode should count read-model builds: ${JSON.stringify(summary.panel.byMode)}`)
+  assert.ok(summary.panel.lastCounts.teamCount >= 1, `panel should record team counts: ${JSON.stringify(summary.panel.lastCounts)}`)
+  assert.ok(summary.panel.lastCounts.taskCount >= 1, `panel should record task counts: ${JSON.stringify(summary.panel.lastCounts)}`)
+  assert.ok(summary.panel.lastCounts.memberCount >= 1, `panel should record member counts: ${JSON.stringify(summary.panel.lastCounts)}`)
+  assert.ok(summary.panel.lastCounts.mailboxProjectionCount >= 1, `panel should record mailbox projection counts: ${JSON.stringify(summary.panel.lastCounts)}`)
+  assert.equal(JSON.stringify(summary).includes('PROFILE_FULL_BODY_SENTINEL'), false, 'profiling summary must not include full mailbox/report body sentinels')
+}
+
+function assertPanelSummaryCloneIsImmutable(profiling, summary) {
+  const beforeEvents = summary.panel.events.length
+  summary.panel.events.push({ kind: 'dataLoad', mode: 'attached', durationMs: 999, teamCount: 999 })
+  summary.panel.byMode.attached.dataLoadCount = 999
+  summary.panel.lastCounts.teamCount = 999
+  const next = profiling.readProfilingSummary()
+  assert.equal(next.panel.events.length, beforeEvents, 'panel profiling events should be cloned from internal state')
+  assert.notEqual(next.panel.byMode.attached.dataLoadCount, 999, 'panel byMode summary should be cloned from internal state')
+  assert.notEqual(next.panel.lastCounts.teamCount, 999, 'panel lastCounts should be cloned from internal state')
+}
+
+function createPanelProfileTeam(modules) {
+  const teamName = 'profiling-panel-suite'
+  modules.state.deleteTeamState(teamName)
+  const team = modules.state.createInitialTeamState({
+    teamName,
+    leaderSessionFile: '/tmp/profiling-panel-suite-leader.jsonl',
+    leaderCwd: '/tmp/profiling-panel-suite',
+  })
+  modules.state.upsertMember(team, {
+    name: 'profile-worker',
+    role: 'implementer',
+    cwd: '/tmp/profiling-panel-suite',
+    sessionFile: '/tmp/profiling-panel-suite-worker.jsonl',
+    paneId: '%profiling-panel-suite-worker',
+    windowTarget: 'profiling:@1',
+    status: 'idle',
+  })
+  const task = modules.state.createTask(team, {
+    title: 'Panel profiling task',
+    description: 'Characterize panel/read-model profiling metrics',
+    owner: 'profile-worker',
+  })
+  modules.state.appendTaskReport(team, {
+    taskId: task.id,
+    type: 'report_done',
+    author: 'profile-worker',
+    text: 'PROFILE_FULL_BODY_SENTINEL report body should stay out of profiling metrics',
+    summary: 'Panel profiling compact report summary',
+    reporterIsOwner: true,
+    statusAtReport: 'open',
+    ownerAtReport: 'profile-worker',
+  })
+  modules.state.writeTeamState(team)
+  modules.state.pushMailboxMessage(teamName, 'team-lead', {
+    from: 'profile-worker',
+    to: 'team-lead',
+    type: 'report_done',
+    taskId: task.id,
+    summary: 'Panel profiling compact mailbox summary',
+    text: 'PROFILE_FULL_BODY_SENTINEL mailbox body should stay out of profiling metrics',
+  })
+  modules.runtimePanes.invalidatePaneReconcileCache(teamName)
+  return teamName
+}
+
 async function exerciseTmuxClientWrappers(tmuxClient) {
   assert.equal(tmuxClient.runTmux(['display-message', '-p', '#D']), 'sync:display-message')
   assert.deepEqual(tmuxClient.runTmuxNoThrow(['list-panes', '-a']), { ok: false, stdout: '', stderr: 'sync failure:list-panes' })
@@ -139,6 +219,7 @@ module.exports = {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-profiling-harness-'))
     try {
       const jsonPath = path.join(tmp, 'profiled-store.json')
+      const panelTeamName = createPanelProfileTeam(env.modules)
 
       withProfileEnv(undefined, () => {
         profiling.resetProfiling()
@@ -150,6 +231,9 @@ module.exports = {
         assert.equal(metricOrEventCount(summary.fsStore, ['readCount', 'reads'], 'read'), 0, 'disabled profiling should not record fsStore reads')
         assert.equal(metricOrEventCount(summary.fsStore, ['writeCount', 'writes'], 'write'), 0, 'disabled profiling should not record fsStore writes')
         assert.equal(metricOrEventCount(summary.tmux, ['commandCount', 'commands'], 'command'), 0, 'disabled profiling should not record tmux commands')
+        assertPanelSummaryEmpty(summary)
+        env.modules.panelDataSource.loadPanelData(panelTeamName)
+        assertPanelSummaryEmpty(profiling.readProfilingSummary())
       })
 
       withProfileEnv('1', () => {
@@ -166,6 +250,7 @@ module.exports = {
         assert.equal(summary.enabled, true, 'summary should expose enabled state')
         assertFsSummaryRecorded(summary)
         assertTmuxSummaryRecorded(summary)
+        assertPanelSummaryEmpty(summary)
       })
 
       const tmuxClient = env.helpers.requireDist('tmux/client.js')
@@ -190,7 +275,18 @@ module.exports = {
         assert.equal(summary.enabled, true)
         assertTmuxWrapperSummaryRecorded(summary)
       })
+
+      withProfileEnv('1', () => {
+        profiling.resetProfiling()
+        const data = env.modules.panelDataSource.loadPanelData(panelTeamName)
+        assert.equal(data.mode, 'attached', 'panel profiling fixture should load attached panel data')
+        const summary = profiling.readProfilingSummary()
+        assert.equal(summary.enabled, true)
+        assertPanelSummaryRecorded(summary)
+        assertPanelSummaryCloneIsImmutable(profiling, summary)
+      })
     } finally {
+      env.modules.state.deleteTeamState('profiling-panel-suite')
       fs.rmSync(tmp, { recursive: true, force: true })
     }
   },

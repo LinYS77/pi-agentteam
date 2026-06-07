@@ -1,26 +1,23 @@
 import type { WorkerHealth } from '../core/publicModel.js'
-import type {
-  TeamMember,
-  TeamTask,
-} from '../internalTypes.js'
+import type { PanelMemberModel, PanelTaskModel } from './readModel.js'
 import { projectTeamMemberHealth } from '../runtime/memberHealth.js'
 import type { TeamAttentionSummary } from './viewModel.js'
 import { hasPaneLostAttention, mailboxType } from './viewModel.js'
 import type { PanelColor, PanelTheme } from './layoutPrimitives.js'
 
-export function memberPaneLabel(member: TeamMember): string {
+export function memberPaneLabel(member: PanelMemberModel): string {
   return member.paneId ? `pane ${member.paneId}` : 'pane missing'
 }
 
-export function projectMemberHealth(member: TeamMember): WorkerHealth {
+export function projectMemberHealth(member: PanelMemberModel): WorkerHealth {
   return projectTeamMemberHealth(member)
 }
 
-export function memberHealthLabel(member: TeamMember): ReturnType<typeof projectMemberHealth> {
+export function memberHealthLabel(member: PanelMemberModel): ReturnType<typeof projectMemberHealth> {
   return projectMemberHealth(member)
 }
 
-export function memberHealthColor(member: TeamMember): PanelColor {
+export function memberHealthColor(member: PanelMemberModel): PanelColor {
   const health = projectMemberHealth(member)
   if (health === 'error') return 'error'
   if (health === 'busy') return 'accent'
@@ -44,7 +41,7 @@ export function mailboxTypeColor(type: ReturnType<typeof mailboxType>): PanelCol
   return 'text'
 }
 
-function taskStatusIcon(status: TeamTask['status']): string {
+function taskStatusIcon(status: PanelTaskModel['status']): string {
   if (status === 'done') return '✔'
   if (status === 'blocked') return '⚠'
   return '○'
@@ -57,12 +54,12 @@ function workerHealthIcon(health: ReturnType<typeof projectMemberHealth>): strin
   return '○'
 }
 
-export function memberHealthBadge(theme: PanelTheme, member: TeamMember): string {
+export function memberHealthBadge(theme: PanelTheme, member: PanelMemberModel): string {
   const health = projectMemberHealth(member)
   return theme.fg(memberHealthColor(member), `[${workerHealthIcon(health)} ${health}]`)
 }
 
-export function taskStatusBadge(theme: PanelTheme, status: TeamTask['status']): string {
+export function taskStatusBadge(theme: PanelTheme, status: PanelTaskModel['status']): string {
   const color =
     status === 'done'
       ? 'success'

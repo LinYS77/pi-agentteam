@@ -18,10 +18,11 @@ function stableStringify(value: unknown): string {
 }
 
 function taskHistoryCounts(team: Extract<PanelData, { mode: 'attached' }>['team'], taskId: string) {
+  const history = team.tasks[taskId]?.history
   return {
-    reports: Object.values(team.taskReports ?? {}).filter(report => report.taskId === taskId).length,
-    events: Object.values(team.taskEvents ?? {}).filter(event => event.taskId === taskId).length,
-    messageRefs: Object.values(team.taskMessageRefs ?? {}).filter(ref => ref.taskId === taskId).length,
+    reports: history?.reports ?? 0,
+    events: history?.events ?? 0,
+    messageRefs: history?.messageRefs ?? 0,
   }
 }
 

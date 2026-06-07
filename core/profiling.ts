@@ -43,10 +43,43 @@ type TmuxProfileSummary = {
   }>
 }
 
+export type PanelProfileMode = 'attached' | 'global'
+
+export type PanelReadModelProfileCounts = {
+  teamCount?: number
+  taskCount?: number
+  memberCount?: number
+  mailboxProjectionCount?: number
+  orphanPaneCount?: number
+}
+
+export type PanelProfileEventKind = 'dataLoad' | 'readModelBuild'
+
+export type PanelProfileInput = PanelReadModelProfileCounts & {
+  kind: PanelProfileEventKind
+  mode: PanelProfileMode
+  durationMs: number
+}
+
+type PanelProfileSummary = {
+  dataLoadCount: number
+  readModelBuildCount: number
+  totalDataLoadMs: number
+  totalReadModelBuildMs: number
+  lastMode?: PanelProfileMode
+  byMode: Record<PanelProfileMode, {
+    dataLoadCount: number
+    readModelBuildCount: number
+  }>
+  lastCounts: PanelReadModelProfileCounts
+  events: Array<PanelProfileInput>
+}
+
 export type ProfilingSummary = {
   enabled: boolean
   fsStore: FsStoreProfileSummary
   tmux: TmuxProfileSummary
+  panel: PanelProfileSummary
 }
 
 function emptyFsStoreSummary(): FsStoreProfileSummary {
@@ -76,9 +109,25 @@ function emptyTmuxSummary(): TmuxProfileSummary {
   }
 }
 
+function emptyPanelSummary(): PanelProfileSummary {
+  return {
+    dataLoadCount: 0,
+    readModelBuildCount: 0,
+    totalDataLoadMs: 0,
+    totalReadModelBuildMs: 0,
+    byMode: {
+      attached: { dataLoadCount: 0, readModelBuildCount: 0 },
+      global: { dataLoadCount: 0, readModelBuildCount: 0 },
+    },
+    lastCounts: {},
+    events: [],
+  }
+}
+
 const summary: Omit<ProfilingSummary, 'enabled'> = {
   fsStore: emptyFsStoreSummary(),
   tmux: emptyTmuxSummary(),
+  panel: emptyPanelSummary(),
 }
 
 export function isProfilingEnabled(): boolean {
@@ -88,6 +137,7 @@ export function isProfilingEnabled(): boolean {
 export function resetProfiling(): void {
   summary.fsStore = emptyFsStoreSummary()
   summary.tmux = emptyTmuxSummary()
+  summary.panel = emptyPanelSummary()
 }
 
 function cloneSummary(): Omit<ProfilingSummary, 'enabled'> {
@@ -100,6 +150,15 @@ function cloneSummary(): Omit<ProfilingSummary, 'enabled'> {
       ...summary.tmux,
       commandNames: [...summary.tmux.commandNames],
       events: summary.tmux.events.map(event => ({ ...event, args: [...event.args] })),
+    },
+    panel: {
+      ...summary.panel,
+      byMode: {
+        attached: { ...summary.panel.byMode.attached },
+        global: { ...summary.panel.byMode.global },
+      },
+      lastCounts: { ...summary.panel.lastCounts },
+      events: summary.panel.events.map(event => ({ ...event })),
     },
   }
 }
@@ -117,6 +176,21 @@ function safeDurationMs(durationMs: number): number {
 
 function safeBytes(bytes: number | undefined): number {
   return Number.isFinite(bytes) && (bytes ?? 0) >= 0 ? bytes ?? 0 : 0
+}
+
+function safeCount(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0
+}
+
+function panelCounts(input: PanelReadModelProfileCounts): PanelReadModelProfileCounts {
+  return {
+    ...(input.teamCount !== undefined ? { teamCount: safeCount(input.teamCount) } : {}),
+    ...(input.taskCount !== undefined ? { taskCount: safeCount(input.taskCount) } : {}),
+    ...(input.memberCount !== undefined ? { memberCount: safeCount(input.memberCount) } : {}),
+    ...(input.mailboxProjectionCount !== undefined ? { mailboxProjectionCount: safeCount(input.mailboxProjectionCount) } : {}),
+    ...(input.orphanPaneCount !== undefined ? { orphanPaneCount: safeCount(input.orphanPaneCount) } : {}),
+  }
 }
 
 export function recordFsStoreEvent(input: {
@@ -170,4 +244,29 @@ export function recordTmuxCommand(input: TmuxProfileInput): void {
     ok: input.ok,
     ...(input.error ? { error: input.error } : {}),
   })
+}
+
+export function recordPanelProfileEvent(input: PanelProfileInput): void {
+  if (!isProfilingEnabled()) return
+  const durationMs = safeDurationMs(input.durationMs)
+  const counts = panelCounts(input)
+  const event: PanelProfileInput = {
+    kind: input.kind,
+    mode: input.mode,
+    durationMs,
+    ...counts,
+  }
+  summary.panel.events.push(event)
+  summary.panel.lastMode = input.mode
+  summary.panel.lastCounts = counts
+  const modeSummary = summary.panel.byMode[input.mode]
+  if (input.kind === 'dataLoad') {
+    summary.panel.dataLoadCount += 1
+    summary.panel.totalDataLoadMs += durationMs
+    modeSummary.dataLoadCount += 1
+  } else {
+    summary.panel.readModelBuildCount += 1
+    summary.panel.totalReadModelBuildMs += durationMs
+    modeSummary.readModelBuildCount += 1
+  }
 }

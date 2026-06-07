@@ -2,23 +2,36 @@ import { isMailboxMessageUnread } from '../messageLifecycle.js'
 import { displayMessageType, mailboxUrgencyRank } from '../protocol.js'
 import { TEAM_LEAD } from '../internalTypes.js'
 import { taskHistoryDisplaySummary, type TaskHistoryActivityDisplay, type TaskHistoryDisplaySummary, type TaskHistoryReportDisplay } from '../state/taskHistoryReadModel.js'
-import type { OutboxDiagnosticsSummary } from '../app/outboxDiagnostics.js'
-import type { QuarantinedTeamSummary } from '../state/validation.js'
+import type { TeamMessageType, TeamState } from '../internalTypes.js'
 import type {
-  MailboxMessage,
-  TeamMember,
-  TeamMessageType,
-  TeamState,
-  TeamTask,
-} from '../internalTypes.js'
+  AttachedPanelData,
+  GlobalPanelData,
+  GlobalPaneItem,
+  GlobalTeamMailboxProjection,
+  PanelData,
+  PanelMailboxItem,
+  PanelMemberModel,
+  PanelTaskModel,
+  PanelTeamModel,
+  TeamAttentionSummary,
+  TeamRuntimeDiagnostics,
+} from './readModel.js'
 
-export type LeaderMailboxItem = MailboxMessage
-export type GlobalPaneItem = {
-  paneId: string
-  target: string
-  label: string
-  currentCommand: string
-}
+export type {
+  AttachedPanelData,
+  GlobalPanelData,
+  GlobalPaneItem,
+  GlobalTeamMailboxProjection,
+  PanelData,
+  PanelMailboxItem,
+  PanelMemberModel,
+  PanelTaskModel,
+  PanelTeamModel,
+  TeamAttentionSummary,
+  TeamRuntimeDiagnostics,
+} from './readModel.js'
+
+export type LeaderMailboxItem = PanelMailboxItem
 
 export type FocusSection = 'cockpit' | 'members' | 'tasks' | 'mailbox' | 'teams' | 'panes'
 export type PanelInteractionMode = 'browse' | 'action-menu'
@@ -60,60 +73,19 @@ export type PanelActionMenu = {
   confirmSelectedIndex?: number
 }
 
-export type AttachedPanelData = {
-  mode: 'attached'
-  team: TeamState
-  members: TeamMember[]
-  tasks: TeamTask[]
-  mailbox: LeaderMailboxItem[]
-  outboxDiagnostics?: OutboxDiagnosticsSummary
-}
-
-export type TeamAttentionSummary = {
-  blockedTasks: number
-  unreadMessages: number
-  blockedMessages: number
-  unownedActiveTasks: number
-  errorMembers: number
-  paneLostMembers: number
-}
-
 export type PanelTaskReportSummary = TaskHistoryReportDisplay
 export type PanelTaskActivitySummary = TaskHistoryActivityDisplay
 export type PanelTaskHistorySummary = TaskHistoryDisplaySummary
 
-export type TeamRuntimeDiagnostics = {
-  outbox?: OutboxDiagnosticsSummary
-}
-
-export type GlobalTeamMailboxProjection = {
-  total: number
-  unread: number
-  blocked: number
-  latestAttention?: MailboxMessage
-}
-
-export type GlobalPanelData = {
-  mode: 'global'
-  teams: TeamState[]
-  teamSummaries: Record<string, TeamAttentionSummary>
-  teamMailboxes: Record<string, GlobalTeamMailboxProjection>
-  teamDiagnostics: Record<string, TeamRuntimeDiagnostics>
-  quarantinedTeams: QuarantinedTeamSummary[]
-  orphanPanes: GlobalPaneItem[]
-}
-
-export type PanelData = AttachedPanelData | GlobalPanelData
-
-export function teamDisplayName(team: TeamState): string {
+export function teamDisplayName(team: PanelTeamModel): string {
   return team.identity?.displayName || team.name
 }
 
-export function teamSlug(team: TeamState): string {
+export function teamSlug(team: PanelTeamModel): string {
   return team.identity?.slug || team.name
 }
 
-export function teamProjectDisambiguator(team: TeamState): string {
+export function teamProjectDisambiguator(team: PanelTeamModel): string {
   return team.leaderCwd || team.identity?.projectKey || team.name
 }
 
@@ -139,18 +111,18 @@ export type TeamPanelState = {
 }
 
 export type CockpitQueueItem =
-  | { kind: 'task'; task: TeamTask; attention: string[] }
+  | { kind: 'task'; task: PanelTaskModel; attention: string[] }
   | { kind: 'mailbox'; message: LeaderMailboxItem; attention: string[] }
 
 export type PanelSelectionView = {
-  visibleTasks: TeamTask[]
+  visibleTasks: PanelTaskModel[]
   visibleMailbox: LeaderMailboxItem[]
   cockpitQueue: CockpitQueueItem[]
   selectedCockpitItem?: CockpitQueueItem
-  selectedTask?: TeamTask
+  selectedTask?: PanelTaskModel
   selectedMailbox?: LeaderMailboxItem
-  selectedMember?: TeamMember
-  selectedTeam?: TeamState
+  selectedMember?: PanelMemberModel
+  selectedTeam?: PanelTeamModel
   selectedPane?: GlobalPaneItem
 }
 
@@ -174,7 +146,7 @@ export function createInitialPanelState(): TeamPanelState {
   }
 }
 
-export function hasPaneLostAttention(member: TeamMember): boolean {
+export function hasPaneLostAttention(member: PanelMemberModel): boolean {
   const lastWake = String(member.lastWakeReason ?? '').toLowerCase()
   const lastError = String(member.lastError ?? '').toLowerCase()
   return member.status === 'error' && (
@@ -185,8 +157,8 @@ export function hasPaneLostAttention(member: TeamMember): boolean {
 }
 
 export function buildTeamAttentionSummary(
-  team: TeamState,
-  mailbox: MailboxMessage[],
+  team: PanelTeamModel,
+  mailbox: LeaderMailboxItem[],
 ): TeamAttentionSummary {
   const teammates = Object.values(team.members).filter(member => member.name !== TEAM_LEAD)
   const tasks = Object.values(team.tasks)
@@ -204,8 +176,16 @@ export function mailboxType(item: LeaderMailboxItem): TeamMessageType {
   return displayMessageType(item.type as string)
 }
 
-export function taskHistorySummary(team: TeamState, taskId: string): PanelTaskHistorySummary {
-  return taskHistoryDisplaySummary(team, taskId)
+export function taskHistorySummary(team: PanelTeamModel | TeamState, taskId: string): PanelTaskHistorySummary {
+  if ('taskReports' in team || 'taskEvents' in team || 'taskMessageRefs' in team) {
+    return taskHistoryDisplaySummary(team as TeamState, taskId)
+  }
+  return team.tasks[taskId]?.history ?? {
+    taskId,
+    reports: 0,
+    events: 0,
+    messageRefs: 0,
+  }
 }
 
 export function hasUnreadBlockedReportAttention(item: LeaderMailboxItem): boolean {
@@ -228,7 +208,7 @@ function filterMailboxItems(
   return sortMailboxByUrgency(mailbox)
 }
 
-function taskAttentionLabels(task: TeamTask): string[] {
+function taskAttentionLabels(task: PanelTaskModel): string[] {
   return [
     task.status === 'blocked' ? 'blocked' : '',
     task.status !== 'done' && !task.owner ? 'unowned' : '',
@@ -244,12 +224,12 @@ function mailboxAttentionLabels(item: LeaderMailboxItem): string[] {
 
 function getVisibleTasks(
   data: AttachedPanelData,
-): TeamTask[] {
+): PanelTaskModel[] {
   return data.tasks
 }
 
 export function buildCockpitQueue(
-  tasks: TeamTask[],
+  tasks: PanelTaskModel[],
   mailbox: LeaderMailboxItem[],
 ): CockpitQueueItem[] {
   const taskItems = tasks
