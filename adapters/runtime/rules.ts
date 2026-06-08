@@ -1,4 +1,4 @@
-import { TEAM_LEAD } from '../../internalTypes.js'
+import { slugifyNewTeamName, TEAM_LEAD } from '../../core/teamIdentity.js'
 import type { TeamState } from '../../internalTypes.js'
 
 export function sanitizeWorkerName(name: string): string {
@@ -6,7 +6,7 @@ export function sanitizeWorkerName(name: string): string {
 }
 
 export function sanitizeTeamName(name: string): string {
-  return sanitizeWorkerName(name)
+  return slugifyNewTeamName(name)
 }
 
 type NewNameValidationResult =
@@ -18,13 +18,13 @@ function isSafeNewSlug(slug: string): boolean {
 }
 
 function validateNewName(rawName: string, label: 'Team' | 'Teammate'): NewNameValidationResult {
-  const normalized = sanitizeWorkerName(rawName)
+  const normalized = label === 'Team' ? sanitizeTeamName(rawName) : sanitizeWorkerName(rawName)
   if (!normalized) {
     return {
       ok: false,
       normalized,
       reason: 'empty_after_normalization',
-      message: `${label} name cannot be empty after normalization`,
+      message: `${label} name cannot be empty after normalization. Use a short ASCII name such as ${label === 'Team' ? 'research-team' : 'researcher-one'}.`,
     }
   }
   if (!isSafeNewSlug(normalized)) {

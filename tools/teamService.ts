@@ -30,6 +30,21 @@ function hasLeaderSessionBinding(team: TeamState): boolean {
   return context.teamName === team.name && context.memberName === TEAM_LEAD
 }
 
+function existingLeaderCollisionDetails(team: TeamState, fallbackPane?: PaneBinding | null) {
+  const existingLeader = team.members[TEAM_LEAD]
+  return {
+    existingLeaderCwd: team.leaderCwd ?? existingLeader?.cwd,
+    existingLeaderSessionFile: team.leaderSessionFile ?? existingLeader?.sessionFile,
+    existingLeaderWindowTarget: existingLeader?.windowTarget ?? fallbackPane?.target,
+    existingLeaderPaneId: existingLeader?.paneId ?? fallbackPane?.paneId,
+  }
+}
+
+function formatExistingLeaderLocation(team: TeamState, fallbackPane?: PaneBinding | null): string {
+  const details = existingLeaderCollisionDetails(team, fallbackPane)
+  return ` Existing leader: cwd ${details.existingLeaderCwd ?? '-'}, window ${details.existingLeaderWindowTarget ?? '-'}, pane ${details.existingLeaderPaneId ?? '-'}, session ${details.existingLeaderSessionFile ?? '-'}.`
+}
+
 function attachCurrentLeaderToExistingTeam(
   team: TeamState,
   sessionFile: string,
@@ -99,9 +114,16 @@ export function executeCreateTeam(
   const currentTeam = deps.ensureTeamForSession(ctx)
   if (currentTeam) {
     if (teamMatchesRequestedSlug(currentTeam, teamName) && (!currentTeam.identity || currentTeam.identity.projectKey === identity.projectKey)) {
+      const latestCurrentTeam = stateRepository.readTeamState(currentTeam.name) ?? currentTeam
+      const currentPane = runtimeRepository.captureCurrentPaneBinding()
       return {
-        content: [{ type: 'text' as const, text: `Team ${teamName} already exists; current session is already attached.` }],
-        details: { teamName, alreadyAttached: true, currentTeamName: currentTeam.name },
+        content: [{ type: 'text' as const, text: `Team ${teamName} already exists; current session is already attached.${formatExistingLeaderLocation(latestCurrentTeam, currentPane)}` }],
+        details: {
+          teamName,
+          alreadyAttached: true,
+          currentTeamName: latestCurrentTeam.name,
+          ...existingLeaderCollisionDetails(latestCurrentTeam, currentPane),
+        },
       }
     }
     return {
@@ -160,17 +182,14 @@ export function executeCreateTeam(
       return {
         content: [{
           type: 'text' as const,
-          text: `Team ${teamName} already exists and is active in another leader pane. Choose a different team_name. ${recoverInstruction}`,
+          text: `Team ${teamName} already exists and is active in another leader pane. Choose a different team_name. ${recoverInstruction}${formatExistingLeaderLocation(existingTeam)}`,
         }],
         details: {
           denied: true,
           teamName,
           reason: 'team_name_conflict_active_elsewhere',
           recoverInstruction,
-          existingLeaderCwd: existingTeam.leaderCwd ?? existingLeader?.cwd,
-          existingLeaderSessionFile: existingTeam.leaderSessionFile ?? existingLeader?.sessionFile,
-          existingLeaderWindowTarget: existingLeader?.windowTarget,
-          existingLeaderPaneId,
+          ...existingLeaderCollisionDetails(existingTeam),
           currentCwd: ctx.cwd,
           currentPaneId: currentPane.paneId,
         },
@@ -207,11 +226,20 @@ export function executeCreateTeam(
     }
   }
   stateRepository.writeTeamState(state)
-  stateRepository.writeSessionContext(sessionFile, stateRepository.buildSessionContextForTeam(state, TEAM_LEAD))
+  const persistedState = currentPane
+    ? stateRepository.updateTeamState(state.name, latest => {
+        const leader = latest.members[TEAM_LEAD]
+        if (!leader) return
+        leader.paneId = currentPane.paneId
+        leader.windowTarget = currentPane.target
+        leader.updatedAt = Date.now()
+      }) ?? state
+    : state
+  stateRepository.writeSessionContext(sessionFile, stateRepository.buildSessionContextForTeam(persistedState, TEAM_LEAD))
   deps.invalidateStatus(ctx)
   return {
     content: [{ type: 'text' as const, text: `Created team ${teamName}` }],
-    details: { teamName, storageTeamName: state.name, teamId: identity.teamId, projectKey: identity.projectKey },
+    details: { teamName, storageTeamName: persistedState.name, teamId: identity.teamId, projectKey: identity.projectKey },
   }
 }
 

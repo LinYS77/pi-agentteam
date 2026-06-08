@@ -9,6 +9,13 @@ export type TeamIdentity = {
   projectKey: string
   displayName: string
   slug: string
+  legacyName?: string
+}
+
+export type TeamIdentitySource = {
+  name: string
+  identity?: TeamIdentity
+  leaderCwd?: string
 }
 
 export type BuildNewTeamIdentityInput = {
@@ -29,8 +36,10 @@ function normalizeProjectSource(cwd: string): string {
   }
 }
 
-function slugifyNewTeamName(name: string): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-')
+export function slugifyNewTeamName(name: string): string {
+  return name.trim().toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^[._-]+|[._-]+$/g, '')
 }
 
 function isSafeNewTeamSlug(slug: string): boolean {
@@ -58,5 +67,18 @@ export function buildNewTeamIdentity(input: BuildNewTeamIdentityInput): TeamIden
     projectKey,
     displayName,
     slug,
+  }
+}
+
+export function effectiveTeamIdentity(team: TeamIdentitySource): TeamIdentity {
+  if (team.identity) return team.identity
+  const legacyName = team.name
+  const projectSource = team.leaderCwd?.trim() || legacyName
+  return {
+    teamId: `legacy-team-${hashPart(legacyName, 16)}`,
+    projectKey: `legacy-project-${hashPart(projectSource, 16)}`,
+    displayName: legacyName,
+    slug: legacyName,
+    legacyName,
   }
 }

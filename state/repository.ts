@@ -1,4 +1,5 @@
 import { discoverAgentsWithDiagnostics } from '../agents.js'
+import { effectiveTeamIdentity } from '../core/teamIdentity.js'
 import type { EffectiveAgentModelSource } from '../config.js'
 import type {
   MailboxMessage,
@@ -139,7 +140,7 @@ export type RepositoryTeamPanelConfigProjection = {
 export type RepositoryTeamPanelModel = {
   version: TeamState['version']
   name: string
-  identity?: TeamState['identity']
+  identity: NonNullable<TeamState['identity']>
   description?: string
   createdAt: number
   leaderCwd: string
@@ -374,7 +375,7 @@ function toRepositoryTeamPanelModel(team: TeamState): RepositoryTeamPanelModel {
   return {
     version: team.version,
     name: team.name,
-    identity: team.identity,
+    identity: effectiveTeamIdentity(team),
     description: team.description,
     createdAt: team.createdAt,
     leaderCwd: team.leaderCwd,

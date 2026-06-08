@@ -75,10 +75,33 @@ function addScopedFieldsFromTeam(context: SessionTeamContext): SessionTeamContex
   return context
 }
 
+function toRuntimeSessionContext(context: SessionTeamContext): SessionTeamContext {
+  const runtimeContext: SessionTeamContext = {
+    teamName: context.teamName,
+    memberName: context.memberName,
+  }
+  defineScopedContextField(runtimeContext, 'teamId', context.teamId ?? undefined)
+  defineScopedContextField(runtimeContext, 'projectKey', context.projectKey ?? undefined)
+  defineScopedContextField(runtimeContext, 'identityKey', context.identityKey ?? undefined)
+  defineScopedContextField(runtimeContext, 'teamSlug', context.teamSlug ?? undefined)
+  return runtimeContext
+}
+
+function materializeSessionContextForWrite(context: SessionTeamContext): SessionTeamContext {
+  return {
+    teamName: context.teamName,
+    memberName: context.memberName,
+    ...(context.teamId ? { teamId: context.teamId } : {}),
+    ...(context.projectKey ? { projectKey: context.projectKey } : {}),
+    ...(context.identityKey ? { identityKey: context.identityKey } : {}),
+    ...(context.teamSlug ? { teamSlug: context.teamSlug } : {}),
+  }
+}
+
 function readSessionContextFile(filePath: string): SessionTeamContext | null {
   try {
     const parsed = readJsonFile<SessionTeamContext>(filePath)
-    return isReadableSessionContext(parsed) ? addScopedFieldsFromTeam(parsed) : null
+    return isReadableSessionContext(parsed) ? addScopedFieldsFromTeam(toRuntimeSessionContext(parsed)) : null
   } catch {
     return null
   }
@@ -103,7 +126,7 @@ export function writeSessionContext(
   sessionFile: string,
   context: SessionTeamContext,
 ): void {
-  writeJsonFile(getSessionContextPath(sessionFile), context)
+  writeJsonFile(getSessionContextPath(sessionFile), materializeSessionContextForWrite(context))
   invalidateSessionContextCache(sessionFile)
 }
 

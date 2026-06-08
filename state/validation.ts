@@ -214,6 +214,51 @@ function pushInvalidReportStatusAtReport(
   }))
 }
 
+function inspectTeamIdentity(
+  reasons: StateValidationReason[],
+  value: unknown,
+  input: { file: string; path: string; teamName?: unknown },
+): void {
+  if (value === undefined) return
+  if (!isObjectRecord(value)) {
+    reasons.push(reason({ code: 'invalid_team_identity_shape', file: input.file, path: input.path, field: 'identity', value, message: 'Team identity must be an object when present' }))
+    return
+  }
+  for (const field of ['teamId', 'projectKey', 'displayName', 'slug'] as const) {
+    if (typeof value[field] === 'string' && value[field].trim()) continue
+    reasons.push(reason({
+      code: 'invalid_team_identity_field',
+      file: input.file,
+      path: `${input.path}.${field}`,
+      field,
+      value: value[field],
+      message: `Team identity ${field} must be a non-empty string`,
+    }))
+  }
+  if (value.legacyName === undefined) return
+  if (typeof value.legacyName !== 'string' || !value.legacyName.trim()) {
+    reasons.push(reason({
+      code: 'invalid_team_identity_legacy_name',
+      file: input.file,
+      path: `${input.path}.legacyName`,
+      field: 'legacyName',
+      value: value.legacyName,
+      message: 'Team identity legacyName must be a non-empty string when present',
+    }))
+    return
+  }
+  if (typeof input.teamName === 'string' && input.teamName && value.legacyName !== input.teamName) {
+    reasons.push(reason({
+      code: 'invalid_team_identity_legacy_name',
+      file: input.file,
+      path: `${input.path}.legacyName`,
+      field: 'legacyName',
+      value: value.legacyName,
+      message: 'Team identity legacyName must match the legacy storage team name',
+    }))
+  }
+}
+
 function pushInvalidTaskEventType(
   reasons: StateValidationReason[],
   input: { file: string; path: string; field: string; value: unknown },
@@ -413,6 +458,7 @@ export function validatePersistedTeamState(raw: unknown, file = 'team.json'): St
   }
 
   inspectOldLayoutMarkers(reasons, raw, { file, path: '$' })
+  inspectTeamIdentity(reasons, raw.identity, { file, path: '$.identity', teamName: raw.name })
 
   const tasks = raw.tasks
   if (tasks !== undefined && !isObjectRecord(tasks)) {

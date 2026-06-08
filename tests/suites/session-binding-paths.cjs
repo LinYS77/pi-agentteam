@@ -88,7 +88,12 @@ module.exports = {
       assert.deepEqual(result.context, { teamName: 'derive-team', memberName: 'team-lead' })
       assert.equal(result.source, 'derived')
       assert.equal(fs.existsSync(hashedPath), true, 'ensure-derived binding should be written to hash path')
-      assert.deepEqual(JSON.parse(fs.readFileSync(hashedPath, 'utf8')), { teamName: 'derive-team', memberName: 'team-lead' })
+      const persisted = JSON.parse(fs.readFileSync(hashedPath, 'utf8'))
+      assert.equal(persisted.teamName, 'derive-team')
+      assert.equal(persisted.memberName, 'team-lead')
+      assert.equal(typeof persisted.teamId, 'string', 'derived session binding should persist identity-first teamId')
+      assert.equal(typeof persisted.projectKey, 'string', 'derived session binding should persist identity-first projectKey')
+      assert.equal(typeof persisted.identityKey, 'string', 'derived session binding should persist identity-first identityKey')
     })
 
     withHome('delete-team-worker-session-sweep', () => {

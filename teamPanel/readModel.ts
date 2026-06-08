@@ -1,5 +1,5 @@
 import type { OutboxDiagnosticsSummary } from '../app/outboxDiagnostics.js'
-import type { TeamIdentity } from '../core/teamIdentity.js'
+import { effectiveTeamIdentity, type TeamIdentity } from '../core/teamIdentity.js'
 import type { EffectiveAgentModelSource } from '../config.js'
 import type {
   MailboxMessage,
@@ -88,7 +88,7 @@ export type PanelConfigProjection = {
 export type PanelTeamModel = {
   version: TeamState['version']
   name: string
-  identity?: TeamIdentity
+  identity: TeamIdentity
   description?: string
   createdAt: number
   leaderCwd: string
@@ -234,7 +234,7 @@ export function toPanelTeamModel(
   return {
     version: team.version,
     name: team.name,
-    identity: team.identity,
+    identity: effectiveTeamIdentity(team),
     description: team.description,
     createdAt: team.createdAt,
     leaderCwd: team.leaderCwd,

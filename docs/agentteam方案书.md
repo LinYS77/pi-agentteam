@@ -43,10 +43,10 @@ AgentTeam 当前不是一个独立 daemon，也不是 native binary 产品；它
   - 首选 v1 schema：`version`、`agents`、`automation`、`ui`。
   - legacy `agentModels` 仍可读，并给出迁移 warning。
   - spawn 与 config/panel compact surfaces 暴露 effective model source：`v1 | legacy | null | default`。
-- `state/paths.ts` 当前 `sanitizeName()` 逻辑是 trim/lowercase 后把非 `[a-z0-9._-]` 替换为 `-`，没有强制 ASCII letter/digit，也没有 trim separator；中文-only 名称可能落到危险 slug。
+- Team Identity / Name Scope Hardening 已完成 v0.4.13 GitHub-only checkpoint 行为：team slug 会 trim 外层 separator，中文-only/标点-only 名称安全拒绝并提示 ASCII slug/name；legacy `teams/-` 不会被自动删除、重命名、迁移、接管或恢复。
 - `state/fsStore.ts` 当前使用同步文件 I/O、整文件 JSON parse/stringify、`.lock` 文件、atomic rename。
-- `state/teamStore.ts` 仍以 `teams/<sanitizeName(teamName)>/team.json` 为主要路径布局。
-- `state/sessionBinding.ts` 当前 session binding 仍以 `teamName/memberName` 查找和修复。
+- `state/teamStore.ts` 仍以 `teams/<storageKey>/team.json` 为主要路径布局；新 team 带 `teamId/projectKey/displayName/slug` identity metadata，legacy no-identity team 通过 read model 暴露 read-only effective identity。
+- `state/sessionBinding.ts` 当前持久化 identity-first session fields（`teamId/projectKey/identityKey/teamSlug`），并保留 legacy `teamName/memberName` 兼容读取和 fallback。
 - `tmux/client.ts` 当前每次 tmux 调用都通过 `execFileSync` 或 `execFile('tmux')`。
 - `teamPanel/dataSource.ts` 当前 panel load 会读取 team、tasks、leader mailbox/outbox diagnostics；attached/global load 路径还会调用 `prepareTeamForPanel()`，其中包含 `reconcileTeamPanes(team, { force: true })`。
 - `app/taskReportWorkflow.ts` 当前 worker `report_done/report_blocked` 会创建 durable TaskReport 并通知 leader，但 non-leader report 是 `reportOnly`，不会自动 close/block task；leader review 仍是治理边界。
@@ -113,18 +113,21 @@ v0.5.0 的 release 标准：
 
 ### 2.1 Team Identity 重构（P0）
 
-#### 当前问题
+#### v0.4.13 已完成行为
 
-当前 team identity 主要依赖全局 sanitized team name。这个模型已经暴露可靠性和安全问题：
+v0.4.13 已把 Team Identity / Name Scope 的 P0 safety 行为落地为 GitHub-only checkpoint：
 
-- 中文-only team name 可能被归一化为 `-`。
-- legacy `teams/-` 会被误撞。
-- 不同 project/session 中同名 team 可能互相阻塞。
-- active collision error 不能充分说明 existing team 的 cwd/window/pane/session。
+- 新 team name 会先生成 safe ASCII slug，并 trim 外层 `.`、`_`、`-` separator；例如 `---Shared Team---` / `...Shared Team...` 归一化为 `shared-team`。
+- `---`、`!!!`、`。。。`、中文-only 等无法产生安全 ASCII slug 的名称会拒绝，并提示用户提供显式 ASCII slug/name；不会创建、查找、复用或 attach 到 `teams/-`。
+- legacy `teams/-` 与 legacy no-identity teams 只读安全保留：不自动删除、重命名、迁移、接管或恢复；read/list/panel/session lookup 路径不写回 legacy `team.json`。
+- 新 identity 使用 scoped shape：`teamId/projectKey/displayName/slug/legacyName?`。`legacyName?` 只用于 legacy/effective identity 标记，不会出现在普通新 team identity 中。
+- create lookup 以 `projectKey + slug` 为主；不同 project 下同 display/slug 可共存，同 project duplicate/alreadyAttached/collision details 包含 existing `cwd/windowTarget/paneId/sessionFile`。
+- session binding 持久化 identity-first fields：`teamId/projectKey/identityKey/teamSlug`，同时保留 legacy `teamName/memberName` compatibility 与 fallback。
+- repository `/team` read model 与 global panel 对 legacy no-identity teams 暴露 compact/effective identity（display/name、slug/storage key、legacyName marker、stable legacy teamId/projectKey），但不读取 mailbox/report full body，不标记 read/delivered。
 
 #### v0.5.0 目标
 
-v0.5.0 必须从“全局 sanitized name”升级为内部 identity：
+v0.5.0 从“全局 sanitized name”升级为内部 identity：
 
 ```ts
 type TeamIdentity = {
@@ -684,19 +687,21 @@ fixture：
 
 ### 4.2 Team isolation / Chinese sanitizer
 
-修复范围：
+v0.4.13 已完成修复范围：
 
-- slug hardening。
-- scoped identity。
-- legacy compatibility。
-- safer collision copy。
+- slug hardening：separator-wrapped safe name trim 为 safe ASCII slug；中文-only/标点-only 安全拒绝并给 ASCII guidance。
+- legacy safety：legacy `teams/-` 与 no-identity teams 不被误删、误迁移、误重命名、误接管或误恢复。
+- scoped identity：`teamId/projectKey/displayName/slug/legacyName?`，跨 project 同 display/slug 可共存。
+- safer collision copy：same-project duplicate/alreadyAttached/active collision details 显示 existing cwd/windowTarget/paneId/sessionFile。
+- identity-first sessions：持久化 `teamId/projectKey/identityKey/teamSlug`，兼容 legacy `teamName/memberName`。
+- legacy effective identity visibility：read model/global panel 可显示 legacy marker/legacyName/identity fields，read-only 路径不写回 legacy state。
 
 验收：
 
-- 中文-only team name 不变成 `-`。
-- legacy `teams/-` 不被误删、误迁移、误接管。
+- 中文-only team name 不变成 `-`，且不会创建/复用/attach `teams/-`。
+- legacy `teams/-` 不被误删、误迁移、误重命名、误接管或误恢复。
 - 不同 project 的同名 team 不互相阻塞。
-- collision details 显示 cwd/window/pane/session。
+- collision details 显示 cwd/windowTarget/paneId/sessionFile。
 
 ### 4.3 `/team` flicker
 
@@ -844,23 +849,22 @@ v0.4.12 将 Config Bootstrap/Schema P0 拆为 6 个 GitHub-only checkpoint slice
 - config changes future-spawn-only，不改 running workers。
 - repository `/team` panel compact config projection 已接入：exists/schemaVersion/diagnosticCount/effective role model+source；不 dump arbitrary full config，不读取 full mailbox/report body。
 
-### Slice 2 — Team Identity / Name Scope
+### v0.4.13 — Team Identity / Name Scope Hardening（GitHub-only checkpoint prep）
 
-目标：修复 sanitizer/team isolation P0，并建立内部 identity。
+v0.4.13 已完成 Team Identity / Name Scope P0 hardening：
 
-交付：
-
-- `teamId + projectKey + displayName + slug`。
-- session binding 兼容新旧 identity。
-- slug hardening。
-- safer collision error。
-- legacy `teams/-` compatibility。
+- Identity schema：`teamId/projectKey/displayName/slug/legacyName?`；普通新 team 不自动带 `legacyName`，legacy/effective identity 用 `legacyName` 标记旧 storage name。
+- Slug hardening：safe ASCII slug trim 外层 separators；`---Shared Team---`、`...Shared Team...` 归一化为 `shared-team`；`---`、`!!!`、`。。。`、中文-only 安全拒绝并提示 ASCII slug/name。
+- Legacy `teams/-` safety：unsafe create、global panel、attached lookup 都不得读取复用、恢复、接管、删除、重命名或迁移 legacy `teams/-`；legacy no-identity teams 同样保持 byte-for-byte stable。
+- Scoped create/lookup：不同 `projectKey` 下相同 display/slug 可共存；same-project duplicate/alreadyAttached/active conflict details 包含 existing cwd/windowTarget/paneId/sessionFile。
+- Identity-first sessions：session JSON 持久化 `teamId/projectKey/identityKey/teamSlug`，同时保留 `teamName/memberName` 兼容字段与 legacy fallback。
+- Read-model visibility：repository `/team` panel/global panel 对 legacy no-identity teams 计算 read-only effective identity（display/name、slug/storage key、stable legacy teamId/projectKey、legacyName marker），不写回 legacy `team.json`，也不读取 full mailbox/report body 或标记 read/delivered。
 
 验证：
 
-- 中文-only team name 安全拒绝。
-- legacy `teams/-` 不被破坏。
-- 不同 project 同名 team 不互相阻塞。
+- `npm test` 全绿，覆盖 v0.4.13 TeamIdentity characterization safety suite。
+- `npm run typecheck`、`npm run -s check:boundaries`、`git diff --check` 全绿。
+- package version 保持 `0.6.8`；该 checkpoint 只为 GitHub commit/tag/push 准备，不表示 npm publish。
 
 ### Slice 3 — State Store / Read Model
 

@@ -1,4 +1,5 @@
 import type { EffectiveAgentModelSource } from '../config.js'
+import type { TeamIdentity } from '../core/teamIdentity.js'
 import type {
   MailboxMessage,
   PlanRun,
@@ -221,7 +222,7 @@ export type RepositoryTeamPanelConfigProjection = {
 export type RepositoryTeamPanelModel = {
   version: TeamState['version']
   name: string
-  identity?: TeamState['identity']
+  identity: TeamIdentity
   description?: string
   createdAt: number
   leaderCwd: string
