@@ -218,27 +218,48 @@ agentteam intentionally keeps a small fixed role set for predictable permissions
 
 ## ⚙️ Model Configuration
 
-npm/pi install does **not** create runtime config files. To assign models per subagent role, run:
+npm/pi install does **not** create or edit runtime config files. To create, inspect, validate, or preview migration for the local runtime config, run:
 
 ```text
 /team config init
 /team config show
 /team config validate
+/team config migrate --dry-run
 ```
 
-`/team config init` creates `${PI_AGENTTEAM_HOME || ~/.pi/agent/agentteam}/config.json` from the bundled `config.example.json` and refuses to overwrite an existing file. You can also copy `config.example.json` manually:
+`/team config init` creates `${PI_AGENTTEAM_HOME || ~/.pi/agent/agentteam}/config.json` from the bundled `config.example.json` on first run and refuses to overwrite an existing file. Missing config is actionable but safe: `/team config show` reports the path, `Exists: no`, and points users to `/team config init` without implicitly writing anything.
+
+The preferred v1 runtime config schema is:
 
 ```json
 {
-  "agentModels": {
-    "planner": null,
-    "researcher": null,
-    "implementer": null
+  "version": 1,
+  "agents": {
+    "researcher": { "model": null },
+    "planner": { "model": null },
+    "implementer": { "model": null }
+  },
+  "automation": {
+    "mode": "manual",
+    "approvedPlan": {
+      "enabled": true,
+      "maxConsecutiveSteps": 5
+    }
+  },
+  "ui": {
+    "teamPanel": {
+      "refreshMode": "debounced",
+      "minRefreshMs": 250
+    }
   }
 }
 ```
 
-Set a role value to a pi model selector, preferably the fully qualified selector you use in pi (for example `openai/gpt-5.3-codex` or your configured alias). `null`, empty string, or a missing key means use the current default model. Configuration is role-level only (`planner`, `researcher`, `implementer`); per-member overrides and live model switching are intentionally not supported. Spawn output and `/team` member details show the effective launch model (`model: <selector>` or `model: default`). Changes apply only to future teammate spawns/respawns; existing workers keep the model they were launched with. The leader always uses your current session model.
+Set `agents.<role>.model` to a pi model selector, preferably the fully qualified selector you use in pi (for example `openai/gpt-5.3-codex` or your configured alias). `null`, empty string, or a missing key means use the current default model. Legacy `agentModels.<role>` remains readable for compatibility and emits migration guidance; existing v1 `agents.<role>.model` values take precedence over legacy values. Effective model source metadata is reported as `v1`, `legacy`, `null`, or `default`, and spawn output/details include the effective launch model label/source.
+
+`/team config migrate --dry-run` reads the current config and prints the proposed v1 config preview with `version`, `agents`, `automation`, and `ui`. It is dry-run only: it does not write config, overwrite user content, delete legacy `agentModels`, or change file mtime. Invalid or missing config returns an actionable preview/error instead of throwing.
+
+Configuration is role-level only (`planner`, `researcher`, `implementer`); per-member overrides and live model switching are intentionally not supported. Changes apply only to future teammate spawns/respawns; existing workers keep the model they were launched with. The leader always uses your current session model. The `/team` panel exposes only a compact config projection (exists/schema version/diagnostic count/effective role model source) and does not dump arbitrary full config content.
 
 Runtime state is stored under `~/.pi/agent/agentteam/` (`teams/<team>/team.json`, `teams/<team>/inboxes/`, `teams/<team>/outbox.json`, `teams/<team>/runtime.json`, `sessions/`, and `worker-sessions/`). `config.json` lives in the same directory. Set `PI_AGENTTEAM_HOME` for testing or temporary sandboxes; `/team config show` displays the effective path and role models.
 

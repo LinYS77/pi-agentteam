@@ -1,14 +1,27 @@
 {
   "version": 1,
   "agents": {
-    "planner": {
+    "researcher": {
       "model": null
     },
-    "researcher": {
+    "planner": {
       "model": null
     },
     "implementer": {
       "model": null
+    }
+  },
+  "automation": {
+    "mode": "manual",
+    "approvedPlan": {
+      "enabled": true,
+      "maxConsecutiveSteps": 5
+    }
+  },
+  "ui": {
+    "teamPanel": {
+      "refreshMode": "debounced",
+      "minRefreshMs": 250
     }
   }
 }

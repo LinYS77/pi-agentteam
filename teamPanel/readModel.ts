@@ -1,5 +1,6 @@
 import type { OutboxDiagnosticsSummary } from '../app/outboxDiagnostics.js'
 import type { TeamIdentity } from '../core/teamIdentity.js'
+import type { EffectiveAgentModelSource } from '../config.js'
 import type {
   MailboxMessage,
   TeamMember,
@@ -70,6 +71,20 @@ export type PanelTaskModel = Pick<TeamTask,
   watchdog?: ReportWatchdogTaskSummary
 }
 
+export type PanelConfigRoleModel = {
+  role: string
+  modelLabel: string
+  modelSource: EffectiveAgentModelSource
+}
+
+export type PanelConfigProjection = {
+  exists: boolean
+  path?: string
+  schemaVersion?: number
+  diagnosticCount: number
+  roleModels: PanelConfigRoleModel[]
+}
+
 export type PanelTeamModel = {
   version: TeamState['version']
   name: string
@@ -80,6 +95,7 @@ export type PanelTeamModel = {
   leaderSessionFile?: string
   members: Record<string, PanelMemberModel>
   tasks: Record<string, PanelTaskModel>
+  config?: PanelConfigProjection
   planRuns: CompactPlanRunPanelProjection[]
   nextTaskSeq: number
   revision?: number

@@ -80,9 +80,16 @@ module.exports = {
     assert.deepEqual(exampleConfig, {
       version: 1,
       agents: {
-        planner: { model: null },
         researcher: { model: null },
+        planner: { model: null },
         implementer: { model: null },
+      },
+      automation: {
+        mode: 'manual',
+        approvedPlan: { enabled: true, maxConsecutiveSteps: 5 },
+      },
+      ui: {
+        teamPanel: { refreshMode: 'debounced', minRefreshMs: 250 },
       },
     })
     assert.equal(files.includes('*.ts'), false, 'package files should not expose broad top-level *.ts surface')

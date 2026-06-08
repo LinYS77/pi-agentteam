@@ -25,20 +25,20 @@ function effectiveModelLabel(model?: string): string {
   return model && model.trim() ? model.trim() : 'default'
 }
 
-function appendModelAndDiagnostics(text: string, modelLabel: string, diagnostics: ReturnType<typeof summarizeConfigDiagnostics>['actionable']): string {
-  const parts = [`${text} [model: ${modelLabel}]`]
+function appendModelAndDiagnostics(text: string, modelLabel: string, modelSource: SpawnResult['modelSource'], diagnostics: ReturnType<typeof summarizeConfigDiagnostics>['actionable']): string {
+  const parts = [`${text} [model: ${modelLabel}] [modelSource: ${modelSource ?? 'default'}]`]
   if (diagnostics.length > 0) {
     parts.push(`Config diagnostics: ${diagnostics.map(formatConfigDiagnostic).join('; ')}`)
   }
   return parts.join('\n')
 }
 
-function spawnResultPatch(roleAgentModel: string | undefined, configDiagnostics: ReturnType<typeof summarizeConfigDiagnostics>['actionable']): Pick<SpawnResult, 'model' | 'modelLabel' | 'modelSource' | 'configDiagnostics'> {
+function spawnResultPatch(roleAgentModel: string | undefined, modelSource: SpawnResult['modelSource'], configDiagnostics: ReturnType<typeof summarizeConfigDiagnostics>['actionable']): Pick<SpawnResult, 'model' | 'modelLabel' | 'modelSource' | 'configDiagnostics'> {
   const modelLabel = effectiveModelLabel(roleAgentModel)
   return {
     model: roleAgentModel,
     modelLabel,
-    modelSource: roleAgentModel ? 'configured' : 'default',
+    modelSource: modelSource ?? (roleAgentModel ? 'v1' : 'default'),
     configDiagnostics,
   }
 }
@@ -198,20 +198,22 @@ function failedSpawnResult(input: {
   text: string
   roleAgentModel: string | undefined
   modelLabel: string
+  modelSource: SpawnResult['modelSource']
   configDiagnostics: ReturnType<typeof summarizeConfigDiagnostics>['actionable']
   workerName: string
   sessionFile: string
   paneId?: string
   cleanup: SpawnRollbackCleanup
 }): SpawnResult {
+  const modelResult = spawnResultPatch(input.roleAgentModel, input.modelSource, input.configDiagnostics)
   return {
     ok: false,
-    text: appendModelAndDiagnostics(`${input.text}. Cleanup: ${formatSpawnRollbackCleanup(input.cleanup)}`, input.modelLabel, input.configDiagnostics),
+    text: appendModelAndDiagnostics(`${input.text}. Cleanup: ${formatSpawnRollbackCleanup(input.cleanup)}`, input.modelLabel, modelResult.modelSource, input.configDiagnostics),
     memberName: input.workerName,
     sessionFile: input.sessionFile,
     paneId: input.paneId,
     rollbackCleanup: input.cleanup,
-    ...spawnResultPatch(input.roleAgentModel, input.configDiagnostics),
+    ...modelResult,
   }
 }
 
@@ -241,8 +243,8 @@ export async function spawnWorkerMember(
   const { normalizedRole, roleAgent } = roleResolution
   const configDiagnosticSummary = summarizeConfigDiagnostics(roleResolution.configDiagnostics)
   const configDiagnostics = configDiagnosticSummary.actionable
-  const modelLabel = effectiveModelLabel(roleAgent.model)
-  const modelResult = spawnResultPatch(roleAgent.model, configDiagnostics)
+  const modelLabel = roleAgent.modelLabel ?? effectiveModelLabel(roleAgent.model)
+  const modelResult = spawnResultPatch(roleAgent.model, roleAgent.modelSource, configDiagnostics)
   const leader = team.members[TEAM_LEAD]
   deps.healMemberPaneBinding(leader)
   const { initialTask: initialWake, bootPrompt: deferredBootPrompt } = deps.classifySpawnTask(assignment.task)
@@ -300,6 +302,7 @@ export async function spawnWorkerMember(
       text: `Failed to create tmux pane for ${workerName}: ${message}`,
       roleAgentModel: roleAgent.model,
       modelLabel,
+      modelSource: modelResult.modelSource,
       configDiagnostics,
       workerName,
       sessionFile,
@@ -328,6 +331,7 @@ export async function spawnWorkerMember(
       text: `Failed to keep tmux pane alive for ${workerName}: Teammate tmux pane disappeared immediately after creation`,
       roleAgentModel: roleAgent.model,
       modelLabel,
+      modelSource: modelResult.modelSource,
       configDiagnostics,
       workerName,
       sessionFile,
@@ -356,6 +360,7 @@ export async function spawnWorkerMember(
       text: `Failed to start visible teammate session for ${workerName}: Timed out waiting for teammate pi process to start in tmux pane`,
       roleAgentModel: roleAgent.model,
       modelLabel,
+      modelSource: modelResult.modelSource,
       configDiagnostics,
       workerName,
       sessionFile,
@@ -418,7 +423,7 @@ export async function spawnWorkerMember(
       : `Created idle teammate ${workerName} (${normalizedRole}) in pane ${pane.paneId}; bridge not ready yet; no initial task supplied`
   return {
     ok: true,
-    text: appendModelAndDiagnostics(text, modelLabel, configDiagnostics),
+    text: appendModelAndDiagnostics(text, modelLabel, modelResult.modelSource, configDiagnostics),
     memberName: workerName,
     sessionFile,
     paneId: pane.paneId,

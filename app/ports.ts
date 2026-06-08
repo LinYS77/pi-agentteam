@@ -1,3 +1,4 @@
+import type { EffectiveAgentModelSource } from '../config.js'
 import type {
   MailboxMessage,
   PlanRun,
@@ -203,6 +204,20 @@ export type RepositoryTeamPanelTask = Pick<TeamTask,
   watchdog?: ReportWatchdogTaskSummary
 }
 
+export type RepositoryTeamPanelConfigRoleModel = {
+  role: string
+  modelLabel: string
+  modelSource: EffectiveAgentModelSource
+}
+
+export type RepositoryTeamPanelConfigProjection = {
+  exists: boolean
+  path?: string
+  schemaVersion?: number
+  diagnosticCount: number
+  roleModels: RepositoryTeamPanelConfigRoleModel[]
+}
+
 export type RepositoryTeamPanelModel = {
   version: TeamState['version']
   name: string
@@ -213,6 +228,7 @@ export type RepositoryTeamPanelModel = {
   leaderSessionFile?: string
   members: Record<string, RepositoryTeamPanelMember>
   tasks: Record<string, RepositoryTeamPanelTask>
+  config: RepositoryTeamPanelConfigProjection
   planRuns: CompactPlanRunPanelProjection[]
   nextTaskSeq: number
   revision?: number

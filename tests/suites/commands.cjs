@@ -38,9 +38,16 @@ module.exports = {
       assert.deepEqual(initialized, {
         version: 1,
         agents: {
-          planner: { model: null },
           researcher: { model: null },
+          planner: { model: null },
           implementer: { model: null },
+        },
+        automation: {
+          mode: 'manual',
+          approvedPlan: { enabled: true, maxConsecutiveSteps: 5 },
+        },
+        ui: {
+          teamPanel: { refreshMode: 'debounced', minRefreshMs: 250 },
         },
       })
       assert.ok(env.notifications.at(-1).message.includes(`Created ${configPath}`))
@@ -71,6 +78,23 @@ module.exports = {
       assert.ok(validateMessage.includes('agentModels_unknown_role'), 'config validate should report unknown role warnings')
       assert.ok(validateMessage.includes('agentModels_invalid_value'), 'config validate should report invalid value warnings')
       assert.ok(validateMessage.includes('future spawns/respawns'), 'config validate should remind spawn-time-only behavior')
+
+      fs.writeFileSync(configPath, JSON.stringify({
+        version: 1,
+        agents: { planner: { model: 'v1-planner-model' } },
+        agentModels: { planner: 'legacy-planner-ignored', researcher: 'legacy-researcher-model' },
+      }), 'utf8')
+      const beforeMigrateBytes = fs.readFileSync(configPath, 'utf8')
+      const beforeMigrateMtimeMs = fs.statSync(configPath).mtimeMs
+      await command('team').handler('config migrate --dry-run', leaderCtx)
+      const migrateMessage = env.notifications.at(-1).message
+      assert.match(migrateMessage, /migrate/i, 'config migrate dry-run should be recognized')
+      assert.match(migrateMessage, /dry-run|dry run/i, 'config migrate dry-run should describe dry-run mode')
+      assert.match(migrateMessage, /Proposed v1 config|would be written|version/i, 'config migrate dry-run should show proposed v1 config')
+      assert.match(migrateMessage, /v1-planner-model/, 'config migrate dry-run should preserve existing v1 role model')
+      assert.match(migrateMessage, /legacy-researcher-model/, 'config migrate dry-run should migrate missing v1 role from legacy agentModels')
+      assert.equal(fs.readFileSync(configPath, 'utf8'), beforeMigrateBytes, 'config migrate dry-run must not write config bytes')
+      assert.equal(fs.statSync(configPath).mtimeMs, beforeMigrateMtimeMs, 'config migrate dry-run must not change config mtime')
 
       fs.writeFileSync(configPath, '{ invalid json', 'utf8')
       await command('team').handler('config validate', leaderCtx)

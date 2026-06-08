@@ -110,9 +110,16 @@ export function discoverAgents() {
       assert.deepEqual(config.readBundledConfigExample(), {
         version: 1,
         agents: {
-          planner: { model: null },
           researcher: { model: null },
+          planner: { model: null },
           implementer: { model: null },
+        },
+        automation: {
+          mode: 'manual',
+          approvedPlan: { enabled: true, maxConsecutiveSteps: 5 },
+        },
+        ui: {
+          teamPanel: { refreshMode: 'debounced', minRefreshMs: 250 },
         },
       }, 'real ESM import should load bundled v1 config example via import.meta.url')
     } finally {

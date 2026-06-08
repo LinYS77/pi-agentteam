@@ -1,3 +1,5 @@
+import { discoverAgentsWithDiagnostics } from '../agents.js'
+import type { EffectiveAgentModelSource } from '../config.js'
 import type {
   MailboxMessage,
   PlanRun,
@@ -120,6 +122,20 @@ export type RepositoryTeamPanelTask = Pick<TeamTask,
   watchdog?: ReportWatchdogTaskSummary
 }
 
+export type RepositoryTeamPanelConfigRoleModel = {
+  role: string
+  modelLabel: string
+  modelSource: EffectiveAgentModelSource
+}
+
+export type RepositoryTeamPanelConfigProjection = {
+  exists: boolean
+  path?: string
+  schemaVersion?: number
+  diagnosticCount: number
+  roleModels: RepositoryTeamPanelConfigRoleModel[]
+}
+
 export type RepositoryTeamPanelModel = {
   version: TeamState['version']
   name: string
@@ -130,6 +146,7 @@ export type RepositoryTeamPanelModel = {
   leaderSessionFile?: string
   members: Record<string, RepositoryTeamPanelMember>
   tasks: Record<string, RepositoryTeamPanelTask>
+  config: RepositoryTeamPanelConfigProjection
   planRuns: CompactPlanRunPanelProjection[]
   nextTaskSeq: number
   revision?: number
@@ -296,6 +313,21 @@ function toRepositoryTeamPanelTask(
   }
 }
 
+function buildRepositoryTeamPanelConfigProjection(): RepositoryTeamPanelConfigProjection {
+  const discovery = discoverAgentsWithDiagnostics()
+  return {
+    exists: discovery.configExists,
+    path: discovery.configPath,
+    schemaVersion: discovery.config.version,
+    diagnosticCount: discovery.diagnostics.length,
+    roleModels: discovery.agents.map(agent => ({
+      role: agent.name,
+      modelLabel: agent.modelLabel ?? (agent.model && agent.model.trim() ? agent.model.trim() : 'default'),
+      modelSource: agent.modelSource ?? 'default',
+    })),
+  }
+}
+
 export {
   appendTaskEvent,
   appendTaskReport,
@@ -353,6 +385,7 @@ function toRepositoryTeamPanelModel(team: TeamState): RepositoryTeamPanelModel {
     tasks: Object.fromEntries(
       Object.entries(team.tasks).map(([taskId, task]) => [taskId, toRepositoryTeamPanelTask(team, task, watchdogByTaskId)]),
     ),
+    config: buildRepositoryTeamPanelConfigProjection(),
     planRuns: compactPlanRunPanelProjection(team),
     nextTaskSeq: team.nextTaskSeq,
     revision: team.revision,

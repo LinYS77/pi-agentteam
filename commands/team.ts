@@ -86,9 +86,9 @@ async function handlePanelResult(
 
 export function registerTeamCommands(pi: ExtensionAPI, deps: CommandHandlerDeps): void {
   pi.registerCommand('team', {
-    description: 'Open the agentteam console. Use /team config init|show|validate for subagent model config.',
+    description: 'Open the agentteam console. Use /team config init|show|validate|migrate --dry-run for subagent model config.',
     getArgumentCompletions: (prefix: string) => {
-      const options = ['config init', 'config show', 'config validate']
+      const options = ['config init', 'config show', 'config validate', 'config migrate --dry-run']
       const filtered = options.filter(option => option.startsWith(prefix.trimStart()))
       return filtered.length > 0 ? filtered.map(value => ({ value, label: value })) : null
     },

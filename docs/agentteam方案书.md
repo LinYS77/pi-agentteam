@@ -39,11 +39,10 @@ AgentTeam 当前不是一个独立 daemon，也不是 native binary 产品；它
 
 当前代码中已经存在若干关键 seam，但还不够稳定：
 
-- `config.ts` 当前主要支持 legacy `agentModels`：
-  - `researcher`
-  - `planner`
-  - `implementer`
-  - schema 没有 version 字段。
+- `config.ts` 已完成 v0.4.12 Config Bootstrap & Effective Runtime Config Hardening：
+  - 首选 v1 schema：`version`、`agents`、`automation`、`ui`。
+  - legacy `agentModels` 仍可读，并给出迁移 warning。
+  - spawn 与 config/panel compact surfaces 暴露 effective model source：`v1 | legacy | null | default`。
 - `state/paths.ts` 当前 `sanitizeName()` 逻辑是 trim/lowercase 后把非 `[a-z0-9._-]` 替换为 `-`，没有强制 ASCII letter/digit，也没有 trim separator；中文-only 名称可能落到危险 slug。
 - `state/fsStore.ts` 当前使用同步文件 I/O、整文件 JSON parse/stringify、`.lock` 文件、atomic rename。
 - `state/teamStore.ts` 仍以 `teams/<sanitizeName(teamName)>/team.json` 为主要路径布局。
@@ -442,9 +441,9 @@ teamPanel/layout.ts
 
 ### 2.6 Config Bootstrap / Schema 重构（P0）
 
-#### 当前问题
+#### 已解决的历史问题
 
-当前配置仍是 legacy `agentModels` 形态：
+v0.4.12 之前，runtime config 主要是 legacy `agentModels` 形态：
 
 ```json
 {
@@ -456,14 +455,16 @@ teamPanel/layout.ts
 }
 ```
 
-不足：
+历史不足：
 
 - 没有 version。
 - 结构只覆盖 model，不方便承载 automation/ui/identity 等配置。
 - fresh runtime 缺少 first-run bootstrap 策略。
 - npm install/postinstall 不知道真实 `PI_AGENTTEAM_HOME`、pi runtime 和 workspace，不适合写用户 runtime state。
 
-#### v0.5.0 目标 schema
+#### v0.4.12 已完成行为 / v0.5.0 目标 schema
+
+v0.4.12 已把 Config Bootstrap / Schema 重构 P0 的 runtime-facing 行为落地为 v1 schema：
 
 ```json
 {
@@ -489,14 +490,16 @@ teamPanel/layout.ts
 }
 ```
 
-策略：
+已完成策略：
 
-- first-run non-overwrite bootstrap。
-- 不用 npm postinstall 写 runtime state。
-- legacy `agentModels` 可读。
-- validate 显示 legacy warning、unknown role、invalid selector、unsupported deliveryMode。
-- `/team config show|validate|migrate` 显示 effective model 和迁移建议。
-- 配置变更只影响未来 spawn/respawn，不偷偷改变已运行 worker。
+- first-run missing config UX：`/team config show` 显示 config path、`Exists: no` 和 `/team config init` 引导，但不隐式写文件。
+- `/team config init` 使用 bundled `config.example.json` 创建完整 v1 config，且 non-overwrite，已有用户 config byte-for-byte 保留。
+- npm/pi install 与 npm lifecycle 不写 runtime state；真实 runtime config 只在用户显式 init 或手动编辑时出现。
+- legacy `agentModels` 可读，并输出 legacy/migration warning；unknown role、invalid shape/value、unsupported `deliveryMode` 继续 compact/actionable diagnostics。
+- `agents.<role>.model` 是主 schema；已有 v1 值优先于 legacy；effective model source metadata 为 `v1 | legacy | null | default`，spawn output/details 和 config surfaces 可见。
+- `/team config show|validate|init|migrate --dry-run` 已实现；`migrate --dry-run` 生成 proposed v1 preview（`version`/`agents`/`automation`/`ui`），不写文件、不覆盖、不删除 legacy `agentModels`、不改 mtime。
+- 配置变更是 future-spawn-only，只影响未来 spawn/respawn，不偷偷改变 running workers。
+- repository `/team` panel read model 暴露 compact config projection：`exists`、可选 path、`schemaVersion`、`diagnosticCount`、effective role model/source；不 dump raw/full config，不读取 mailbox/report full body。
 
 #### 主要涉及区域
 
@@ -507,16 +510,19 @@ commands/config.ts
 agents.ts
 tools/workerRole.ts
 tools/workerSpawnService.ts
+state/repository.ts
+teamPanel/readModel.ts
 README.md
 ```
 
 #### 验收标准
 
-- clean `PI_AGENTTEAM_HOME` 首次加载后，config 缺失不再让用户迷路。
-- 要么自动创建默认 config，要么明确一次性提示并支持 init。
-- `agentModels` legacy 可读。
-- `agents.<role>.model` 是主 schema。
-- spawn researcher/planner/implementer 时使用 effective model，并在结果和 `/team` 中可见。
+- clean `PI_AGENTTEAM_HOME` 首次加载后，config 缺失不再让用户迷路，且不会隐式创建 runtime config。
+- `/team config init` 支持 explicit first-run bootstrap，并拒绝覆盖已有 config。
+- `agentModels` legacy 可读并提示迁移；`agents.<role>.model` 是主 schema 且优先级高于 legacy。
+- spawn researcher/planner/implementer 时使用 effective model，并在结果/details 中显示 `modelLabel` 与 `modelSource`。
+- `/team config migrate --dry-run` 只预览 proposed v1 schema，不写文件、不改 mtime、不覆盖用户配置。
+- `/team` read model 只暴露 compact config projection，不泄漏 arbitrary full config 或 mailbox/report full bodies。
 
 ---
 
@@ -660,17 +666,21 @@ fixture：
 
 修复范围：
 
-- versioned config schema。
-- first-run non-overwrite bootstrap。
-- legacy `agentModels` compatibility。
-- `/team config show|validate|migrate` diagnostics。
+- versioned v1 config schema（`version`、`agents`、`automation`、`ui`）。
+- first-run missing config UX 与 explicit non-overwrite bootstrap。
+- legacy `agentModels` compatibility 与 migration warning。
+- `/team config show|validate|init|migrate --dry-run` diagnostics/preview。
+- effective model source metadata：`v1 | legacy | null | default`。
+- future-spawn-only config behavior 与 `/team` compact config projection。
 
 验收：
 
-- clean `PI_AGENTTEAM_HOME` 首次加载后 config 缺失不再让用户迷路。
+- clean `PI_AGENTTEAM_HOME` 首次加载后 config 缺失不再让用户迷路，也不隐式写 runtime config。
 - `agentModels` legacy 可读，并提示迁移。
-- `agents.<role>.model` 是主 schema。
-- validate 能报 unknown role、invalid shape、unsupported deliveryMode。
+- `agents.<role>.model` 是主 schema，且优先于 legacy。
+- validate 能报 unknown role、invalid shape/value、unsupported deliveryMode。
+- migrate dry-run 可预览完整 proposed v1 config，且 no-write/no-overwrite/no-mtime-change。
+- `/team` panel 只显示 compact config status/source summary，不 dump full config。
 
 ### 4.2 Team isolation / Chinese sanitizer
 
@@ -814,13 +824,25 @@ v0.5.0 不做：
 - `agents.<role>.model` 主结构。
 - legacy `agentModels` read compatibility。
 - first-run non-overwrite bootstrap。
-- `/team config show|validate|migrate`。
+- `/team config show|validate|init|migrate --dry-run`。
 
 验证：
 
 - clean runtime 可获得默认配置或明确 bootstrap。
 - spawn 使用 effective model。
 - legacy config 有 warning，但仍可工作。
+
+### v0.4.12 — Config Bootstrap & Effective Runtime Config Hardening（已完成）
+
+v0.4.12 将 Config Bootstrap/Schema P0 拆为 6 个 GitHub-only checkpoint slice，并已完成：
+
+- 完整 v1 schema：`version`、`agents`、`automation`、`ui`；`config.example.json` 和 `createDefaultAgentConfig()` 对齐。
+- `/team config init` 首次创建 v1 config，已有 config 时拒绝覆盖；missing config 的 `/team config show` 给出 path/exists/init 引导且不写文件。
+- legacy `agentModels` 兼容读取并给出 migration warning；v1 `agents.<role>.model` 优先于 legacy。
+- effective model source metadata：`v1 | legacy | null | default`，spawn output/details、config show 和 panel compact projection 可见。
+- `/team config show|validate|init|migrate --dry-run` 可用；`migrate --dry-run` 输出 proposed v1 preview，且 no-write/no-overwrite/no-mtime-change。
+- config changes future-spawn-only，不改 running workers。
+- repository `/team` panel compact config projection 已接入：exists/schemaVersion/diagnosticCount/effective role model+source；不 dump arbitrary full config，不读取 full mailbox/report body。
 
 ### Slice 2 — Team Identity / Name Scope
 
@@ -1005,6 +1027,7 @@ clean PI_AGENTTEAM_HOME
 first-run config bootstrap
 /team config show
 /team config validate
+/team config migrate --dry-run
 create ASCII team
 Chinese-only team name rejected safely
 legacy teams/- not deleted or recovered accidentally

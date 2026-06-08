@@ -192,7 +192,7 @@ module.exports = {
     helpers.assertContains(res.content[0].text, '[model: 077-glm-5.1]')
     assert.equal(res.details.model, '077-glm-5.1')
     assert.equal(res.details.modelLabel, '077-glm-5.1')
-    assert.equal(res.details.modelSource, 'configured')
+    assert.equal(res.details.modelSource, 'legacy')
 
     res = await tool('agentteam_spawn').execute('spawn-2', {
       name: 'Plan One',
@@ -216,7 +216,7 @@ module.exports = {
     helpers.assertContains(res.content[0].text, '[model: 077-gpt-5.4]')
     assert.equal(res.details.model, '077-gpt-5.4')
     assert.equal(res.details.modelLabel, '077-gpt-5.4')
-    assert.equal(res.details.modelSource, 'configured')
+    assert.equal(res.details.modelSource, 'legacy')
 
     const originalWriteTeamState = modules.state.writeTeamState
     let duplicateSpawnWrites = 0

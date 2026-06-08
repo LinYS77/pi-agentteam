@@ -60,6 +60,13 @@ module.exports = {
       for (const role of ['planner', 'researcher', 'implementer']) {
         assert.deepEqual(config.agents[role], { model: null }, `${label} should default ${role} model through agents.<role>.model`)
       }
+      assert.deepEqual(config.automation, {
+        mode: 'manual',
+        approvedPlan: { enabled: true, maxConsecutiveSteps: 5 },
+      }, `${label} should include manual approved-plan automation defaults`)
+      assert.deepEqual(config.ui, {
+        teamPanel: { refreshMode: 'debounced', minRefreshMs: 250 },
+      }, `${label} should include debounced team panel UI defaults`)
       assert.equal(Object.hasOwn(config, 'agentModels'), false, `${label} should not write legacy-only agentModels`)
     }
 
@@ -217,6 +224,76 @@ module.exports = {
       assert.equal(fs.readFileSync(configPath, 'utf8'), before, 'config init must never overwrite an existing config')
     })
 
+    withHome('config-migrate-dry-run-preview-no-write', home => {
+      const configPath = path.join(home, 'config.json')
+      writeConfig(home, `${JSON.stringify({
+        version: 1,
+        agents: {
+          researcher: { model: 'v1-researcher-model' },
+          planner: { model: null },
+        },
+        agentModels: {
+          researcher: 'legacy-researcher-ignored',
+          planner: 'legacy-planner-ignored',
+          implementer: 'legacy-implementer-model',
+        },
+        automation: {
+          mode: 'manual',
+          approvedPlan: { enabled: false, maxConsecutiveSteps: 7 },
+        },
+        ui: {
+          teamPanel: { refreshMode: 'debounced', minRefreshMs: 500 },
+        },
+      }, null, 2)}\n`)
+      const beforeBytes = fs.readFileSync(configPath, 'utf8')
+      const beforeMtimeMs = fs.statSync(configPath).mtimeMs
+      const preview = configModule.buildProposedV1AgentConfig({ knownRoles: ['planner', 'researcher', 'implementer'] })
+      assert.equal(preview.proposed.version, 1)
+      assert.deepEqual(preview.proposed.agents.researcher, { model: 'v1-researcher-model' }, 'v1 model should beat legacy during dry-run preview')
+      assert.deepEqual(preview.proposed.agents.planner, { model: null }, 'v1 null should beat legacy during dry-run preview')
+      assert.deepEqual(preview.proposed.agents.implementer, { model: 'legacy-implementer-model' }, 'non-empty legacy model should migrate into missing v1 role')
+      assert.deepEqual(preview.proposed.automation, { mode: 'manual', approvedPlan: { enabled: false, maxConsecutiveSteps: 7 } })
+      assert.deepEqual(preview.proposed.ui, { teamPanel: { refreshMode: 'debounced', minRefreshMs: 500 } })
+      assert.equal(Object.hasOwn(preview.proposed, 'agentModels'), false, 'dry-run proposed v1 config should not include legacy agentModels')
+      assert.equal(fs.readFileSync(configPath, 'utf8'), beforeBytes, 'dry-run preview helper must not write config bytes')
+      assert.equal(fs.statSync(configPath).mtimeMs, beforeMtimeMs, 'dry-run preview helper must not change mtime')
+
+      const text = commandConfigModule.buildConfigMigrateDryRunText().text
+      assert.match(text, /migrate/i)
+      assert.match(text, /dry-run|dry run/i)
+      assert.match(text, /Proposed v1 config|would be written|version/i)
+      assert.match(text, /agents/i)
+      assert.match(text, /automation/i)
+      assert.match(text, /teamPanel/i)
+      assert.equal(fs.readFileSync(configPath, 'utf8'), beforeBytes, 'dry-run command text must not write config bytes')
+      assert.equal(fs.statSync(configPath).mtimeMs, beforeMtimeMs, 'dry-run command text must not change mtime')
+    })
+
+    withHome('config-migrate-dry-run-invalid-json-actionable', home => {
+      const configPath = path.join(home, 'config.json')
+      writeConfig(home, '{ invalid json')
+      const beforeBytes = fs.readFileSync(configPath, 'utf8')
+      const beforeMtimeMs = fs.statSync(configPath).mtimeMs
+      const preview = commandConfigModule.buildConfigMigrateDryRunText()
+      assert.equal(preview.level, 'error')
+      assert.match(preview.text, /config_invalid_json|Failed to parse/i)
+      assert.match(preview.text, /dry-run|no file was written|Fix the JSON/i)
+      assert.match(preview.text, /version/i)
+      assert.equal(fs.readFileSync(configPath, 'utf8'), beforeBytes, 'invalid dry-run must not write config bytes')
+      assert.equal(fs.statSync(configPath).mtimeMs, beforeMtimeMs, 'invalid dry-run must not change mtime')
+    })
+
+    withHome('config-migrate-dry-run-missing-actionable', home => {
+      const configPath = path.join(home, 'config.json')
+      const preview = commandConfigModule.buildConfigMigrateDryRunText()
+      assert.equal(preview.level, 'info')
+      assert.match(preview.text, /Exists: no/i)
+      assert.match(preview.text, /default v1 config|config init|proposed/i)
+      assert.match(preview.text, /automation/i)
+      assert.match(preview.text, /teamPanel/i)
+      assert.equal(fs.existsSync(configPath), false, 'missing dry-run must not create config.json')
+    })
+
     await withHome('spawn-invalid-config-diagnostics', async home => {
       writeConfig(home, JSON.stringify({ agentModels: { ghost: 'x', researcher: 123 } }))
       const ctx = env.helpers.createCtx('/tmp/config-spawn-project', '/tmp/config-spawn-leader.jsonl', env.notifications)
@@ -271,7 +348,7 @@ module.exports = {
       assert.ok(spawnRes.content[0].text.includes('[model: default]'), 'default model spawn should show default')
       assert.equal(spawnRes.details.model, undefined)
       assert.equal(spawnRes.details.modelLabel, 'default')
-      assert.equal(spawnRes.details.modelSource, 'default')
+      assert.equal(spawnRes.details.modelSource, 'null')
       env.patches.livePanes.delete(spawnRes.details.paneId)
     })
 

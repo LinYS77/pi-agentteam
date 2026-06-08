@@ -2,18 +2,21 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseFrontmatter } from '@earendil-works/pi-coding-agent'
-import { loadAgentConfig } from './config.js'
-import type { AgentTeamConfig, AgentTeamConfigDiagnostic } from './config.js'
+import { loadAgentConfig, resolveEffectiveAgentModel } from './config.js'
+import type { AgentTeamConfig, AgentTeamConfigDiagnostic, EffectiveAgentModel } from './config.js'
 
 export type AgentDefinition = {
   name: string
   description: string
   tools?: string[]
   model?: string
+  modelLabel?: string
+  modelSource?: EffectiveAgentModel['source']
+  effectiveModel?: EffectiveAgentModel
   systemPrompt: string
 }
 
-export type { AgentTeamConfig, AgentTeamConfigDiagnostic }
+export type { AgentTeamConfig, AgentTeamConfigDiagnostic, EffectiveAgentModel }
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -37,12 +40,14 @@ function applyModelOverrides(
   agents: AgentDefinition[],
   config: AgentTeamConfig,
 ): AgentDefinition[] {
-  const modelMap = config.agentModels ?? {}
   return agents.map(agent => {
-    const override = modelMap[agent.name]
+    const effectiveModel = resolveEffectiveAgentModel(agent.name, config)
     return {
       ...agent,
-      model: typeof override === 'string' && override.length > 0 ? override : undefined,
+      model: effectiveModel.model,
+      modelLabel: effectiveModel.modelLabel,
+      modelSource: effectiveModel.source,
+      effectiveModel,
     }
   })
 }

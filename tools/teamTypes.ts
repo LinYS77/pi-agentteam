@@ -1,4 +1,4 @@
-import type { AgentTeamConfigDiagnostic } from '../config.js'
+import type { AgentTeamConfigDiagnostic, EffectiveAgentModelSource } from '../config.js'
 
 export type SpawnRollbackCleanup = {
   memberRemoved: boolean
@@ -28,7 +28,7 @@ export type SpawnResult = {
   paneId?: string
   model?: string
   modelLabel?: string
-  modelSource?: 'configured' | 'default'
+  modelSource?: EffectiveAgentModelSource
   configDiagnostics?: AgentTeamConfigDiagnostic[]
   rollbackCleanup?: SpawnRollbackCleanup
   bridgeReady?: boolean
