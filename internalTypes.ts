@@ -156,6 +156,7 @@ export type PlanRunPauseReason =
   | 'watchdog'
   | 'waiting_for_report'
   | 'leader_paused'
+  | 'validation_failed'
 
 export type PlanRunStep = {
   id: string
@@ -193,6 +194,7 @@ export type PlanRunEventType =
   | 'approved'
   | 'advanced'
   | 'step_task_created'
+  | 'step_accepted'
   | 'waiting_review'
   | 'paused'
   | 'resumed'

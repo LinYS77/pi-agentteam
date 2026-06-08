@@ -1,5 +1,5 @@
 import type { PlanRunAction } from '../core/planRunActions.js'
-import type { TeamState } from '../internalTypes.js'
+import type { PlanRunPauseReason, TeamState } from '../internalTypes.js'
 
 export type PlanRunStepInput = {
   title?: string
@@ -12,6 +12,8 @@ export type PlanRunInput = {
   sourceReportId?: string
   planRunId?: string
   confirmApproved?: boolean
+  pauseReason?: PlanRunPauseReason | string
+  dryRun?: boolean
   steps?: PlanRunStepInput[]
 }
 

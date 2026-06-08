@@ -1,6 +1,7 @@
 import type { MessagePolicyIntent } from '../core/messagePolicy.js'
 import type { MessageType, TaskReportType } from '../core/publicModel.js'
 import type { MailboxMessage, TeamMessagePriority, TeamMessageWakeHint, TeamState } from '../internalTypes.js'
+import type { ObservedPlanRunQuestionPause } from './planRunMessageObserver.js'
 import type { OutboxRunResult } from './effectRunner.js'
 
 export type MessageAttentionPolicy = import('../core/messagePolicy.js').MessagePolicyDecision
@@ -115,6 +116,7 @@ export type SendMessageApplicationResult = {
     sideEffectWarnings?: MessageSideEffectWarning[]
     outboxEffects?: MessageOutboxRecord[]
     outboxRun?: OutboxRunResult
+    planRunQuestionPause?: ObservedPlanRunQuestionPause
   }
   statusInvalidationRequested?: boolean
 }
@@ -163,4 +165,5 @@ export type SendMessagePlanningState = {
   sideEffectWarnings: MessageSideEffectWarning[]
   outboxEffects: MessageOutboxRecord[]
   outboxRun?: OutboxRunResult
+  planRunQuestionPause?: ObservedPlanRunQuestionPause
 }

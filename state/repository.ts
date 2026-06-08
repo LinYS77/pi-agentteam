@@ -15,7 +15,7 @@ import { TEAM_LEAD } from '../internalTypes.js'
 import { isMailboxMessageUnread } from '../messageLifecycle.js'
 import { summarizeOutboxEffects, type OutboxDiagnosticsSummary } from '../app/outboxDiagnostics.js'
 import { markMailboxMessagesDelivered, markMailboxMessagesRead, readMailbox } from './mailboxStore.js'
-import { compactPlanRunLeaderAttention, type CompactPlanRunLeaderAttention } from './runVisibilityReadModel.js'
+import { compactPlanRunLeaderAttention, compactPlanRunPanelProjection, type CompactPlanRunLeaderAttention, type CompactPlanRunPanelProjection } from './runVisibilityReadModel.js'
 import {
   appendTaskEvent,
   appendTaskReport,
@@ -130,6 +130,7 @@ export type RepositoryTeamPanelModel = {
   leaderSessionFile?: string
   members: Record<string, RepositoryTeamPanelMember>
   tasks: Record<string, RepositoryTeamPanelTask>
+  planRuns: CompactPlanRunPanelProjection[]
   nextTaskSeq: number
   revision?: number
   memberTombstones?: Record<string, number>
@@ -350,6 +351,7 @@ function toRepositoryTeamPanelModel(team: TeamState): RepositoryTeamPanelModel {
     tasks: Object.fromEntries(
       Object.entries(team.tasks).map(([taskId, task]) => [taskId, toRepositoryTeamPanelTask(team, task, watchdogByTaskId)]),
     ),
+    planRuns: compactPlanRunPanelProjection(team),
     nextTaskSeq: team.nextTaskSeq,
     revision: team.revision,
     memberTombstones: team.memberTombstones ? { ...team.memberTombstones } : undefined,

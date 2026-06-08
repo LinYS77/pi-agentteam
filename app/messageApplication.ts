@@ -13,6 +13,7 @@ import {
   runSelectedOutboxEffects,
 } from './outboxSideEffects.js'
 import type { MessageApplicationDeps } from './types.js'
+import { observePlanRunQuestionMessage } from './planRunMessageObserver.js'
 import { taskAssignmentNonActionableReason } from './taskActionability.js'
 import type {
   MessageAttentionPolicy,
@@ -397,6 +398,27 @@ async function deliverMessageToRecipient(
   else sent.push(recipient)
 }
 
+function firstSentMessageIdToLeader(state: SendMessagePlanningState): string | undefined {
+  return state.sent.includes(TEAM_LEAD) ? state.sentMessages[TEAM_LEAD]?.id : undefined
+}
+
+function observePlanRunQuestionPause(state: SendMessagePlanningState, deps: MessageApplicationDeps): void {
+  if (!state.params.taskId || state.messageType !== 'question' || !state.sent.includes(TEAM_LEAD)) return
+  const observedAt = deps.now?.() ?? Date.now()
+  let observed: SendMessagePlanningState['planRunQuestionPause']
+  deps.planRuns.writePlanRunMutation(state.team.name, latest => {
+    observed = observePlanRunQuestionMessage(latest, {
+      taskId: state.params.taskId,
+      messageType: state.messageType,
+      sender: state.sender,
+      recipients: state.sent,
+      at: observedAt,
+      mailboxMessageId: firstSentMessageIdToLeader(state),
+    })
+  })
+  if (observed) state.planRunQuestionPause = observed
+}
+
 async function appendPeerMessageEvent(state: SendMessagePlanningState, deps: MessageApplicationDeps): Promise<void> {
   const { team, sender, sent, messageType, params, resolvedThreadId, priority } = state
   const peerRecipients = sent.filter(name => name !== TEAM_LEAD)
@@ -527,6 +549,7 @@ export async function executeSendMessageApplication(
   }
 
   await appendPeerMessageEvent(state, deps)
+  observePlanRunQuestionPause(state, deps)
 
   const routingSuffix = state.sent.length > 0 ? formatRoutingSuffix(state) : ''
   const summary = state.sent.length > 0
@@ -552,6 +575,7 @@ export async function executeSendMessageApplication(
       mirroredToLeader: state.leaderMirrors,
       outboxEffects: state.outboxEffects,
       ...(state.outboxRun ? { outboxRun: state.outboxRun } : {}),
+      ...(state.planRunQuestionPause ? { planRunQuestionPause: state.planRunQuestionPause } : {}),
       ...(state.sideEffectWarnings.length > 0 ? { warning: 'side_effect_failed', sideEffectWarnings: state.sideEffectWarnings } : {}),
     },
     statusInvalidationRequested: true,

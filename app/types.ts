@@ -35,6 +35,7 @@ export type MessageApplicationDeps = DeliveryRequestDeps & {
   outboxHandlers?: OutboxEffectHandlers
   now?: () => number
   outboxStore: MessageApplicationOutboxStore
+  planRuns: PlanRunMutationPort
   sanitizeWorkerName: (name: string) => string
 }
 

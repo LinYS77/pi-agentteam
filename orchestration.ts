@@ -44,7 +44,8 @@ function compactTaskIdList(taskIds: string[], limit = 8): string {
 function compactPlanRunDigestLine(item: LeaderCoordinationSnapshot['planRunAttention'][number]): string {
   const pause = item.pauseReason ? ` pauseReason=${item.pauseReason}` : ''
   const report = item.latestReportId ? ` report=${item.latestReportId}` : ''
-  return `${item.planRunId} step ${item.stepNumber} ${item.status}/${item.stepStatus} task=${item.taskId}${pause}${report}; next: ${item.nextAction}`
+  const watchdog = item.watchdog ? ` watchdog=${item.watchdog.state} needsNudge=${item.watchdog.needsNudge}` : ''
+  return `${item.planRunId} step ${item.stepNumber} ${item.status}/${item.stepStatus} task=${item.taskId}${pause}${report}${watchdog}; next: ${item.nextAction}`
 }
 
 function buildLeaderDigest(team: TeamState, snapshot: LeaderCoordinationSnapshot): string {
@@ -96,7 +97,7 @@ export function computeLeaderDigestKey(
   coordination?: LeaderCoordinationSnapshot,
 ): string {
   const snapshot = coordination ?? buildLeaderCoordinationSnapshot(team)
-  const planRunKey = snapshot.planRunAttention.map(item => `${item.planRunId}:${item.status}:${item.stepIndex}:${item.taskId}:${item.pauseReason ?? ''}:${item.latestReportId ?? ''}`).join(',')
+  const planRunKey = snapshot.planRunAttention.map(item => `${item.planRunId}:${item.status}:${item.stepIndex}:${item.taskId}:${item.pauseReason ?? ''}:${item.latestReportId ?? ''}:${item.watchdog?.state ?? ''}:${item.watchdog?.needsNudge ?? ''}`).join(',')
   return `${team.name}|blocked:${snapshot.blockedCount}|blockedIds:${snapshot.blockedTaskIds.join(',')}|unread:${snapshot.unreadCount}|latest:${snapshot.latestUnreadMessageId}|waitingReports:${snapshot.waitingReportCount}|waitingReportIds:${snapshot.waitingReportTaskIds.join(',')}|planRuns:${snapshot.planRunAttentionCount}|planRunItems:${planRunKey}`
 }
 

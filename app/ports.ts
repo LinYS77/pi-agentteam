@@ -11,10 +11,10 @@ import type {
   TeamTask,
 } from '../internalTypes.js'
 import type { TaskHistoryCounts, TaskHistoryDisplaySummary, TaskHistoryReportDisplay, TaskHistorySummary } from '../state/taskHistoryReadModel.js'
-import type { CompactPlanRunLeaderAttention } from '../state/runVisibilityReadModel.js'
+import type { CompactPlanRunLeaderAttention, CompactPlanRunPanelProjection } from '../state/runVisibilityReadModel.js'
 import type { ReportWatchdogSummary, ReportWatchdogTaskSummary } from '../state/taskReportWatchdogReadModel.js'
 export type { TaskHistoryCounts, TaskHistorySummary } from '../state/taskHistoryReadModel.js'
-export type { CompactPlanRunLeaderAttention } from '../state/runVisibilityReadModel.js'
+export type { CompactPlanRunLeaderAttention, CompactPlanRunPanelProjection } from '../state/runVisibilityReadModel.js'
 export type { ReportWatchdogState, ReportWatchdogSummary, ReportWatchdogTaskSummary } from '../state/taskReportWatchdogReadModel.js'
 import type {
   OutboxClaimInput,
@@ -211,6 +211,7 @@ export type RepositoryTeamPanelModel = {
   leaderSessionFile?: string
   members: Record<string, RepositoryTeamPanelMember>
   tasks: Record<string, RepositoryTeamPanelTask>
+  planRuns: CompactPlanRunPanelProjection[]
   nextTaskSeq: number
   revision?: number
   memberTombstones?: Record<string, number>

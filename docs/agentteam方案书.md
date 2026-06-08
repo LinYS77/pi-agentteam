@@ -1,6 +1,6 @@
 # AgentTeam v0.5.0 核心重构方案书
 
-> 更新时间：2026-06-04
+> 更新时间：2026-06-06
 > 版本口径：本文按产品路线 `v0.4.0 → v0.5.0` 编写；仓库当前 `package.json` 版本可能高于该路线口径，本文关注下一次 v0.5 目标形态，而不是历史标签账本。
 > 一句话目标：`v0.5.0 = core refactor + performance baseline + bug burn-down release`。
 
@@ -343,7 +343,7 @@ runtime/leaderAttention.ts
 
 #### v0.5.0 目标：Approved PlanRun
 
-v0.4.9 已完成 Approved PlanRun MVP 的基础链路，v0.5.0 在此基础上继续补齐更完整的 pause/resume/cancel 和多步验收能力。当前显式 PlanRun 状态保持 compact：
+v0.4.9 已完成 Approved PlanRun MVP 的基础链路；v0.4.10 已补齐 completion/recovery hardening，使 PlanRun 能在 leader-gated、compact-only、无自动化的前提下完成多步闭环。当前显式 PlanRun 状态保持 compact：
 
 ```ts
 type PlanRun = {
@@ -352,7 +352,7 @@ type PlanRun = {
   status: 'approved' | 'active' | 'waiting_review' | 'paused' | 'cancelled' | 'done'
   currentStepIndex: number
   activeTaskId?: string
-  pauseReason?: 'report_blocked' | 'question' | 'watchdog' | 'waiting_for_report' | 'leader_paused'
+  pauseReason?: 'report_blocked' | 'question' | 'watchdog' | 'waiting_for_report' | 'leader_paused' | 'validation_failed'
   steps: Array<{
     id: string
     index: number
@@ -364,22 +364,26 @@ type PlanRun = {
 }
 ```
 
-v0.4.9 MVP 已落地规则：
+v0.4.9/v0.4.10 已落地规则：
 
 - `approve` 必须由 leader 明确指定 `sourceReportId` 且 `confirmApproved=true`；approve 只创建 compact PlanRun，不创建 task。
-- `advance(planRunId)` 必须显式调用；每次只创建一个当前 step task，并写 compact assigned TaskEvent。
+- `advance(planRunId)` 必须显式调用；每次只创建一个当前 step task，并写 compact created/assigned audit。
 - 当前 step task 仍 `open`/`waiting_review`/`blocked` 时，重复 `advance` 被拒绝，不创建第二个 task。
-- owner `report_done` 后 task 仍保持 `open`；PlanRun/step 进入 `waiting_review`，等待 leader review/close 后再显式 advance。
+- owner `report_done` 后 task 仍保持 `open`；PlanRun/step 进入 `waiting_review`，等待 leader review/close。
+- leader `close` active step task 后，step 进入 `done`，`currentStepIndex` 指向下一 pending step；最后一步 close 后 PlanRun 进入 `done`。
 - owner `report_blocked` 后 task 仍保持 `open`；PlanRun 进入 `paused` 且 `pauseReason=report_blocked`，不自动 block task。
-- `agentteam_task show` 和 leader digest 只显示 compact PlanRun hint，不读取 `TaskReport.text` 或 `MailboxMessage.text`。
-- 不存在 hidden scheduler/autopilot/timer；不自动 advance/close/block/reassign/nudge。
+- owner 对 active step task 发 task-bound `question` 后，PlanRun 进入 `paused` 且 `pauseReason=question`，task 不自动 block/close/reassign。
+- leader-only `pause/resume/cancel` 已实现；`pauseReason=leader_paused` 默认，支持手动 `validation_failed` seam。
+- `show/list/task show/digest` 和 `/team` 只显示 compact PlanRun hint/projection，不读取 `TaskReport.text` 或 `MailboxMessage.text`。
+- `dryRun=true` 可预览 `advance/pause/resume/cancel`，不分配 id、不改 seq、不写 event/mailbox、不改变 PlanRun/task 状态。
+- watchdog/no-report 以 compact attention 暴露，不自动 nudge、不自动 advance。
+- 不存在 hidden scheduler/autopilot/timer；不自动 advance/close/block/reassign/nudge；不允许 worker 创建任务或派发 worker。
 
 PlanRun 后续规则：
 
-- question/test failure/no report 仍需要继续补齐更细的 pause 检测和恢复交互。
-- 达到 step/time limit 立即 pause。
+- test failure 的 richer first-class integration 仍需在未来补齐；当前以 leader 手动 `validation_failed` pause seam 表达。
+- 达到 step/time limit 的自动化策略仍需明确，但不得通过 hidden scheduler/default autopilot 实现。
 - 所有动作写入 compact PlanRunEvent/task/report/history。
-- 不允许 worker 创建任务或派发 worker。
 
 #### 主要涉及区域
 
@@ -403,10 +407,14 @@ teamPanel/layout.ts
 - worker 完成但不 report 的情形可见、可提醒、不会被 leader 伪造 report 掩盖。
 - 无 approved PlanRun 时，不自动创建下游任务。
 - `approve` 不创建 task；`advance` 才创建一个 step task。
-- worker `report_done` 后 PlanRun compact `waiting_review` 可在 `agentteam_task show` 和 leader digest 中看到。
-- worker `report_blocked` 后 PlanRun compact `paused/report_blocked` 可在 `agentteam_task show` 和 leader digest 中看到。
+- worker `report_done` 后 PlanRun compact `waiting_review` 可在 `agentteam_task show`、leader digest 和 `/team` compact projection 中看到。
+- leader close 后显式 advance 到下一 step 的多步链路可完成，最后一步 close 后 PlanRun `done`。
+- worker `report_blocked` 后 PlanRun compact `paused/report_blocked` 可在 `agentteam_task show`、leader digest 和 `/team` compact projection 中看到。
+- owner task-bound question 可 pause active PlanRun step，且不会自动 block/close/reassign task。
+- `pause/resume/cancel` leader-only，可审计且无 task/mailbox side effects。
+- `dryRun=true` preview 不分配 id、不改 seq、不写 event/mailbox。
 - 每步都有 task/report/PlanRunEvent 历史，且 compact surfaces 不泄漏 full body。
-- blocked/question/test failure/no report pause 继续作为 v0.5 完整链路验收项。
+- test failure 和 step/time limit 仍作为 v0.5 后续完整链路增强项。
 
 ---
 
@@ -864,7 +872,7 @@ v0.5.0 不做：
 - nudge 是 directed reminder，不是 broadcast。
 - leader 不伪造 report。
 
-### Slice 6 — Approved PlanRun MVP
+### Slice 6 — Approved PlanRun MVP + Completion/Recovery Hardening
 
 目标：用户批准计划后，leader 可受控推进，不引入默认自动执行。
 
@@ -877,13 +885,27 @@ v0.4.9 已完成切片：
 - Slice E：owner `report_done` 让 PlanRun/step 进入 `waiting_review`；owner `report_blocked` 让 PlanRun `paused` 且 `pauseReason=report_blocked`。
 - Slice F：compact visibility 接入 `agentteam_task show` 与 leader digest，并补齐文档/checkpoint 说明。
 
+v0.4.10 已完成切片：
+
+- Slice 1：completion/recovery RED characterization，覆盖 close→advance 多步闭环、terminal done、pause/resume/cancel、question/watchdog/validation pause、dryRun、`/team` compact visibility。
+- Slice 2：leader close active step task 后 step accepted/done，推进 `currentStepIndex`，最后一步 close 后 PlanRun `done`。
+- Slice 3：leader-only `pause/resume/cancel`，含 `leader_paused` 默认 pause 和 `validation_failed` seam。
+- Slice 4：owner task-bound question pause active PlanRun step；watchdog/no-report 只做 compact attention，不自动 nudge/advance。
+- Slice 5：`show/list nextAction` 和 `dryRun=true` previews，保证不分配 id、不改 seq、不写 event/mailbox。
+- Slice 6：active/waiting/paused/approved-ready PlanRun compact projection 接入 repository `/team` read-model 和 panel model。
+- Slice 7：docs/checkpoint hardening，GitHub-only v0.4.10 checkpoint。
+
 当前核心行为：
 
 - `approve` 只创建 compact PlanRun，不创建 task、不发送 assignment。
 - `advance` 必须显式 leader 调用，每次最多创建一个当前 step task。
 - `report_done` 不关闭 task，只把 active PlanRun step 标记为 `waiting_review`。
+- leader close active step task 后才能显式 advance 下一 step；最后一步 close 后 PlanRun `done`。
 - `report_blocked` 不 block task，只把 PlanRun compact pause 为 `report_blocked`。
-- `show/list/task show/digest` 不读取或返回 `TaskReport.text`/`MailboxMessage.text`。
+- owner task-bound question 可把 active PlanRun compact pause 为 `question`。
+- `pause/resume/cancel` leader-only，只更新 compact PlanRun 状态/event，不改 task/mailbox。
+- `show/list/task show/digest/team panel` 不读取或返回 `TaskReport.text`/`MailboxMessage.text`。
+- `dryRun=true` preview 不写 state，且不分配 id/seq。
 - 不实现 hidden scheduler/autopilot/timer，不自动 advance/close/block/reassign/nudge。
 
 验证：
@@ -896,9 +918,8 @@ v0.4.9 已完成切片：
 
 后续验收项：
 
-- leader close 后显式 advance 到下一 step 的完整多步链路。
-- question/test failure/watchdog waiting-for-report 的 pause/resume/cancel 交互。
-- `/team` active/paused PlanRun visibility 如需更强 cockpit 集成，可在 compact read-model 中继续扩展。
+- test failure 的 first-class source/seam 可继续扩展；当前使用手动 `validation_failed` pause。
+- step/time limit policy 仍需单独设计，且不得引入 hidden scheduler/default autopilot。
 
 ### Slice 7 — Release hardening
 
@@ -958,10 +979,14 @@ legacy teams/- not deleted or recovered accidentally
 spawn researcher/planner/implementer with configured models
 researcher report_done -> leader receive
 planner report_done -> user approves PlanRun
-implementer executes PlanRun step 1 -> report_done -> leader close
-implementer executes PlanRun step 2 -> report_done -> leader close
+implementer executes PlanRun step 1 -> report_done -> leader close -> explicit advance step 2
+implementer executes PlanRun step 2 -> report_done -> leader close -> PlanRun done when final
 blocked report pauses PlanRun
+owner question pauses PlanRun without blocking/closing task
+leader pause/resume/cancel are compact and auditable
+agentteam_planrun dryRun preview does not mutate state or allocate ids
 worker no-report state appears as waiting-for-report attention
+/team shows compact PlanRun projection without full report/mailbox bodies
 /team remains open during worker activity without flicker
 /team does not mark mailbox read/delivered
 ```
@@ -975,7 +1000,7 @@ worker no-report state appears as waiting-for-report attention
 | Tmux Adapter | snapshot/cache 生效；普通 refresh 不逐 member 调 tmux |
 | `/team` Panel | 无持续闪烁；in-place action；debounce/diff 生效 |
 | Task/Report | no-report 可见可提醒；不伪造 report；leader close 仍 required |
-| PlanRun | user-approved；approve no task；explicit one-step advance；report_done waiting_review；report_blocked paused；compact visibility；全程可审计 |
+| PlanRun | user-approved；approve no task；explicit one-step advance；leader close 后多步推进；terminal done；report_done waiting_review；report_blocked/question paused；pause/resume/cancel；dryRun no mutation；`/team` compact visibility；全程可审计 |
 | Config | v1 schema；legacy compatibility；first-run bootstrap；effective model 可见 |
 | Performance | baseline + p95 + 相对改善数据齐全 |
 

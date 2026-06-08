@@ -52,11 +52,21 @@ const PLAN_RUN_EVENT_TYPES = Object.freeze([
   'approved',
   'advanced',
   'step_task_created',
+  'step_accepted',
   'waiting_review',
   'paused',
   'resumed',
   'cancelled',
   'completed',
+] as const)
+
+const PLAN_RUN_PAUSE_REASONS = Object.freeze([
+  'report_blocked',
+  'question',
+  'watchdog',
+  'waiting_for_report',
+  'leader_paused',
+  'validation_failed',
 ] as const)
 
 const OLD_LAYOUT_MARKER_KEYS = Object.freeze([
@@ -263,6 +273,22 @@ function pushInvalidPlanRunEventType(
   }))
 }
 
+function pushInvalidPlanRunPauseReason(
+  reasons: StateValidationReason[],
+  input: { file: string; path: string; field: string; value: unknown },
+): void {
+  if (input.value === undefined) return
+  if (typeof input.value === 'string' && (PLAN_RUN_PAUSE_REASONS as readonly string[]).includes(input.value)) return
+  reasons.push(reason({
+    code: 'unsupported_plan_run_pause_reason',
+    file: input.file,
+    path: input.path,
+    field: input.field,
+    value: input.value,
+    message: `Unsupported PlanRun pauseReason ${valueString(input.value)} in persisted state`,
+  }))
+}
+
 function inspectOldLayoutMarkers(
   reasons: StateValidationReason[],
   value: Record<string, unknown>,
@@ -390,6 +416,7 @@ export function validatePersistedTeamState(raw: unknown, file = 'team.json'): St
       }
       inspectOldLayoutMarkers(reasons, planRun, { file, path: planRunPath })
       pushInvalidPlanRunStatus(reasons, { file, path: `${planRunPath}.status`, field: 'status', value: planRun.status })
+      pushInvalidPlanRunPauseReason(reasons, { file, path: `${planRunPath}.pauseReason`, field: 'pauseReason', value: planRun.pauseReason })
       if (planRun.steps !== undefined && !Array.isArray(planRun.steps)) {
         reasons.push(reason({ code: 'invalid_plan_run_steps_shape', file, path: `${planRunPath}.steps`, field: 'steps', value: planRun.steps, message: `PlanRun ${planRunId} steps must be an array when present` }))
       } else if (Array.isArray(planRun.steps)) {
@@ -417,6 +444,7 @@ export function validatePersistedTeamState(raw: unknown, file = 'team.json'): St
       }
       inspectOldLayoutMarkers(reasons, event, { file, path: eventPath })
       pushInvalidPlanRunEventType(reasons, { file, path: `${eventPath}.type`, field: 'type', value: event.type })
+      pushInvalidPlanRunPauseReason(reasons, { file, path: `${eventPath}.pauseReason`, field: 'pauseReason', value: event.pauseReason })
     }
   }
 

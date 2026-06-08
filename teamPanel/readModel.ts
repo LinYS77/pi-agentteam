@@ -11,6 +11,7 @@ import type {
 import type { QuarantinedTeamSummary } from '../state/validation.js'
 import {
   defaultPanelReadModelServices,
+  type CompactPlanRunPanelProjection,
   type PanelReadModelServices,
   type ReportWatchdogTaskSummary,
   type TaskHistoryDisplaySummary,
@@ -79,6 +80,7 @@ export type PanelTeamModel = {
   leaderSessionFile?: string
   members: Record<string, PanelMemberModel>
   tasks: Record<string, PanelTaskModel>
+  planRuns: CompactPlanRunPanelProjection[]
   nextTaskSeq: number
   revision?: number
   memberTombstones?: Record<string, number>
@@ -223,6 +225,7 @@ export function toPanelTeamModel(
     leaderSessionFile: team.leaderSessionFile,
     members,
     tasks,
+    planRuns: services.planRunProjection(team),
     nextTaskSeq: team.nextTaskSeq,
     revision: team.revision,
     memberTombstones: team.memberTombstones ? { ...team.memberTombstones } : undefined,

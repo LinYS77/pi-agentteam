@@ -13,6 +13,7 @@ import {
   unsupportedStatusParam,
 } from './taskCommandShared.js'
 import { buildImplementationCompletionNote, formatTask } from './taskFormatting.js'
+import { observeClosedTaskForRuns, type ObservedClosedTaskRunStep } from './planRunTaskObserver.js'
 import { actorRole } from './taskPermissions.js'
 import type { TaskCommandContext, TaskCommandResult, TeamTaskInput } from './taskTypes.js'
 
@@ -151,6 +152,7 @@ export function closeTaskCommand(input: TaskCommandContext, taskId: string, para
   const unsupportedBlockedBy = unsupportedBlockedByParam(params, 'close')
   if (unsupportedBlockedBy) return unsupportedBlockedBy
   const existingTask = requireTask(input.team, taskId)
+  let closedTaskRunStep: ObservedClosedTaskRunStep | undefined
   const transitionAt = Date.now()
   const initialTransition = transitionTask(reducerTaskSnapshot(existingTask), { type: 'close', at: transitionAt })
   if (!initialTransition.ok) return taskTransitionFailure(existingTask, 'close', initialTransition.reason)
@@ -174,9 +176,14 @@ export function closeTaskCommand(input: TaskCommandContext, taskId: string, para
       summary: compactTaskHistorySummary(note),
       data: { source: 'agentteam_task_dual_write', previousStatus, previousBlockedBy },
     })
+    closedTaskRunStep = observeClosedTaskForRuns(latest, {
+      taskId: task.id,
+      actor: input.actor,
+      at: transitionAt,
+    })
   }), input.teamName)
   const task = requireTask(updated, taskId)
-  return { task, text: `Closed ${formatTask(task)}`, details: { task } }
+  return { task, text: `Closed ${formatTask(task)}`, details: { task, runStep: closedTaskRunStep } }
 }
 
 export function progressTaskCommand(input: TaskCommandContext, taskId: string, params: TeamTaskInput): TaskCommandResult {
