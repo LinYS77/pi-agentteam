@@ -1,3 +1,4 @@
+import * as fs from 'node:fs'
 import { discoverAgentsWithDiagnostics } from '../agents.js'
 import { effectiveTeamIdentity } from '../core/teamIdentity.js'
 import type { EffectiveAgentModelSource } from '../config.js'
@@ -18,6 +19,7 @@ import { TEAM_LEAD } from '../internalTypes.js'
 import { isMailboxMessageUnread } from '../messageLifecycle.js'
 import { summarizeOutboxEffects, type OutboxDiagnosticsSummary } from '../app/outboxDiagnostics.js'
 import { markMailboxMessagesDelivered, markMailboxMessagesRead, readMailbox } from './mailboxStore.js'
+import { readMailboxProjection, readTeamPanelProjection } from './panelProjectionStore.js'
 import { compactPlanRunLeaderAttention, compactPlanRunPanelProjection, type CompactPlanRunLeaderAttention, type CompactPlanRunPanelProjection } from './runVisibilityReadModel.js'
 import {
   appendTaskEvent,
@@ -42,12 +44,13 @@ import {
   type TaskHistoryItem,
   type TaskHistoryReportDisplay,
 } from './taskHistoryReadModel.js'
-import { listOutboxEffects } from './outboxStore.js'
-import { readOutboxDiagnosticsStore } from './outboxDiagnosticsStore.js'
+import { listOutboxEffectsWithoutTeamValidation } from './outboxStore.js'
+import { readOutboxDiagnosticsStoreWithoutTeamValidation } from './outboxDiagnosticsStore.js'
 import { buildSessionContextForTeam, readSessionContext, writeSessionContext } from './sessionBinding.js'
 import { createTask } from './taskStore.js'
 import { createInitialTeamState, findTeamByProjectSlug, listTeams, readTeamState, updateTeamState, writeTeamState } from './teamStore.js'
-import { listQuarantinedTeams, readLatestQuarantineForTeam, type QuarantinedTeamSummary } from './validation.js'
+import { getTeamsDir } from './paths.js'
+import { isTeamQuarantined, listQuarantinedTeams, readLatestQuarantineForTeam, type QuarantinedTeamSummary } from './validation.js'
 
 export type RepositoryMailboxProjectionItem = Pick<MailboxMessage,
   | 'id'
@@ -252,7 +255,7 @@ export type StateRepository = {
   writeTeamMutation(teamName: string, updater: TeamMutationWriter): TeamState | null
 }
 
-function toRepositoryMailboxProjectionItem(message: MailboxMessage): RepositoryMailboxProjectionItem {
+function toRepositoryMailboxProjectionItem(message: Omit<MailboxMessage, 'text'>): RepositoryMailboxProjectionItem {
   return {
     id: message.id,
     from: message.from,
@@ -367,7 +370,10 @@ export function updateTeamStateForRepository(teamName: string, updater: TeamMuta
 export { updateTeamStateForRepository as updateTeamState }
 
 export function readTeamForPanel(teamName: string): TeamState | null {
-  return readTeamState(teamName)
+  const projection = readTeamPanelProjection(teamName)
+  if (projection) return projection.team as TeamState
+  if (isTeamQuarantined(teamName)) return null
+  return null
 }
 
 function toRepositoryTeamPanelModel(team: TeamState): RepositoryTeamPanelModel {
@@ -400,7 +406,17 @@ export function readTeamPanelModel(teamName: string): RepositoryTeamPanelModel |
 }
 
 export function listTeamPanelNames(): string[] {
-  return listTeams().map(team => team.name)
+  const names: string[] = []
+  for (const entry of fs.readdirSync(getTeamsDir(), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const projection = readTeamPanelProjection(entry.name)
+    if (projection) {
+      names.push(projection.team.name)
+      continue
+    }
+    if (isTeamQuarantined(entry.name)) continue
+  }
+  return names.sort((a, b) => a.localeCompare(b))
 }
 
 function blockedTaskIdsForLeaderCoordination(team: TeamState): string[] {
@@ -411,7 +427,9 @@ function blockedTaskIdsForLeaderCoordination(team: TeamState): string[] {
 }
 
 export function readLeaderMailboxProjection(teamName: string): RepositoryLeaderMailboxProjection {
-  const items = readMailbox(teamName, TEAM_LEAD)
+  const projection = readMailboxProjection(teamName, TEAM_LEAD)
+  const sourceItems = projection?.items ?? readMailbox(teamName, TEAM_LEAD)
+  const items = sourceItems
     .map(toRepositoryMailboxProjectionItem)
     .sort((a, b) => b.createdAt - a.createdAt)
   const latestAttention = items.find(isMailboxMessageUnread)
@@ -454,7 +472,7 @@ export function readTaskReportSummary(teamName: string, reportId: string): TaskH
 }
 
 export function readReportWatchdogSummary(teamName: string): ReportWatchdogSummary | null {
-  const team = readTeamState(teamName)
+  const team = readTeamForPanel(teamName)
   return team ? buildReportWatchdogSummary(team) : null
 }
 
@@ -577,13 +595,17 @@ export function appendPlanRunEvent(teamName: string, input: AppendRepositoryPlan
 }
 
 export function readOutboxDiagnosticsSummary(teamName: string): OutboxDiagnosticsSummary {
-  return summarizeOutboxEffects(listOutboxEffects(teamName), readOutboxDiagnosticsStore(teamName))
+  return summarizeOutboxEffects(listOutboxEffectsWithoutTeamValidation(teamName), readOutboxDiagnosticsStoreWithoutTeamValidation(teamName))
 }
 
 export { listQuarantinedTeams }
 
 export function writeTeamMutation(teamName: string, updater: TeamMutationWriter): TeamState | null {
-  return updateTeamStateForRepository(teamName, updater)
+  return updateTeamStateForRepository(teamName, latest => {
+    const before = latest
+    const next = updater(latest) ?? latest
+    if (next !== before) return next
+  })
 }
 
 export function createStateRepository(): StateRepository {

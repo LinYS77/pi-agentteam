@@ -702,6 +702,7 @@ export function validatePersistedTeamDir(teamName: string): StateValidationReaso
   if (fs.existsSync(inboxDir)) {
     for (const entry of fs.readdirSync(inboxDir, { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith('.json')) continue
+      if (entry.name.endsWith('.panel.json')) continue
       const inboxPath = path.join(inboxDir, entry.name)
       reasons.push(...validatePersistedMailbox(readJsonFile<unknown>(inboxPath), path.join('inboxes', entry.name)))
     }
@@ -877,6 +878,11 @@ export function validateOrQuarantineTeam(teamName: string, now = Date.now()): Qu
   const reasons = validatePersistedTeamDir(teamName)
   if (reasons.length === 0) return null
   return quarantineTeamDir(teamName, reasons, now)
+}
+
+export function isTeamQuarantined(teamName: string): boolean {
+  if (!teamDirExists(teamName)) return false
+  return readLatestQuarantineForTeam(teamName) !== null
 }
 
 export function readLatestQuarantineForTeam(teamName: string): QuarantinedTeamSummary | null {

@@ -164,7 +164,28 @@ export function buildSessionContextForTeam(
   return context
 }
 
+function identityKeyForTeam(team: TeamState): string | undefined {
+  return team.identity ? `${team.identity.projectKey}:${team.identity.slug}` : undefined
+}
+
+function teamMatchesSessionContext(team: TeamState, context: SessionTeamContext): boolean {
+  if (context.teamId && team.identity?.teamId !== context.teamId && team.name !== context.teamId) return false
+  if (context.projectKey && team.identity?.projectKey !== context.projectKey) return false
+  if (context.teamSlug && team.identity?.slug !== context.teamSlug) return false
+  if (context.identityKey && identityKeyForTeam(team) !== context.identityKey) return false
+  return true
+}
+
+function readNamedTeamForSessionContext(context: SessionTeamContext): TeamState | null {
+  if (!context.teamName) return null
+  const named = readTeamState(context.teamName)
+  if (!named) return null
+  return teamMatchesSessionContext(named, context) ? named : null
+}
+
 function findTeamForSessionContext(context: SessionTeamContext): TeamState | null {
+  const named = readNamedTeamForSessionContext(context)
+  if (named) return named
   if (context.teamId) {
     const byId = listTeams().find(team => team.identity?.teamId === context.teamId || team.name === context.teamId)
     if (byId) return byId
@@ -175,7 +196,7 @@ function findTeamForSessionContext(context: SessionTeamContext): TeamState | nul
     if (byProjectSlug) return byProjectSlug
   }
   if (context.identityKey) {
-    const byIdentityKey = listTeams().find(team => team.identity && `${team.identity.projectKey}:${team.identity.slug}` === context.identityKey)
+    const byIdentityKey = listTeams().find(team => identityKeyForTeam(team) === context.identityKey)
     if (byIdentityKey) return byIdentityKey
   }
   return context.teamName ? readTeamState(context.teamName) : null

@@ -124,7 +124,7 @@ Attached to a team:
 → a opens team maintenance actions
 ```
 
-The Cockpit tab is an interactive attention queue for active tasks and unread mailbox items, not a passive status box. The Tasks tab surfaces compact v0.6.2 history: latest TaskReport id/type/author/summary, latest TaskEvent/TaskMessageRef activity, and counts for reports/events/messageRefs. It does not hydrate full report text or task-bound message bodies; use `agentteam_task action=report reportId=<id>` or `agentteam_receive` for explicit full-text reads.
+The Cockpit tab is an interactive attention queue for active tasks and unread mailbox items, not a passive status box. The Tasks tab surfaces compact v0.6.2 history: latest TaskReport id/type/author/summary, latest TaskEvent/TaskMessageRef activity, and counts for reports/events/messageRefs. v0.4.14 panel/read-model paths prefer compact sidecars (`teams/<team>/team-panel.json` and `teams/<team>/inboxes/<member>.panel.json`) that omit `TaskReport.text` and `MailboxMessage.text`, so `/team` can refresh task/mailbox summaries without reading full bodies. Use `agentteam_task action=report reportId=<id>` or `agentteam_receive` for explicit full-text reads.
 
 Not attached to a team:
 
@@ -365,13 +365,16 @@ Public behavior remains behavior-preserving: `agentteam_receive` is the full-tex
 ```bash
 npm test                 # unit/package smoke suites
 npm run typecheck        # tsc --noEmit
-npm run check:boundaries # import/public-surface boundary guard
-npm run check            # test + typecheck + git diff --check + boundaries
-npm run release:check    # npm run check + npm pack --dry-run --ignore-scripts
-npm run test:e2e         # optional manual tmux smoke; requires real tmux/pi runtime
+npm run check:boundaries      # import/public-surface boundary guard
+npm run check                 # test + typecheck + git diff --check + boundaries
+npm run release:check         # npm run check + npm pack --dry-run --ignore-scripts
+npm run bench:state-read-model # deterministic state/read-model baseline JSON
+npm run test:e2e              # optional manual tmux smoke; requires real tmux/pi runtime
 ```
 
 `release:check` is safe for local CI: it does not publish, install, tag, bump versions, or edit user settings. It intentionally does **not** run `test:e2e` because the e2e smoke requires a real tmux/pi environment and is best run manually in a clean `PI_AGENTTEAM_HOME` sandbox.
+
+State/read-model profiling is opt-in: `npm run bench:state-read-model` runs `PI_AGENTTEAM_PROFILE=1 node tests/bench/team-read-model-baseline.cjs` and emits explicit JSON for the deterministic `/team` baseline. Normal user/tool output is not polluted when profiling is off, and the v0.4.14 bench is a baseline/profiling gate only, not a p95 release target pass/fail claim.
 
 The package surface is intentionally explicit: `package.json#files` lists required top-level files plus `api/`, `app/`, `adapters/`, `commands/`, `hooks/`, `core/`, `runtime/`, `state/`, `teamPanel/`, `tmux/`, `tools/`, and bundled `agents/`. It does not use broad `*.ts`, and removed root facades/wrappers are explicitly excluded/guarded.
 

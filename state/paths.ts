@@ -56,6 +56,14 @@ export function getMailboxPath(teamName: string, memberName: string): string {
   return path.join(getMailboxDir(teamName), `${sanitizeName(memberName)}.json`)
 }
 
+export function getMailboxProjectionPath(teamName: string, memberName: string): string {
+  return path.join(getMailboxDir(teamName), `${sanitizeName(memberName)}.panel.json`)
+}
+
+export function getTeamPanelProjectionPath(teamName: string): string {
+  return path.join(getTeamDir(teamName), 'team-panel.json')
+}
+
 export function getRuntimeStatePath(teamName: string): string {
   return path.join(getTeamDir(teamName), 'runtime.json')
 }

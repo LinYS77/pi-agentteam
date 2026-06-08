@@ -37,7 +37,18 @@ function prepareTeamForPanel(
   const team = deps.stateRepository.readTeamForPanel(teamName)
   if (!team) return null
   if (deps.runtimeRepository.prepareTeamForPanel(team, options)) {
-    deps.stateRepository.writeTeamMutation(team.name, () => team)
+    deps.stateRepository.writeTeamMutation(team.name, latest => {
+      for (const [memberName, panelMember] of Object.entries(team.members)) {
+        const latestMember = latest.members[memberName]
+        if (!latestMember) continue
+        latestMember.paneId = panelMember.paneId
+        latestMember.windowTarget = panelMember.windowTarget
+        latestMember.status = panelMember.status
+        latestMember.lastWakeReason = panelMember.lastWakeReason
+        latestMember.lastError = panelMember.lastError
+        latestMember.updatedAt = panelMember.updatedAt
+      }
+    })
   }
   const readModelStartedAt = Date.now()
   const panelTeam = deps.stateRepository.readTeamPanelModel(team.name)

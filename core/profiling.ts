@@ -13,6 +13,19 @@ export type TmuxProfileInput = ProfileAttribution & {
   error?: string
 }
 
+type FsStoreProfileEvent = ProfileAttribution & {
+  kind: FsProfileEventKind
+  operation: FsProfileEventKind
+  durationMs: number
+  lockWaitMs?: number
+  readMs?: number
+  parseMs?: number
+  writeMs?: number
+  bytes?: number
+  path?: string
+  callSite: string
+}
+
 type FsStoreProfileSummary = {
   lockCount: number
   totalLockMs: number
@@ -28,12 +41,7 @@ type FsStoreProfileSummary = {
   stateWriteCount: number
   mailboxProjectionReadCount: number
   teamStateReadCount: number
-  events: Array<ProfileAttribution & {
-    kind: FsProfileEventKind
-    durationMs: number
-    bytes?: number
-    path?: string
-  }>
+  events: FsStoreProfileEvent[]
 }
 
 type TmuxProfileSummary = {
@@ -201,6 +209,12 @@ function safeProfileText(value: string | undefined, fallback: string): string {
   return trimmed || fallback
 }
 
+function safePathHint(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  if (!trimmed) return undefined
+  return trimmed.replace(/\?.*$/, '')
+}
+
 function profileCategoryFromPath(filePath?: string): string {
   if (!filePath) return 'state:unknown'
   if (filePath.endsWith('/team.json') || filePath.endsWith('\\team.json')) return 'state:team'
@@ -234,36 +248,51 @@ function panelCounts(input: PanelReadModelProfileCounts): PanelReadModelProfileC
 export function recordFsStoreEvent(input: ProfileAttribution & {
   kind: FsProfileEventKind
   durationMs: number
+  lockWaitMs?: number
+  readMs?: number
+  parseMs?: number
+  writeMs?: number
   bytes?: number
   path?: string
+  callSite?: string
 }): void {
   if (!isProfilingEnabled()) return
   const durationMs = safeDurationMs(input.durationMs)
   const bytes = safeBytes(input.bytes)
   const category = safeProfileText(input.category, profileCategoryFromPath(input.path))
   const caller = safeProfileText(input.caller, 'state.fsStore')
+  const lockWaitMs = input.lockWaitMs !== undefined ? safeDurationMs(input.lockWaitMs) : undefined
+  const readMs = input.readMs !== undefined ? safeDurationMs(input.readMs) : undefined
+  const parseMs = input.parseMs !== undefined ? safeDurationMs(input.parseMs) : undefined
+  const writeMs = input.writeMs !== undefined ? safeDurationMs(input.writeMs) : undefined
   summary.fsStore.events.push({
     kind: input.kind,
+    operation: input.kind,
     durationMs,
     caller,
     category,
+    callSite: safeProfileText(input.callSite, caller),
+    ...(lockWaitMs !== undefined ? { lockWaitMs } : {}),
+    ...(readMs !== undefined ? { readMs } : {}),
+    ...(parseMs !== undefined ? { parseMs } : {}),
+    ...(writeMs !== undefined ? { writeMs } : {}),
     ...(input.bytes !== undefined ? { bytes } : {}),
-    ...(input.path ? { path: input.path } : {}),
+    ...(safePathHint(input.path) ? { path: safePathHint(input.path) } : {}),
   })
   incrementFsRepositoryCounters(input.kind, category)
   if (input.kind === 'lock') {
     summary.fsStore.lockCount += 1
-    summary.fsStore.totalLockMs += durationMs
+    summary.fsStore.totalLockMs += lockWaitMs ?? durationMs
   } else if (input.kind === 'read') {
     summary.fsStore.readCount += 1
-    summary.fsStore.totalReadMs += durationMs
+    summary.fsStore.totalReadMs += readMs ?? durationMs
     summary.fsStore.bytesRead += bytes
   } else if (input.kind === 'parse') {
     summary.fsStore.parseCount += 1
-    summary.fsStore.totalParseMs += durationMs
+    summary.fsStore.totalParseMs += parseMs ?? durationMs
   } else if (input.kind === 'write') {
     summary.fsStore.writeCount += 1
-    summary.fsStore.totalWriteMs += durationMs
+    summary.fsStore.totalWriteMs += writeMs ?? durationMs
     summary.fsStore.bytesWritten += bytes
   }
 }

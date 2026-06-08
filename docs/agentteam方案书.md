@@ -189,6 +189,17 @@ internalTypes.ts
 
 这会放大 lock wait、parse time、write time 和 panel warm refresh 延迟。
 
+#### v0.4.14 已完成行为
+
+v0.4.14 已把 State Store / Read Model P0 的边界与 profiling baseline 建成 GitHub-only checkpoint：
+
+- Panel compact sidecars 已落地：`teams/<team>/team-panel.json` 保存无 full report body 的 team/task/member/report/message-ref summary，`teams/<team>/inboxes/<member>.panel.json` 保存无 full mailbox body 的 mailbox summary。
+- `/team`/repository panel read-model 路径优先读取 compact sidecars，不读取 full `MailboxMessage.text` 或 `TaskReport.text` source；compact snapshots 也不会把 raw `taskReports`、`taskEvents`、`taskMessageRefs` full state 泄漏成 panel model。
+- 显式 full-text/read boundary 保持不变：`agentteam_receive` 仍是 mailbox full-text/read boundary，`agentteam_task action=report` 仍是 TaskReport full-text boundary。
+- Hot `agentteam_task show` current-team lookup 改为 precise session identity lookup：先验证当前 session `teamId/projectKey/teamSlug/identityKey`，避免为了 show 当前任务扫描 decoy teams。
+- `fsStore` operation-level profiling 已接入 `PI_AGENTTEAM_PROFILE=1`，事件字段包括 `lockWaitMs`、`readMs`、`parseMs`、`writeMs`、`bytes`、`callSite`，并保留 `category`/`operation` 方便 breakdown。
+- Deterministic microbench baseline 已新增：fixture 为 1 leader、3 workers、100 tasks、500 mailbox items，stub tmux/runtime，包含 warm refresh iterations、JSON summary、fixture sizes、dataLoad/readModel/fsStore percentiles、bytes、callSite/category breakdown 和 tmux count；该结果是 baseline/profiling gate，不是 p95 target pass/fail 声明。
+
 #### v0.5.0 目标
 
 v0.5.0 必须建立清晰 StateRepository/RuntimeRepository seam：
@@ -582,6 +593,8 @@ PI_AGENTTEAM_PROFILE=1
 
 普通用户输出不能被 profiling 噪音污染；profiling 应进入 debug log、diagnostics 或明确的 bench 输出。
 
+v0.4.14 已完成 State Store / Read Model baseline/profiling gate：`npm run bench:state-read-model`（等价于 `PI_AGENTTEAM_PROFILE=1 node tests/bench/team-read-model-baseline.cjs`）使用 deterministic fixture 和 stub tmux/runtime 输出 JSON；输出包含 fixture sizes、warm/measured iteration counts、panel dataLoad/readModel timing percentiles、fsStore lock/read/parse/write timing与 bytes、callSite/category breakdown、tmux count，并验证 full-body sentinel 不泄漏。该 baseline 只用于后续对比和回归定位，不表示已达成最终 release p95 目标。
+
 ### 3.2 release 性能门禁
 
 使用“绝对目标 + 相对改善目标”双门禁：若机器/环境无法稳定达到绝对目标，必须证明相对当前 baseline 改善至少 50%。
@@ -864,6 +877,26 @@ v0.4.13 已完成 Team Identity / Name Scope P0 hardening：
 
 - `npm test` 全绿，覆盖 v0.4.13 TeamIdentity characterization safety suite。
 - `npm run typecheck`、`npm run -s check:boundaries`、`git diff --check` 全绿。
+- package version 保持 `0.6.8`；该 checkpoint 只为 GitHub commit/tag/push 准备，不表示 npm publish。
+
+### v0.4.14 — State Store / Read Model Baseline & Profiling Gate（GitHub-only checkpoint prep）
+
+v0.4.14 已完成 State Store / Read Model P0 的前置 hardening 与 baseline：
+
+- Slice 1：新增 State/read-model RED boundary characterization，覆盖 panel/read-model 不读取 full mailbox/report source、不泄漏 full report/message body、explicit full-text boundary 保持、hot task show 不扫 decoy team、config/identity/PlanRun compact projection 保持。
+- Slice 2：新增 compact panel sidecars：`team-panel.json` 与 `*.panel.json`；repository/panel read-model 优先读取 compact projection，reconciliation writeback 只同步 runtime/member 字段，避免 compact snapshot 覆盖 full report body。
+- Slice 3：hot `agentteam_task show` current-team lookup 改为 precise identity/session lookup，命中当前 team 时不 fallback `listTeams()` 扫描 decoy teams。
+- Slice 4：`fsStore` operation-level profiling contract 完成，记录 `lockWaitMs/readMs/parseMs/writeMs/bytes/callSite/category/operation`，普通输出无 profiling 噪音。
+- Slice 5：deterministic state/read-model microbench baseline 完成，fixture 为 1 leader、3 workers、100 tasks、500 mailbox items，stub tmux/runtime，输出 JSON summary；baseline only，不作为 p95 release target pass/fail。
+- Slice 6：docs/perf checkpoint prep 记录 baseline 和验证，为 GitHub-only `v0.4.14` commit/tag/push 准备；不执行 `npm version`、`npm publish`、commit、tag 或 push。
+
+验证：
+
+- `npm test`
+- `npm run typecheck`
+- `npm run -s check:boundaries`
+- `git diff --check`
+- `npm run bench:state-read-model`
 - package version 保持 `0.6.8`；该 checkpoint 只为 GitHub commit/tag/push 准备，不表示 npm publish。
 
 ### Slice 3 — State Store / Read Model

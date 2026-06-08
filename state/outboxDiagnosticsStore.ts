@@ -26,6 +26,10 @@ export function readOutboxDiagnosticsStore(teamName: string): OutboxDiagnosticsS
   return normalizeOutboxDiagnosticsStore(readJsonFile<unknown>(getOutboxDiagnosticsPath(teamName)))
 }
 
+export function readOutboxDiagnosticsStoreWithoutTeamValidation(teamName: string): OutboxDiagnosticsStoreState {
+  return normalizeOutboxDiagnosticsStore(readJsonFile<unknown>(getOutboxDiagnosticsPath(teamName)))
+}
+
 export function markOutboxMaintenanceRun(teamName: string, lastRunAt = Date.now()): OutboxDiagnosticsStoreState {
   if (validateOrQuarantineTeam(teamName)) return emptyOutboxDiagnosticsStore()
   const storePath = getOutboxDiagnosticsPath(teamName)

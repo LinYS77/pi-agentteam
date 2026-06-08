@@ -17,6 +17,7 @@ import { mergeTeamStates, normalizeTeamState } from './merge.js'
 import { migrateTaskNotesToHistory, teamHasLegacyTaskNotes } from './taskHistoryMigration.js'
 import { clearSessionContext } from './sessionBinding.js'
 import { validateOrQuarantineTeam, validatePersistedTeamState } from './validation.js'
+import { writeTeamPanelProjection } from './panelProjectionStore.js'
 
 // ---------------------------------------------------------------------------
 // Team state persistence and in-memory member mutations.
@@ -170,6 +171,7 @@ export function writeTeamState(state: TeamState): void {
     ensureLeaderMemberShape(merged)
     assertWritableTeamState(merged)
     writeJsonFile(statePath, merged)
+    writeTeamPanelProjection(merged)
     Object.assign(state, merged)
   })
 }
@@ -198,6 +200,7 @@ export function updateTeamState(
 
     next.revision = (normalizedCurrent.revision ?? 0) + 1
     writeJsonFile(statePath, next)
+    writeTeamPanelProjection(next)
     return next
   })
 }

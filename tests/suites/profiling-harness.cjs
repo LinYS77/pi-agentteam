@@ -63,6 +63,19 @@ function durationOrEventTotal(section, metricNames) {
   return 0
 }
 
+function assertFsEventShape(event, expectedKind, timingField) {
+  assert.ok(event, `fsStore should record ${expectedKind} event`)
+  assert.equal(event.kind, expectedKind, `${expectedKind} event should keep kind`)
+  assert.equal(event.operation, expectedKind, `${expectedKind} event should expose operation`)
+  assertNumber(event.durationMs, `${expectedKind} durationMs`)
+  assertNumber(event[timingField], `${expectedKind} ${timingField}`)
+  assert.equal(typeof event.callSite, 'string', `${expectedKind} event should include callSite`)
+  assert.ok(event.callSite.length > 0, `${expectedKind} callSite should be non-empty`)
+  assert.equal(typeof event.category, 'string', `${expectedKind} event should include category`)
+  assert.equal(typeof event.caller, 'string', `${expectedKind} event should include caller`)
+  assert.equal(JSON.stringify(event).includes('enabled'), false, `${expectedKind} event should not include JSON body content`)
+}
+
 function assertFsSummaryRecorded(summary) {
   assert.ok(summary.fsStore, 'profiling summary should include fsStore section')
   assert.ok(metricOrEventCount(summary.fsStore, ['readCount', 'reads'], 'read') >= 1, `fsStore should record reads: ${JSON.stringify(summary.fsStore)}`)
@@ -73,6 +86,14 @@ function assertFsSummaryRecorded(summary) {
   assert.ok(durationOrEventTotal(summary.fsStore, ['totalWriteMs', 'writeMs']) >= 0, 'fsStore write duration should be queryable')
   assert.ok((summary.fsStore.bytesRead ?? summary.fsStore.readBytes ?? 0) > 0, `fsStore should record read bytes: ${JSON.stringify(summary.fsStore)}`)
   assert.ok((summary.fsStore.bytesWritten ?? summary.fsStore.writeBytes ?? 0) > 0, `fsStore should record written bytes: ${JSON.stringify(summary.fsStore)}`)
+  assertFsEventShape(summary.fsStore.events.find(event => event.kind === 'lock'), 'lock', 'lockWaitMs')
+  assertFsEventShape(summary.fsStore.events.find(event => event.kind === 'read'), 'read', 'readMs')
+  assertFsEventShape(summary.fsStore.events.find(event => event.kind === 'parse'), 'parse', 'parseMs')
+  assertFsEventShape(summary.fsStore.events.find(event => event.kind === 'write'), 'write', 'writeMs')
+  for (const event of summary.fsStore.events.filter(item => item.kind === 'read' || item.kind === 'parse' || item.kind === 'write')) {
+    assertNumber(event.bytes, `${event.kind} bytes`)
+    assert.ok(event.bytes > 0, `${event.kind} bytes should be positive`)
+  }
 }
 
 function assertTmuxSummaryRecorded(summary) {
@@ -143,6 +164,15 @@ function assertPanelSummaryRecorded(summary) {
   assert.ok(summary.panel.lastCounts.memberCount >= 1, `panel should record member counts: ${JSON.stringify(summary.panel.lastCounts)}`)
   assert.ok(summary.panel.lastCounts.mailboxProjectionCount >= 1, `panel should record mailbox projection counts: ${JSON.stringify(summary.panel.lastCounts)}`)
   assert.equal(JSON.stringify(summary).includes('PROFILE_FULL_BODY_SENTINEL'), false, 'profiling summary must not include full mailbox/report body sentinels')
+}
+
+function assertFsSummaryCloneIsImmutable(profiling, summary) {
+  const beforeEvents = summary.fsStore.events.length
+  summary.fsStore.events.push({ kind: 'read', operation: 'read', durationMs: 999, readMs: 999, callSite: 'mutated' })
+  summary.fsStore.readCount = 999
+  const next = profiling.readProfilingSummary()
+  assert.equal(next.fsStore.events.length, beforeEvents, 'fsStore profiling events should be cloned from internal state')
+  assert.notEqual(next.fsStore.readCount, 999, 'fsStore summary counters should be cloned from internal state')
 }
 
 function assertPanelSummaryCloneIsImmutable(profiling, summary) {
@@ -230,6 +260,7 @@ module.exports = {
         assert.equal(summary.enabled, false, 'summary should expose disabled state')
         assert.equal(metricOrEventCount(summary.fsStore, ['readCount', 'reads'], 'read'), 0, 'disabled profiling should not record fsStore reads')
         assert.equal(metricOrEventCount(summary.fsStore, ['writeCount', 'writes'], 'write'), 0, 'disabled profiling should not record fsStore writes')
+        assert.equal(summary.fsStore.events.length, 0, 'disabled profiling should keep fsStore event count at 0')
         assert.equal(metricOrEventCount(summary.tmux, ['commandCount', 'commands'], 'command'), 0, 'disabled profiling should not record tmux commands')
         assertPanelSummaryEmpty(summary)
         env.modules.panelDataSource.loadPanelData(panelTeamName)
@@ -249,6 +280,7 @@ module.exports = {
         const summary = profiling.readProfilingSummary()
         assert.equal(summary.enabled, true, 'summary should expose enabled state')
         assertFsSummaryRecorded(summary)
+        assertFsSummaryCloneIsImmutable(profiling, summary)
         assertTmuxSummaryRecorded(summary)
         assertPanelSummaryEmpty(summary)
       })

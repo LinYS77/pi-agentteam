@@ -94,6 +94,7 @@
     "check:boundaries": "node scripts/check-import-boundaries.cjs",
     "check": "npm test && npm run typecheck && git diff --check && npm run -s check:boundaries",
     "release:check": "npm run check && npm pack --dry-run --ignore-scripts",
-    "test:e2e": "node tests/e2e/tmux-smoke.cjs"
+    "test:e2e": "node tests/e2e/tmux-smoke.cjs",
+    "bench:state-read-model": "PI_AGENTTEAM_PROFILE=1 node tests/bench/team-read-model-baseline.cjs"
   }
 }

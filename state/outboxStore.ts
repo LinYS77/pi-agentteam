@@ -106,6 +106,10 @@ export function readOutboxStore(teamName: string): OutboxStoreState {
   return normalizeOutboxStore(readJsonFile<unknown>(getOutboxStatePath(teamName)))
 }
 
+export function readOutboxStoreWithoutTeamValidation(teamName: string): OutboxStoreState {
+  return normalizeOutboxStore(readJsonFile<unknown>(getOutboxStatePath(teamName)))
+}
+
 export function updateOutboxStore(
   teamName: string,
   updater: (state: OutboxStoreState) => void | false | OutboxStoreState,
@@ -296,7 +300,14 @@ export function markOutboxEffectFailed(input: OutboxFailInput): OutboxEffect | n
   return updated
 }
 
+function sortOutboxEffects(effects: OutboxEffect[]): OutboxEffect[] {
+  return effects.sort((a, b) => a.createdAt - b.createdAt || a.effectId.localeCompare(b.effectId))
+}
+
 export function listOutboxEffects(teamName: string): OutboxEffect[] {
-  return Object.values(readOutboxStore(teamName).effects)
-    .sort((a, b) => a.createdAt - b.createdAt || a.effectId.localeCompare(b.effectId))
+  return sortOutboxEffects(Object.values(readOutboxStore(teamName).effects))
+}
+
+export function listOutboxEffectsWithoutTeamValidation(teamName: string): OutboxEffect[] {
+  return sortOutboxEffects(Object.values(readOutboxStoreWithoutTeamValidation(teamName).effects))
 }

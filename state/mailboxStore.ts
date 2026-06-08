@@ -5,6 +5,7 @@ import { unreadMailboxMessages } from '../messageLifecycle.js'
 import { ensureDir, readJsonFile, withFileLock, writeJsonFile } from './fsStore.js'
 import { getMailboxPath } from './paths.js'
 import { validateOrQuarantineTeam } from './validation.js'
+import { writeMailboxProjection } from './panelProjectionStore.js'
 
 // ---------------------------------------------------------------------------
 // File-backed mailbox primitives. Each member gets one append-only JSON array
@@ -20,6 +21,10 @@ function ensureMailboxFile(mailboxPath: string): void {
     const code = (error as NodeJS.ErrnoException | undefined)?.code
     if (code !== 'EEXIST') throw error
   }
+}
+
+function persistMailboxProjection(teamName: string, memberName: string, mailbox: MailboxMessage[]): void {
+  writeMailboxProjection(teamName, memberName, mailbox)
 }
 
 function readMailboxFile(mailboxPath: string): MailboxMessage[] {
@@ -38,7 +43,9 @@ function withMailboxLock<T>(teamName: string, memberName: string, fn: (mailboxPa
 }
 
 export function ensureMailbox(teamName: string, memberName: string): void {
-  withMailboxLock(teamName, memberName, () => undefined)
+  withMailboxLock(teamName, memberName, mailboxPath => {
+    persistMailboxProjection(teamName, memberName, readMailboxFile(mailboxPath))
+  })
 }
 
 export function readMailbox(teamName: string, memberName: string): MailboxMessage[] {
@@ -65,6 +72,7 @@ export function pushMailboxMessage(
     }
     mailbox.push(next)
     writeJsonFile(mailboxPath, mailbox)
+    persistMailboxProjection(teamName, memberName, mailbox)
     return next
   })
 }
@@ -98,6 +106,7 @@ function markMailboxMessages(
     }
     if (changed) {
       writeJsonFile(mailboxPath, mailbox)
+      persistMailboxProjection(teamName, memberName, mailbox)
     }
   })
 }
