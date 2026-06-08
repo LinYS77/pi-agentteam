@@ -157,6 +157,29 @@ export type PlanRunPauseReason =
   | 'waiting_for_report'
   | 'leader_paused'
   | 'validation_failed'
+  | 'test_failed'
+  | 'limit_reached'
+
+export type PlanRunLimits = {
+  maxSteps?: number
+  maxConsecutiveSteps?: number
+  deadlineAt?: number
+  maxDurationMs?: number
+}
+
+export type PlanRunLimitReached = {
+  kind: 'max_steps' | 'max_consecutive_steps' | 'deadline' | 'duration'
+  at: number
+  value?: number
+  limit?: number
+}
+
+export type PlanRunLimitState = {
+  stepsStarted: number
+  consecutiveStepsStarted: number
+  lastLimitCheckAt?: number
+  lastLimitReached?: PlanRunLimitReached
+}
 
 export type PlanRunStep = {
   id: string
@@ -186,6 +209,8 @@ export type PlanRun = {
   currentStepIndex: number
   activeTaskId?: string
   pauseReason?: PlanRunPauseReason
+  limits?: PlanRunLimits
+  limitState?: PlanRunLimitState
   steps: PlanRunStep[]
   metadata?: Record<string, unknown>
 }
@@ -200,6 +225,8 @@ export type PlanRunEventType =
   | 'resumed'
   | 'cancelled'
   | 'completed'
+  | 'failure_signaled'
+  | 'limit_reached'
 
 export type PlanRunEvent = {
   id: string

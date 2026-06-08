@@ -176,6 +176,8 @@ export type RepositoryPlanRunSummary = Pick<PlanRun,
   | 'currentStepIndex'
   | 'activeTaskId'
   | 'pauseReason'
+  | 'limits'
+  | 'limitState'
 > & {
   stepCount: number
   steps: RepositoryPlanRunStepSummary[]
@@ -478,6 +480,15 @@ function toRepositoryPlanRunSummary(team: TeamState, run: PlanRun): RepositoryPl
     currentStepIndex: run.currentStepIndex,
     activeTaskId: run.activeTaskId,
     pauseReason: run.pauseReason,
+    limits: run.limits ? { ...run.limits } : undefined,
+    limitState: run.limitState
+      ? {
+          stepsStarted: run.limitState.stepsStarted,
+          consecutiveStepsStarted: run.limitState.consecutiveStepsStarted,
+          lastLimitCheckAt: run.limitState.lastLimitCheckAt,
+          lastLimitReached: run.limitState.lastLimitReached ? { ...run.limitState.lastLimitReached } : undefined,
+        }
+      : undefined,
     stepCount: run.steps.length,
     steps: run.steps.map(toRepositoryPlanRunStepSummary),
     latestEvent: latestEvent ? toRepositoryPlanRunEventSummary(latestEvent) : undefined,

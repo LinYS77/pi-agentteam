@@ -58,6 +58,8 @@ const PLAN_RUN_EVENT_TYPES = Object.freeze([
   'resumed',
   'cancelled',
   'completed',
+  'failure_signaled',
+  'limit_reached',
 ] as const)
 
 const PLAN_RUN_PAUSE_REASONS = Object.freeze([
@@ -67,6 +69,8 @@ const PLAN_RUN_PAUSE_REASONS = Object.freeze([
   'waiting_for_report',
   'leader_paused',
   'validation_failed',
+  'test_failed',
+  'limit_reached',
 ] as const)
 
 const OLD_LAYOUT_MARKER_KEYS = Object.freeze([
@@ -289,6 +293,100 @@ function pushInvalidPlanRunPauseReason(
   }))
 }
 
+function isPositiveFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return Number.isInteger(value) && isPositiveFiniteNumber(value)
+}
+
+function pushInvalidPlanRunLimit(
+  reasons: StateValidationReason[],
+  input: { file: string; path: string; field: string; value: unknown; integer?: boolean },
+): void {
+  if (input.value === undefined) return
+  const valid = input.integer ? isPositiveInteger(input.value) : isPositiveFiniteNumber(input.value)
+  if (valid) return
+  reasons.push(reason({
+    code: 'invalid_plan_run_limit',
+    file: input.file,
+    path: input.path,
+    field: input.field,
+    value: input.value,
+    message: `Invalid PlanRun limit ${input.field}=${valueString(input.value)}; expected positive ${input.integer ? 'integer' : 'finite number'}`,
+  }))
+}
+
+function pushInvalidPlanRunLimitStateNumber(
+  reasons: StateValidationReason[],
+  input: { file: string; path: string; field: string; value: unknown; required?: boolean; integer?: boolean },
+): void {
+  if (input.value === undefined && input.required !== true) return
+  const valid = input.integer
+    ? (Number.isInteger(input.value) && typeof input.value === 'number' && input.value >= 0)
+    : (typeof input.value === 'number' && Number.isFinite(input.value) && input.value >= 0)
+  if (valid) return
+  reasons.push(reason({
+    code: 'invalid_plan_run_limit_state',
+    file: input.file,
+    path: input.path,
+    field: input.field,
+    value: input.value,
+    message: `Invalid PlanRun limitState ${input.field}=${valueString(input.value)}`,
+  }))
+}
+
+function inspectPlanRunLimits(
+  reasons: StateValidationReason[],
+  value: unknown,
+  input: { file: string; path: string },
+): void {
+  if (value === undefined) return
+  if (!isObjectRecord(value)) {
+    reasons.push(reason({ code: 'invalid_plan_run_limits_shape', file: input.file, path: input.path, field: 'limits', value, message: 'PlanRun limits must be an object when present' }))
+    return
+  }
+  pushInvalidPlanRunLimit(reasons, { file: input.file, path: `${input.path}.maxSteps`, field: 'maxSteps', value: value.maxSteps, integer: true })
+  pushInvalidPlanRunLimit(reasons, { file: input.file, path: `${input.path}.maxConsecutiveSteps`, field: 'maxConsecutiveSteps', value: value.maxConsecutiveSteps, integer: true })
+  pushInvalidPlanRunLimit(reasons, { file: input.file, path: `${input.path}.deadlineAt`, field: 'deadlineAt', value: value.deadlineAt })
+  pushInvalidPlanRunLimit(reasons, { file: input.file, path: `${input.path}.maxDurationMs`, field: 'maxDurationMs', value: value.maxDurationMs })
+}
+
+function inspectPlanRunLimitReached(
+  reasons: StateValidationReason[],
+  value: unknown,
+  input: { file: string; path: string },
+): void {
+  if (value === undefined) return
+  if (!isObjectRecord(value)) {
+    reasons.push(reason({ code: 'invalid_plan_run_limit_state', file: input.file, path: input.path, field: 'lastLimitReached', value, message: 'PlanRun limitState.lastLimitReached must be an object when present' }))
+    return
+  }
+  if (value.kind !== 'max_steps' && value.kind !== 'max_consecutive_steps' && value.kind !== 'deadline' && value.kind !== 'duration') {
+    reasons.push(reason({ code: 'invalid_plan_run_limit_state', file: input.file, path: `${input.path}.kind`, field: 'kind', value: value.kind, message: `Unsupported PlanRun limitState.lastLimitReached kind ${valueString(value.kind)}` }))
+  }
+  pushInvalidPlanRunLimitStateNumber(reasons, { file: input.file, path: `${input.path}.at`, field: 'at', value: value.at, required: true })
+  pushInvalidPlanRunLimitStateNumber(reasons, { file: input.file, path: `${input.path}.value`, field: 'value', value: value.value })
+  pushInvalidPlanRunLimitStateNumber(reasons, { file: input.file, path: `${input.path}.limit`, field: 'limit', value: value.limit })
+}
+
+function inspectPlanRunLimitState(
+  reasons: StateValidationReason[],
+  value: unknown,
+  input: { file: string; path: string },
+): void {
+  if (value === undefined) return
+  if (!isObjectRecord(value)) {
+    reasons.push(reason({ code: 'invalid_plan_run_limit_state_shape', file: input.file, path: input.path, field: 'limitState', value, message: 'PlanRun limitState must be an object when present' }))
+    return
+  }
+  pushInvalidPlanRunLimitStateNumber(reasons, { file: input.file, path: `${input.path}.stepsStarted`, field: 'stepsStarted', value: value.stepsStarted, required: true, integer: true })
+  pushInvalidPlanRunLimitStateNumber(reasons, { file: input.file, path: `${input.path}.consecutiveStepsStarted`, field: 'consecutiveStepsStarted', value: value.consecutiveStepsStarted, required: true, integer: true })
+  pushInvalidPlanRunLimitStateNumber(reasons, { file: input.file, path: `${input.path}.lastLimitCheckAt`, field: 'lastLimitCheckAt', value: value.lastLimitCheckAt })
+  inspectPlanRunLimitReached(reasons, value.lastLimitReached, { file: input.file, path: `${input.path}.lastLimitReached` })
+}
+
 function inspectOldLayoutMarkers(
   reasons: StateValidationReason[],
   value: Record<string, unknown>,
@@ -417,6 +515,8 @@ export function validatePersistedTeamState(raw: unknown, file = 'team.json'): St
       inspectOldLayoutMarkers(reasons, planRun, { file, path: planRunPath })
       pushInvalidPlanRunStatus(reasons, { file, path: `${planRunPath}.status`, field: 'status', value: planRun.status })
       pushInvalidPlanRunPauseReason(reasons, { file, path: `${planRunPath}.pauseReason`, field: 'pauseReason', value: planRun.pauseReason })
+      inspectPlanRunLimits(reasons, planRun.limits, { file, path: `${planRunPath}.limits` })
+      inspectPlanRunLimitState(reasons, planRun.limitState, { file, path: `${planRunPath}.limitState` })
       if (planRun.steps !== undefined && !Array.isArray(planRun.steps)) {
         reasons.push(reason({ code: 'invalid_plan_run_steps_shape', file, path: `${planRunPath}.steps`, field: 'steps', value: planRun.steps, message: `PlanRun ${planRunId} steps must be an array when present` }))
       } else if (Array.isArray(planRun.steps)) {

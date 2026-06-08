@@ -343,7 +343,7 @@ runtime/leaderAttention.ts
 
 #### v0.5.0 目标：Approved PlanRun
 
-v0.4.9 已完成 Approved PlanRun MVP 的基础链路；v0.4.10 已补齐 completion/recovery hardening，使 PlanRun 能在 leader-gated、compact-only、无自动化的前提下完成多步闭环。当前显式 PlanRun 状态保持 compact：
+v0.4.9 已完成 Approved PlanRun MVP 的基础链路；v0.4.10 已补齐 completion/recovery hardening；v0.4.11 已补齐 first-class failure/limits hardening，使 PlanRun 能在 leader-gated、compact-only、无自动化的前提下完成多步闭环并显式处理失败/限制。当前显式 PlanRun 状态保持 compact：
 
 ```ts
 type PlanRun = {
@@ -352,7 +352,24 @@ type PlanRun = {
   status: 'approved' | 'active' | 'waiting_review' | 'paused' | 'cancelled' | 'done'
   currentStepIndex: number
   activeTaskId?: string
-  pauseReason?: 'report_blocked' | 'question' | 'watchdog' | 'waiting_for_report' | 'leader_paused' | 'validation_failed'
+  pauseReason?: 'report_blocked' | 'question' | 'watchdog' | 'waiting_for_report' | 'leader_paused' | 'validation_failed' | 'test_failed' | 'limit_reached'
+  limits?: {
+    maxSteps?: number
+    maxConsecutiveSteps?: number
+    deadlineAt?: number
+    maxDurationMs?: number
+  }
+  limitState?: {
+    stepsStarted: number
+    consecutiveStepsStarted: number
+    lastLimitCheckAt?: number
+    lastLimitReached?: {
+      kind: 'max_steps' | 'max_consecutive_steps' | 'deadline' | 'duration'
+      at: number
+      value?: number
+      limit?: number
+    }
+  }
   steps: Array<{
     id: string
     index: number
@@ -364,7 +381,7 @@ type PlanRun = {
 }
 ```
 
-v0.4.9/v0.4.10 已落地规则：
+v0.4.9/v0.4.10/v0.4.11 已落地规则：
 
 - `approve` 必须由 leader 明确指定 `sourceReportId` 且 `confirmApproved=true`；approve 只创建 compact PlanRun，不创建 task。
 - `advance(planRunId)` 必须显式调用；每次只创建一个当前 step task，并写 compact created/assigned audit。
@@ -373,16 +390,19 @@ v0.4.9/v0.4.10 已落地规则：
 - leader `close` active step task 后，step 进入 `done`，`currentStepIndex` 指向下一 pending step；最后一步 close 后 PlanRun 进入 `done`。
 - owner `report_blocked` 后 task 仍保持 `open`；PlanRun 进入 `paused` 且 `pauseReason=report_blocked`，不自动 block task。
 - owner 对 active step task 发 task-bound `question` 后，PlanRun 进入 `paused` 且 `pauseReason=question`，task 不自动 block/close/reassign。
-- leader-only `pause/resume/cancel` 已实现；`pauseReason=leader_paused` 默认，支持手动 `validation_failed` seam。
+- leader-only `pause/resume/cancel` 已实现；`pauseReason=leader_paused` 默认，支持手动 pause。
+- first-class `signal_failure` 已实现，支持 compact `validation_failed` / `test_failed`，不解析 report/test logs，不改 task 状态。
+- `approve` 可存储 optional compact limits：`maxSteps`、`maxConsecutiveSteps`、`deadlineAt`、`maxDurationMs`，并初始化 compact `limitState`。
+- explicit `check_limits` 已实现，只在 leader 显式调用时评估 limits；触发后 PlanRun `paused` 且 `pauseReason=limit_reached`，写 compact `limit_reached` event。
 - `show/list/task show/digest` 和 `/team` 只显示 compact PlanRun hint/projection，不读取 `TaskReport.text` 或 `MailboxMessage.text`。
-- `dryRun=true` 可预览 `advance/pause/resume/cancel`，不分配 id、不改 seq、不写 event/mailbox、不改变 PlanRun/task 状态。
+- `dryRun=true` 可预览 `advance/pause/resume/cancel/signal_failure/check_limits`，不分配 id、不改 seq、不写 event/mailbox、不改变 PlanRun/task 状态。
 - watchdog/no-report 以 compact attention 暴露，不自动 nudge、不自动 advance。
-- 不存在 hidden scheduler/autopilot/timer；不自动 advance/close/block/reassign/nudge；不允许 worker 创建任务或派发 worker。
+- 不存在 hidden scheduler/autopilot/timer；deadline/duration limit 不后台检查，只在 explicit leader action 中检查；不自动 advance/close/block/reassign/nudge；不允许 worker 创建任务或派发 worker。
 
 PlanRun 后续规则：
 
-- test failure 的 richer first-class integration 仍需在未来补齐；当前以 leader 手动 `validation_failed` pause seam 表达。
-- 达到 step/time limit 的自动化策略仍需明确，但不得通过 hidden scheduler/default autopilot 实现。
+- 更丰富的外部 CI/test integration 可在 first-class `signal_failure` seam 之上继续扩展，但不得存储 raw logs/full text。
+- step/time policy 的 config defaults 仍需单独设计，且不得引入 hidden scheduler/default autopilot。
 - 所有动作写入 compact PlanRunEvent/task/report/history。
 
 #### 主要涉及区域
@@ -412,9 +432,11 @@ teamPanel/layout.ts
 - worker `report_blocked` 后 PlanRun compact `paused/report_blocked` 可在 `agentteam_task show`、leader digest 和 `/team` compact projection 中看到。
 - owner task-bound question 可 pause active PlanRun step，且不会自动 block/close/reassign task。
 - `pause/resume/cancel` leader-only，可审计且无 task/mailbox side effects。
+- `signal_failure` 可 first-class 表达 validation/test failure，且不会自动 block/close/reassign task。
+- `check_limits` 可显式评估 max steps/consecutive steps/deadline/duration，limit reached 时 pause 且不创建 task/mailbox/nudge。
 - `dryRun=true` preview 不分配 id、不改 seq、不写 event/mailbox。
 - 每步都有 task/report/PlanRunEvent 历史，且 compact surfaces 不泄漏 full body。
-- test failure 和 step/time limit 仍作为 v0.5 后续完整链路增强项。
+- 外部 CI/test source integration 和 limit config defaults 仍作为 v0.5 后续增强项。
 
 ---
 
@@ -895,6 +917,14 @@ v0.4.10 已完成切片：
 - Slice 6：active/waiting/paused/approved-ready PlanRun compact projection 接入 repository `/team` read-model 和 panel model。
 - Slice 7：docs/checkpoint hardening，GitHub-only v0.4.10 checkpoint。
 
+v0.4.11 已完成切片：
+
+- Slice 1：limits/failure RED characterization，覆盖 `signal_failure`、limits/limitState、`check_limits`、limit reached、compact UX/panel、no scheduler/no full-text。
+- Slice 2：first-class `signal_failure` seam，支持 `validation_failed`/`test_failed` compact failure signal。
+- Slice 3：PlanRun optional `limits`/`limitState` model、approve storage、validation、repository summary 和 legacy compatibility。
+- Slice 4：explicit `check_limits`、pure limit evaluator、`limit_reached` pause/event，且无后台 scheduler/timer/autopilot。
+- Slice 5：docs/checkpoint hardening，GitHub-only v0.4.11 checkpoint。
+
 当前核心行为：
 
 - `approve` 只创建 compact PlanRun，不创建 task、不发送 assignment。
@@ -904,6 +934,8 @@ v0.4.10 已完成切片：
 - `report_blocked` 不 block task，只把 PlanRun compact pause 为 `report_blocked`。
 - owner task-bound question 可把 active PlanRun compact pause 为 `question`。
 - `pause/resume/cancel` leader-only，只更新 compact PlanRun 状态/event，不改 task/mailbox。
+- `signal_failure` leader-only，只记录 compact validation/test failure，并 pause PlanRun。
+- `check_limits` leader-only，只在显式调用时评估 compact limits；reached 时 pause PlanRun，不创建 task/mailbox/nudge。
 - `show/list/task show/digest/team panel` 不读取或返回 `TaskReport.text`/`MailboxMessage.text`。
 - `dryRun=true` preview 不写 state，且不分配 id/seq。
 - 不实现 hidden scheduler/autopilot/timer，不自动 advance/close/block/reassign/nudge。
@@ -918,8 +950,8 @@ v0.4.10 已完成切片：
 
 后续验收项：
 
-- test failure 的 first-class source/seam 可继续扩展；当前使用手动 `validation_failed` pause。
-- step/time limit policy 仍需单独设计，且不得引入 hidden scheduler/default autopilot。
+- 外部 CI/test source integration 可继续接入 `signal_failure`，但不得存储 raw logs/full body。
+- PlanRun limit defaults/config policy 仍需单独设计，且不得引入 hidden scheduler/default autopilot。
 
 ### Slice 7 — Release hardening
 
@@ -984,6 +1016,8 @@ implementer executes PlanRun step 2 -> report_done -> leader close -> PlanRun do
 blocked report pauses PlanRun
 owner question pauses PlanRun without blocking/closing task
 leader pause/resume/cancel are compact and auditable
+signal_failure pauses PlanRun for validation_failed/test_failed without task mutation
+check_limits pauses PlanRun for limit_reached without task/mailbox side effects
 agentteam_planrun dryRun preview does not mutate state or allocate ids
 worker no-report state appears as waiting-for-report attention
 /team shows compact PlanRun projection without full report/mailbox bodies
@@ -1000,7 +1034,7 @@ worker no-report state appears as waiting-for-report attention
 | Tmux Adapter | snapshot/cache 生效；普通 refresh 不逐 member 调 tmux |
 | `/team` Panel | 无持续闪烁；in-place action；debounce/diff 生效 |
 | Task/Report | no-report 可见可提醒；不伪造 report；leader close 仍 required |
-| PlanRun | user-approved；approve no task；explicit one-step advance；leader close 后多步推进；terminal done；report_done waiting_review；report_blocked/question paused；pause/resume/cancel；dryRun no mutation；`/team` compact visibility；全程可审计 |
+| PlanRun | user-approved；approve no task；explicit one-step advance；leader close 后多步推进；terminal done；report_done waiting_review；report_blocked/question paused；signal_failure validation/test failed；check_limits limit_reached；pause/resume/cancel；dryRun no mutation；`/team` compact visibility；全程可审计 |
 | Config | v1 schema；legacy compatibility；first-run bootstrap；effective model 可见 |
 | Performance | baseline + p95 + 相对改善数据齐全 |
 

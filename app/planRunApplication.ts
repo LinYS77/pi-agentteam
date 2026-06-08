@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { PlanRun, PlanRunPauseReason, PlanRunStep, TaskReport, TeamMember, TeamState, TeamTask } from '../internalTypes.js'
+import type { PlanRun, PlanRunLimitReached, PlanRunLimitState, PlanRunLimits, PlanRunPauseReason, PlanRunStep, TaskReport, TeamMember, TeamState, TeamTask } from '../internalTypes.js'
 import { TEAM_LEAD } from '../internalTypes.js'
 import type { PlanRunApplicationDeps } from './types.js'
 import type { PlanRunApplicationInput, PlanRunApplicationResult, PlanRunInput, PlanRunStepInput } from './planRunTypes.js'
@@ -60,6 +60,87 @@ function fallbackStepCount(report: TaskReport): number {
   return Math.max(1, Math.min(20, Math.floor(value)))
 }
 
+function normalizePositiveInteger(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined
+  if (!Number.isFinite(value) || value <= 0) return undefined
+  return Math.floor(value)
+}
+
+function normalizePositiveNumber(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined
+  return Number.isFinite(value) && value > 0 ? value : undefined
+}
+
+function normalizePlanRunLimits(value: PlanRunInput['limits']): PlanRunLimits | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const limits: PlanRunLimits = {}
+  const maxSteps = normalizePositiveInteger(value.maxSteps)
+  const maxConsecutiveSteps = normalizePositiveInteger(value.maxConsecutiveSteps)
+  const deadlineAt = normalizePositiveNumber(value.deadlineAt)
+  const maxDurationMs = normalizePositiveNumber(value.maxDurationMs)
+  if (maxSteps !== undefined) limits.maxSteps = maxSteps
+  if (maxConsecutiveSteps !== undefined) limits.maxConsecutiveSteps = maxConsecutiveSteps
+  if (deadlineAt !== undefined) limits.deadlineAt = deadlineAt
+  if (maxDurationMs !== undefined) limits.maxDurationMs = maxDurationMs
+  return Object.keys(limits).length ? limits : undefined
+}
+
+function initialPlanRunLimitState(limits: PlanRunLimits | undefined): PlanRunLimitState | undefined {
+  return limits
+    ? {
+        stepsStarted: 0,
+        consecutiveStepsStarted: 0,
+      }
+    : undefined
+}
+
+function formatPlanRunLimits(limits: PlanRunLimits | undefined): string {
+  if (!limits) return 'Limits: -'
+  return `Limits: maxSteps=${limits.maxSteps ?? '-'}; maxConsecutiveSteps=${limits.maxConsecutiveSteps ?? '-'}; deadlineAt=${limits.deadlineAt ?? '-'}; maxDurationMs=${limits.maxDurationMs ?? '-'}`
+}
+
+function formatPlanRunLimitState(limitState: PlanRunLimitState | undefined): string {
+  if (!limitState) return 'Limit state: -'
+  const lastCheck = limitState.lastLimitCheckAt === undefined ? '-' : String(limitState.lastLimitCheckAt)
+  const lastReached = limitState.lastLimitReached ? `${limitState.lastLimitReached.kind} at ${limitState.lastLimitReached.at}` : '-'
+  return `Limit state: stepsStarted=${limitState.stepsStarted}; consecutiveStepsStarted=${limitState.consecutiveStepsStarted}; lastLimitCheckAt=${lastCheck}; lastLimitReached=${lastReached}`
+}
+
+function ensurePlanRunLimitState(run: Pick<PlanRun, 'limits' | 'limitState'>): PlanRunLimitState | undefined {
+  if (!run.limits) return undefined
+  if (run.limitState) return run.limitState
+  return {
+    stepsStarted: 0,
+    consecutiveStepsStarted: 0,
+  }
+}
+
+function evaluatePlanRunLimits(run: Pick<PlanRun, 'limits' | 'limitState' | 'approvedAt' | 'createdAt'>, now: number): PlanRunLimitReached | undefined {
+  const limits = run.limits
+  const state = ensurePlanRunLimitState(run)
+  if (!limits || !state) return undefined
+  if (limits.maxSteps !== undefined && state.stepsStarted >= limits.maxSteps) {
+    return { kind: 'max_steps', at: now, value: state.stepsStarted, limit: limits.maxSteps }
+  }
+  if (limits.maxConsecutiveSteps !== undefined && state.consecutiveStepsStarted >= limits.maxConsecutiveSteps) {
+    return { kind: 'max_consecutive_steps', at: now, value: state.consecutiveStepsStarted, limit: limits.maxConsecutiveSteps }
+  }
+  if (limits.deadlineAt !== undefined && now >= limits.deadlineAt) {
+    return { kind: 'deadline', at: now, value: now, limit: limits.deadlineAt }
+  }
+  const startedAt = run.approvedAt ?? run.createdAt
+  if (limits.maxDurationMs !== undefined && now - startedAt >= limits.maxDurationMs) {
+    return { kind: 'duration', at: now, value: now - startedAt, limit: limits.maxDurationMs }
+  }
+  return undefined
+}
+
+function limitReachedSummary(reached: PlanRunLimitReached): string {
+  const value = reached.value === undefined ? '-' : String(reached.value)
+  const limit = reached.limit === undefined ? '-' : String(reached.limit)
+  return `PlanRun limit_reached kind=${reached.kind} value=${value} limit=${limit}`
+}
+
 function normalizePlanRunSteps(input: {
   steps?: PlanRunStepInput[]
   report: TaskReport
@@ -109,7 +190,9 @@ function formatPlanRunLine(run: PlanRunSummary): string {
   const source = run.sourceReportId ? ` sourceReport=${run.sourceReportId}` : ''
   const active = run.activeTaskId ? ` activeTask=${run.activeTaskId}` : ''
   const pause = run.pauseReason ? ` pause=${run.pauseReason}` : ''
-  return `${run.id} ${run.status}${source} steps=${run.stepCount} currentStep=${run.currentStepIndex}${active}${pause}; nextAction: ${nextActionForPlanRunSummary(run)}`
+  const limits = run.limits ? ` limits=maxSteps:${run.limits.maxSteps ?? '-'},maxConsecutiveSteps:${run.limits.maxConsecutiveSteps ?? '-'},deadlineAt:${run.limits.deadlineAt ?? '-'},maxDurationMs:${run.limits.maxDurationMs ?? '-'}` : ''
+  const limitState = run.limitState ? ` limitState=stepsStarted:${run.limitState.stepsStarted},consecutiveStepsStarted:${run.limitState.consecutiveStepsStarted}` : ''
+  return `${run.id} ${run.status}${source} steps=${run.stepCount} currentStep=${run.currentStepIndex}${active}${pause}${limits}${limitState}; nextAction: ${nextActionForPlanRunSummary(run)}`
 }
 
 function formatPlanRunDetails(run: PlanRunSummary): string {
@@ -120,6 +203,8 @@ function formatPlanRunDetails(run: PlanRunSummary): string {
     `Source summary: ${run.sourceReportSummary ?? '-'}`,
     `Steps: ${run.stepCount}`,
     `Current step index: ${run.currentStepIndex}`,
+    formatPlanRunLimits(run.limits),
+    formatPlanRunLimitState(run.limitState),
     `nextAction: ${nextActionForPlanRunSummary(run)}`,
   ]
   if (run.pauseReason) lines.push(`Pause reason: ${run.pauseReason}`)
@@ -155,6 +240,16 @@ function normalizeManualPauseReason(value: PlanRunInput['pauseReason']): PlanRun
   return reason === 'leader_paused' || reason === 'validation_failed' ? reason : undefined
 }
 
+function normalizeFailureKind(value: PlanRunInput['failureKind']): Extract<PlanRunPauseReason, 'validation_failed' | 'test_failed'> | undefined {
+  return value === 'validation_failed' || value === 'test_failed' ? value : undefined
+}
+
+function compactMetadataValue(value: string | undefined): string | undefined {
+  const normalized = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
+  if (!normalized) return undefined
+  return normalized.length <= 120 ? normalized : `${normalized.slice(0, 117)}...`
+}
+
 function isActiveStepStatus(status: PlanRunStep['status']): boolean {
   return status === 'assigned' || status === 'open' || status === 'waiting_review' || status === 'blocked'
 }
@@ -164,7 +259,7 @@ function resumeStatusForRun(run: Pick<PlanRun, 'activeTaskId' | 'currentStepInde
   return run.activeTaskId || (step?.taskId && isActiveStepStatus(step.status)) ? 'active' : 'approved'
 }
 
-type PlanRunDryRunAction = Extract<PlanRunInput['action'], 'advance' | 'pause' | 'resume' | 'cancel'>
+type PlanRunDryRunAction = Extract<PlanRunInput['action'], 'advance' | 'pause' | 'resume' | 'cancel' | 'signal_failure' | 'check_limits'>
 
 type PlanRunDryRunPreview = {
   dryRun: true
@@ -346,6 +441,64 @@ function previewCancelPlanRun(run: PlanRunSummary): PlanRunDryRunPreview {
   }
 }
 
+function previewSignalFailurePlanRun(run: PlanRunSummary, params: PlanRunInput): PlanRunDryRunPreview {
+  const step = currentSummaryStep(run)
+  const failureKind = normalizeFailureKind(params.failureKind)
+  if (!failureKind) return previewDenied({ action: 'signal_failure', planRunId: run.id, run, reason: 'failure_kind_required', step })
+  if (run.status === 'done' || run.status === 'cancelled') return previewDenied({ action: 'signal_failure', planRunId: run.id, run, reason: 'planrun_terminal', step })
+  return {
+    dryRun: true,
+    preview: true,
+    action: 'signal_failure',
+    planRunId: run.id,
+    allowed: true,
+    status: run.status,
+    stepIndex: step?.index,
+    stepStatus: step?.status,
+    taskId: params.taskId ?? run.activeTaskId ?? step?.taskId ?? null,
+    wouldCreateTask: false,
+    wouldAppendEvent: true,
+    wouldChangeStatus: run.status !== 'paused' || run.pauseReason !== failureKind,
+    wouldChangePlanRun: true,
+    wouldChangeTask: false,
+    wouldSendMailbox: false,
+    wouldAllocateIdOnExecute: true,
+    allocatedId: false,
+    changedSeq: false,
+    nextStatus: 'paused',
+    nextPauseReason: failureKind,
+    nextAction: `leader review ${failureKind}; maybe resume/cancel`,
+  }
+}
+
+function previewCheckLimitsPlanRun(run: PlanRunSummary, now: number): PlanRunDryRunPreview {
+  const step = currentSummaryStep(run)
+  const reached = evaluatePlanRunLimits(run, now)
+  return {
+    dryRun: true,
+    preview: true,
+    action: 'check_limits',
+    planRunId: run.id,
+    allowed: true,
+    status: run.status,
+    stepIndex: step?.index,
+    stepStatus: step?.status,
+    taskId: run.activeTaskId ?? step?.taskId ?? null,
+    wouldCreateTask: false,
+    wouldAppendEvent: Boolean(reached),
+    wouldChangeStatus: Boolean(reached) && (run.status !== 'paused' || run.pauseReason !== 'limit_reached'),
+    wouldChangePlanRun: Boolean(reached),
+    wouldChangeTask: false,
+    wouldSendMailbox: false,
+    wouldAllocateIdOnExecute: Boolean(reached),
+    allocatedId: false,
+    changedSeq: false,
+    nextStatus: reached ? 'paused' : run.status,
+    nextPauseReason: reached ? 'limit_reached' : run.pauseReason,
+    nextAction: reached ? `leader review limit_reached ${reached.kind}; maybe resume/cancel` : nextActionForPlanRunSummary(run),
+  }
+}
+
 function dryRunPlanRun(
   input: PlanRunApplicationInput,
   deps: PlanRunApplicationDeps,
@@ -381,7 +534,11 @@ function dryRunPlanRun(
       ? previewPausePlanRun(run, params)
       : action === 'resume'
         ? previewResumePlanRun(run)
-        : previewCancelPlanRun(run)
+        : action === 'signal_failure'
+          ? previewSignalFailurePlanRun(run, params)
+          : action === 'check_limits'
+            ? previewCheckLimitsPlanRun(run, deps.now?.() ?? Date.now())
+            : previewCancelPlanRun(run)
   return {
     text: `dryRun preview ${action} PlanRun ${run.id}: wouldCreateTask=${preview.wouldCreateTask}; wouldAppendEvent=${preview.wouldAppendEvent}; nextStatus=${preview.nextStatus ?? '-'}; reason=${preview.reason ?? '-'}`,
     details: {
@@ -431,6 +588,8 @@ function approvePlanRun(
   }
 
   const approvedAt = deps.now?.() ?? Date.now()
+  const limits = normalizePlanRunLimits(params.limits)
+  const limitState = initialPlanRunLimitState(limits)
   let planRunId = ''
   const updated = deps.planRuns.writePlanRunMutation(teamName, latest => {
     planRunId = allocatePlanRunId(latest)
@@ -446,6 +605,8 @@ function approvePlanRun(
       createdAt: approvedAt,
       updatedAt: approvedAt,
       currentStepIndex: 0,
+      limits,
+      limitState,
       steps: normalizePlanRunSteps({ steps: params.steps, report, at: approvedAt }),
       metadata: { source: 'agentteam_planrun_approve', reportType: report.type, reportAuthor: report.author },
     }
@@ -607,6 +768,12 @@ function advancePlanRun(
     step.updatedAt = advancedAt
     run.status = 'active'
     run.activeTaskId = task.id
+    const limitState = ensurePlanRunLimitState(run)
+    if (limitState) {
+      limitState.stepsStarted += 1
+      limitState.consecutiveStepsStarted += 1
+      run.limitState = limitState
+    }
     run.updatedAt = advancedAt
     latest.activePlanRunId = run.id
     createdTask = task
@@ -939,6 +1106,249 @@ function cancelPlanRun(
   }
 }
 
+function checkPlanRunLimits(
+  input: PlanRunApplicationInput,
+  deps: PlanRunApplicationDeps,
+): PlanRunApplicationResult {
+  const { params, context } = input
+  const { teamName, actor } = context
+  if (actor !== TEAM_LEAD) {
+    return denyPlanRun({
+      action: 'check_limits',
+      reason: 'leader_only',
+      message: 'Cannot check PlanRun limits: only team-lead may explicitly check PlanRun limits.',
+    })
+  }
+  if (!params.planRunId) {
+    return denyPlanRun({
+      action: 'check_limits',
+      reason: 'planrun_id_required',
+      message: 'Cannot check PlanRun limits: planRunId is required.',
+    })
+  }
+
+  const checkedAt = deps.now?.() ?? Date.now()
+  const before = deps.planRuns.readPlanRunSummary(teamName, params.planRunId)
+  if (!before) {
+    return denyPlanRun({
+      action: 'check_limits',
+      reason: 'planrun_not_found',
+      message: `Cannot check PlanRun limits: ${params.planRunId} was not found.`,
+      details: { planRunId: params.planRunId },
+    })
+  }
+  const previewReached = evaluatePlanRunLimits(before, checkedAt)
+  if (!previewReached) {
+    return {
+      text: `PlanRun ${params.planRunId} limits ok; no mutation performed.`,
+      details: {
+        planRunId: params.planRunId,
+        planRun: before,
+        limitReached: false,
+        taskCreated: false,
+        taskClosed: false,
+        taskBlocked: false,
+        mailboxSent: false,
+      },
+    }
+  }
+
+  let denial: PlanRunApplicationResult | undefined
+  let reached: PlanRunLimitReached | undefined
+  let stepIndex: number | undefined
+  let taskId: string | undefined
+  let previousStatus: PlanRun['status'] | undefined
+  const updated = deps.planRuns.writePlanRunMutation(teamName, latest => {
+    const run = latest.planRuns?.[params.planRunId!]
+    if (!run) {
+      denial = denyPlanRun({
+        action: 'check_limits',
+        reason: 'planrun_not_found',
+        message: `Cannot check PlanRun limits: ${params.planRunId} was not found.`,
+        details: { planRunId: params.planRunId },
+      })
+      return
+    }
+    const limitState = ensurePlanRunLimitState(run)
+    reached = evaluatePlanRunLimits(run, checkedAt)
+    if (!reached || !limitState) return
+    const step = run.steps[run.currentStepIndex]
+    previousStatus = run.status
+    stepIndex = step?.index
+    taskId = run.activeTaskId ?? step?.taskId
+    limitState.lastLimitCheckAt = checkedAt
+    limitState.lastLimitReached = reached
+    run.limitState = limitState
+    run.status = 'paused'
+    run.pauseReason = 'limit_reached'
+    run.updatedAt = checkedAt
+    latest.activePlanRunId = run.id
+  })
+
+  if (denial) return denial
+  if (!updated || !reached) {
+    return denyPlanRun({
+      action: 'check_limits',
+      reason: 'check_limits_write_failed',
+      message: `Cannot check PlanRun limits for ${params.planRunId}: write failed.`,
+      details: { planRunId: params.planRunId },
+    })
+  }
+
+  const event = deps.planRuns.appendPlanRunEvent(teamName, {
+    planRunId: params.planRunId,
+    type: 'limit_reached',
+    by: actor,
+    at: checkedAt,
+    summary: limitReachedSummary(reached),
+    stepIndex,
+    taskId,
+    pauseReason: 'limit_reached',
+    data: {
+      source: 'agentteam_planrun_check_limits',
+      reached,
+      previousStatus,
+    },
+  })
+  const summary = deps.planRuns.readPlanRunSummary(teamName, params.planRunId)
+  return {
+    text: `PlanRun ${params.planRunId} limit_reached ${reached.kind}; PlanRun paused and no task/mailbox side effects were performed.`,
+    details: {
+      planRunId: params.planRunId,
+      planRun: summary,
+      event,
+      limitReached: true,
+      reached,
+      taskCreated: false,
+      taskClosed: false,
+      taskBlocked: false,
+      taskReassigned: false,
+      assignmentSent: false,
+      mailboxSent: false,
+    },
+    statusInvalidationRequested: true,
+  }
+}
+
+function signalPlanRunFailure(
+  input: PlanRunApplicationInput,
+  deps: PlanRunApplicationDeps,
+): PlanRunApplicationResult {
+  const { params, context } = input
+  const { teamName, actor } = context
+  if (actor !== TEAM_LEAD) {
+    return denyPlanRun({
+      action: 'signal_failure',
+      reason: 'leader_only',
+      message: 'Cannot signal PlanRun failure: only team-lead may signal first-class PlanRun failures.',
+    })
+  }
+  if (!params.planRunId) {
+    return denyPlanRun({
+      action: 'signal_failure',
+      reason: 'planrun_id_required',
+      message: 'Cannot signal PlanRun failure: planRunId is required.',
+    })
+  }
+  const failureKind = normalizeFailureKind(params.failureKind)
+  if (!failureKind) {
+    return denyPlanRun({
+      action: 'signal_failure',
+      reason: 'failure_kind_required',
+      message: 'Cannot signal PlanRun failure: failureKind must be validation_failed or test_failed.',
+      details: { planRunId: params.planRunId, failureKind: params.failureKind ?? null },
+    })
+  }
+
+  const signaledAt = deps.now?.() ?? Date.now()
+  const compactSource = compactMetadataValue(params.source)
+  const compactExternalRef = compactMetadataValue(params.externalRef)
+  const compactFailureSummary = compactSummary(params.summary, `${failureKind} signaled`)
+  let denial: PlanRunApplicationResult | undefined
+  let previousStatus: PlanRun['status'] | undefined
+  let stepIndex: number | undefined
+  let taskId: string | undefined
+  const updated = deps.planRuns.writePlanRunMutation(teamName, latest => {
+    const run = latest.planRuns?.[params.planRunId!]
+    if (!run) {
+      denial = denyPlanRun({
+        action: 'signal_failure',
+        reason: 'planrun_not_found',
+        message: `Cannot signal PlanRun failure: ${params.planRunId} was not found.`,
+        details: { planRunId: params.planRunId },
+      })
+      return
+    }
+    if (run.status === 'done' || run.status === 'cancelled') {
+      denial = denyPlanRun({
+        action: 'signal_failure',
+        reason: 'planrun_terminal',
+        message: `Cannot signal PlanRun failure for ${run.id}: status is ${run.status}.`,
+        details: { planRunId: run.id, status: run.status },
+      })
+      return
+    }
+    const currentStep = run.steps[run.currentStepIndex]
+    const explicitTaskId = compactMetadataValue(params.taskId)
+    const stepForExplicitTask = explicitTaskId ? run.steps.find(step => step.taskId === explicitTaskId) : undefined
+    const resolvedStep = stepForExplicitTask ?? currentStep
+    previousStatus = run.status
+    stepIndex = resolvedStep?.index
+    taskId = explicitTaskId ?? run.activeTaskId ?? resolvedStep?.taskId
+    run.status = 'paused'
+    run.pauseReason = failureKind
+    run.updatedAt = signaledAt
+    latest.activePlanRunId = run.id
+  })
+
+  if (denial) return denial
+  if (!updated) {
+    return denyPlanRun({
+      action: 'signal_failure',
+      reason: 'signal_failure_write_failed',
+      message: `Cannot signal PlanRun failure for ${params.planRunId}: write failed.`,
+      details: { planRunId: params.planRunId },
+    })
+  }
+
+  const event = deps.planRuns.appendPlanRunEvent(teamName, {
+    planRunId: params.planRunId,
+    type: 'failure_signaled',
+    by: actor,
+    at: signaledAt,
+    summary: compactFailureSummary,
+    stepIndex,
+    taskId,
+    pauseReason: failureKind,
+    data: {
+      source: 'agentteam_planrun_signal_failure',
+      kind: failureKind,
+      failureKind,
+      signalSource: compactSource,
+      externalRef: compactExternalRef,
+      previousStatus,
+    },
+  })
+  const summary = deps.planRuns.readPlanRunSummary(teamName, params.planRunId)
+  return {
+    text: `Signaled PlanRun ${params.planRunId} failure ${failureKind}; PlanRun paused and no task/mailbox side effects were performed.`,
+    details: {
+      planRunId: params.planRunId,
+      planRun: summary,
+      event,
+      failureKind,
+      taskId: taskId ?? null,
+      taskCreated: false,
+      taskClosed: false,
+      taskBlocked: false,
+      taskReassigned: false,
+      assignmentSent: false,
+      mailboxSent: false,
+    },
+    statusInvalidationRequested: true,
+  }
+}
+
 function showPlanRun(params: PlanRunInput, deps: PlanRunApplicationDeps, teamName: string): PlanRunApplicationResult {
   if (!params.planRunId) {
     return denyPlanRun({
@@ -979,7 +1389,7 @@ export function executePlanRunApplication(
   deps: PlanRunApplicationDeps,
 ): PlanRunApplicationResult {
   if (input.params.dryRun === true) {
-    if (input.params.action === 'advance' || input.params.action === 'pause' || input.params.action === 'resume' || input.params.action === 'cancel') {
+    if (input.params.action === 'advance' || input.params.action === 'pause' || input.params.action === 'resume' || input.params.action === 'cancel' || input.params.action === 'signal_failure' || input.params.action === 'check_limits') {
       return dryRunPlanRun(input, deps)
     }
   }
@@ -998,6 +1408,10 @@ export function executePlanRunApplication(
       return resumePlanRun(input, deps)
     case 'cancel':
       return cancelPlanRun(input, deps)
+    case 'signal_failure':
+      return signalPlanRunFailure(input, deps)
+    case 'check_limits':
+      return checkPlanRunLimits(input, deps)
     default:
       throw new Error(`Unsupported PlanRun action ${(input.params as { action: string }).action}`)
   }

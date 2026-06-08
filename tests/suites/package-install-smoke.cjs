@@ -496,10 +496,16 @@ module.exports = {
     assert.equal(taskTool.parameters.o.includeMessages.kind, 'optional')
 
     const planRunTool = env.pi.__tools.get('agentteam_planrun')
-    assert.deepEqual(planRunTool.parameters.o.action.enum, ['approve', 'show', 'list', 'advance', 'pause', 'resume', 'cancel'])
+    assert.deepEqual(planRunTool.parameters.o.action.enum, ['approve', 'show', 'list', 'advance', 'pause', 'resume', 'cancel', 'signal_failure', 'check_limits'])
     assert.equal(planRunTool.parameters.o.sourceReportId.kind, 'optional')
     assert.equal(planRunTool.parameters.o.planRunId.kind, 'optional')
     assert.equal(planRunTool.parameters.o.confirmApproved.kind, 'optional')
+    assert.equal(planRunTool.parameters.o.failureKind.kind, 'optional')
+    assert.equal(planRunTool.parameters.o.taskId.kind, 'optional')
+    assert.equal(planRunTool.parameters.o.source.kind, 'optional')
+    assert.equal(planRunTool.parameters.o.summary.kind, 'optional')
+    assert.equal(planRunTool.parameters.o.externalRef.kind, 'optional')
+    assert.equal(planRunTool.parameters.o.limits.kind, 'optional')
     assert.equal(planRunTool.parameters.o.steps.kind, 'optional')
 
     assert.deepEqual([...env.pi.__commands.keys()].filter(name => name.startsWith('team')), ['team'])

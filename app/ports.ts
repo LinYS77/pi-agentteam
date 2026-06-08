@@ -83,6 +83,8 @@ export type PlanRunSummary = Pick<PlanRun,
   | 'currentStepIndex'
   | 'activeTaskId'
   | 'pauseReason'
+  | 'limits'
+  | 'limitState'
 > & {
   stepCount: number
   steps: PlanRunStepSummary[]

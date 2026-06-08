@@ -1,5 +1,19 @@
 import type { PlanRunAction } from '../core/planRunActions.js'
-import type { PlanRunPauseReason, TeamState } from '../internalTypes.js'
+import type { PlanRunLimitState, PlanRunPauseReason, TeamState } from '../internalTypes.js'
+
+export type PlanRunFailureKind = Extract<PlanRunPauseReason, 'validation_failed' | 'test_failed'>
+
+export type PlanRunLimitsInput = {
+  maxSteps?: number
+  maxConsecutiveSteps?: number
+  deadlineAt?: number
+  maxDurationMs?: number
+}
+
+export type PlanRunLimitsPreview = {
+  limits?: PlanRunLimitsInput
+  limitState?: PlanRunLimitState
+}
 
 export type PlanRunStepInput = {
   title?: string
@@ -13,6 +27,12 @@ export type PlanRunInput = {
   planRunId?: string
   confirmApproved?: boolean
   pauseReason?: PlanRunPauseReason | string
+  failureKind?: PlanRunFailureKind | string
+  taskId?: string
+  source?: string
+  summary?: string
+  externalRef?: string
+  limits?: PlanRunLimitsInput
   dryRun?: boolean
   steps?: PlanRunStepInput[]
 }
