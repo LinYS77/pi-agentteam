@@ -48,7 +48,7 @@ AgentTeam 当前不是一个独立 daemon，也不是 native binary 产品；它
 - `state/teamStore.ts` 仍以 `teams/<storageKey>/team.json` 为主要路径布局；新 team 带 `teamId/projectKey/displayName/slug` identity metadata，legacy no-identity team 通过 read model 暴露 read-only effective identity。
 - `state/sessionBinding.ts` 当前持久化 identity-first session fields（`teamId/projectKey/identityKey/teamSlug`），并保留 legacy `teamName/memberName` 兼容读取和 fallback。
 - `tmux/client.ts` 当前每次 tmux 调用都通过 `execFileSync` 或 `execFile('tmux')`。
-- `teamPanel/dataSource.ts` 当前 panel load 会读取 team、tasks、leader mailbox/outbox diagnostics；attached/global load 路径还会调用 `prepareTeamForPanel()`，其中包含 `reconcileTeamPanes(team, { force: true })`。
+- `teamPanel/dataSource.ts` 当前 panel load 会读取 team、tasks、leader mailbox/outbox diagnostics；v0.4.15 起 attached/global 普通 refresh 通过 `prepareTeamForPanel(..., { mode: 'light' })` 或等价 light intent 走非破坏性 reconcile，explicit force reconcile 只保留为手动/显式路径。
 - `app/taskReportWorkflow.ts` 当前 worker `report_done/report_blocked` 会创建 durable TaskReport 并通知 leader，但 non-leader report 是 `reportOnly`，不会自动 close/block task；leader review 仍是治理边界。
 
 这些事实说明：当前主要风险不是“TypeScript 语言本身慢”，而是 identity、file store/read model、tmux subprocess、panel refresh loop、report lifecycle 和 config bootstrap 这些核心 seam 没有完成。
@@ -251,9 +251,19 @@ teamPanel/dataSource.ts
 - worker 输出期间 `/team` 闪烁。
 - 无法判断性能瓶颈来自 tmux、state 还是 render。
 
+#### v0.4.15 已完成行为
+
+v0.4.15 已把 Tmux Adapter + `/team` Panel Refresh Stability Gate 的 P0 安全行为落地为 GitHub-only checkpoint：
+
+- ordinary attached/global `/team` refresh 显式使用 light reconcile intent；无显式 force 时不会传 `force: true`，不会逐 member 执行昂贵 `display-message` 检查。
+- global warm refresh 通过一次 tmux snapshot/list-panes 发现 panes/orphans，而不是对每个 team/member 启动 tmux subprocess。
+- light mode 下 snapshot/list-panes failure 被视为 unknown/stale：不清空 `paneId/windowTarget`，不写 `lastWakeReason: 'pane lost'` 或 `lastError: 'tmux pane disappeared'`，不自动把 active worker 标为 `error`。
+- explicit `{ mode: 'force' }` / force reconcile 仍保留为手动/显式路径，允许 expensive per-pane checks；它不属于普通 panel refresh。
+- tmux profiling 继续记录 command count、duration、success/failure 和 command names，并进入 explicit bench/profiling 输出。
+
 #### v0.5.0 目标
 
-v0.5.0 必须把 tmux 访问重构为 adapter + snapshot/cache 模型：
+v0.5.0 必须继续把 tmux 访问深化为 adapter + snapshot/cache 模型：
 
 - 新增 `TmuxSnapshot`：一次 `list-panes -a -F` 返回 paneId/target/currentCommand/labels 等必要字段。
 - `paneExists`、`resolvePaneBinding`、`reconcileTeamPanes` 在 panel/reconcile 路径优先使用 snapshot/cache。
@@ -288,18 +298,29 @@ teamPanel/dataSource.ts
 
 用户明确反馈：pi 正在工作时打开 `/team` 面板会持续闪烁。
 
-当前候选根因包括：
+历史候选根因包括：
 
-- panel action 后 close/reopen。
-- 每次 load 强制 reconcile。
+- panel action 后 close/reopen（v0.4.15 已改为 refresh/sync in-place update）。
+- 每次 load 强制 reconcile（v0.4.15 普通 refresh 已改为 explicit light intent，force 仅保留为手动/显式路径）。
 - data source 每次重建完整 view model。
 - mailbox projection、leader attention、`ui.notify` 与 panel render 竞争。
 - tmux label/list-panes churn。
-- 缺少 diff/debounce/cache。
+- 缺少 diff/debounce/cache（v0.4.15 已建立 fingerprint/cacheHit/diffChanged profiling gate）。
+
+#### v0.4.15 已完成行为
+
+v0.4.15 已把 `/team` Panel Refresh Stability Gate 的核心稳定性行为落地：
+
+- refresh 与 sync/action 使用 in-place update：保持同一个 `ctx.ui.custom` mounted panel，刷新当前 panel data，不 close/reopen；`q`/close 仍显式调用 close/done。
+- render loop 使用 data/state fingerprint：no-diff refresh 记录 cacheHit 并跳过 requestRender；semantic diffChanged 才 requestRender。
+- worker-output-like/no-semantic invalidation 已有 coalescing guard，避免 requestRender/render count 无界增长；semantic changes 仍能触发 render。
+- panel profiling 字段已接入 `PI_AGENTTEAM_PROFILE=1`：`dataLoad`、`readModelBuild`、`render`、`requestRender`、`cacheHit`、`diffChanged`，普通用户输出不污染。
+- deterministic `npm run bench:team-panel-tmux` baseline 已新增，覆盖 attached/global warm refresh、render/dataLoad p50/p95、tmux command count、requestRender/cacheHit/diffChanged；它是 baseline/profiling gate，不是最终 p95 target pass/fail 声明。
+- `/team` 继续保持 v0.4.14 compact/full-text boundary：不读取 `MailboxMessage.text` / `TaskReport.text` full bodies，不标记 mailbox `readAt` / `deliveredAt`。
 
 #### v0.5.0 目标
 
-`/team` 必须成为稳定 cockpit：
+`/team` 必须继续深化为稳定 cockpit：
 
 - panel actions in-place 完成，不重开整屏组件。
 - data source 做 cached snapshot、diff 和 debounce。
@@ -594,6 +615,8 @@ PI_AGENTTEAM_PROFILE=1
 普通用户输出不能被 profiling 噪音污染；profiling 应进入 debug log、diagnostics 或明确的 bench 输出。
 
 v0.4.14 已完成 State Store / Read Model baseline/profiling gate：`npm run bench:state-read-model`（等价于 `PI_AGENTTEAM_PROFILE=1 node tests/bench/team-read-model-baseline.cjs`）使用 deterministic fixture 和 stub tmux/runtime 输出 JSON；输出包含 fixture sizes、warm/measured iteration counts、panel dataLoad/readModel timing percentiles、fsStore lock/read/parse/write timing与 bytes、callSite/category breakdown、tmux count，并验证 full-body sentinel 不泄漏。该 baseline 只用于后续对比和回归定位，不表示已达成最终 release p95 目标。
+
+v0.4.15 已新增 Runtime/Panel/Tmux profiling 与 deterministic panel/tmux refresh baseline：`npm run bench:team-panel-tmux`（等价于 `PI_AGENTTEAM_PROFILE=1 node tests/bench/team-panel-tmux-refresh-v0415.cjs`）使用 fake tmux client、fake TUI 和 deterministic fixture 输出 JSON；输出包含 attached/global fixture sizes、warm/measured iteration counts、panel `dataLoad`/`render` p50/p95、`requestRender`/`cacheHit`/`diffChanged` counts、tmux command count/duration/success/failure，并验证 full-body sentinel 不泄漏。该 baseline 只说明 profiling gate established，不声称已达成最终 p95 release target。
 
 ### 3.2 release 性能门禁
 

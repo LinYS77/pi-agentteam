@@ -89,6 +89,9 @@ export function reconcileTeamPanes(team: TeamState, options?: ReconcileTeamPanes
   paneReconcileRevisionCache.set(team.name, revision)
 
   const snapshot = force ? undefined : options?.snapshot ?? captureTmuxSnapshot()
+  if (!force && options?.mode === 'light' && snapshot?.ok === false) {
+    return false
+  }
   const teamPaneIds = Object.values(team.members).map(member => member.paneId).filter((paneId): paneId is string => Boolean(paneId))
   const useSnapshot = snapshot?.ok !== false && (teamPaneIds.length === 0 || teamPaneIds.some(paneId => Boolean(snapshot?.byPaneId[paneId])))
   let changed = false

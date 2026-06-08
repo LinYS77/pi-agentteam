@@ -70,7 +70,7 @@ export type PanelReadModelProfileCounts = {
   orphanPaneCount?: number
 }
 
-export type PanelProfileEventKind = 'dataLoad' | 'readModelBuild'
+export type PanelProfileEventKind = 'dataLoad' | 'readModelBuild' | 'render' | 'requestRender' | 'cacheHit' | 'diffChanged'
 
 export type PanelProfileInput = ProfileAttribution & PanelReadModelProfileCounts & {
   kind: PanelProfileEventKind
@@ -78,16 +78,30 @@ export type PanelProfileInput = ProfileAttribution & PanelReadModelProfileCounts
   durationMs: number
 }
 
+type PanelModeProfileSummary = {
+  dataLoadCount: number
+  readModelBuildCount: number
+  renderCount: number
+  requestRenderCount: number
+  cacheHitCount: number
+  diffChangedCount: number
+}
+
 type PanelProfileSummary = {
   dataLoadCount: number
   readModelBuildCount: number
+  renderCount: number
+  requestRenderCount: number
+  cacheHitCount: number
+  diffChangedCount: number
   totalDataLoadMs: number
   totalReadModelBuildMs: number
+  totalRenderMs: number
+  totalRequestRenderMs: number
+  totalCacheHitMs: number
+  totalDiffChangedMs: number
   lastMode?: PanelProfileMode
-  byMode: Record<PanelProfileMode, {
-    dataLoadCount: number
-    readModelBuildCount: number
-  }>
+  byMode: Record<PanelProfileMode, PanelModeProfileSummary>
   lastCounts: PanelReadModelProfileCounts
   events: Array<PanelProfileInput>
 }
@@ -130,15 +144,34 @@ function emptyTmuxSummary(): TmuxProfileSummary {
   }
 }
 
+function emptyPanelModeSummary(): PanelModeProfileSummary {
+  return {
+    dataLoadCount: 0,
+    readModelBuildCount: 0,
+    renderCount: 0,
+    requestRenderCount: 0,
+    cacheHitCount: 0,
+    diffChangedCount: 0,
+  }
+}
+
 function emptyPanelSummary(): PanelProfileSummary {
   return {
     dataLoadCount: 0,
     readModelBuildCount: 0,
+    renderCount: 0,
+    requestRenderCount: 0,
+    cacheHitCount: 0,
+    diffChangedCount: 0,
     totalDataLoadMs: 0,
     totalReadModelBuildMs: 0,
+    totalRenderMs: 0,
+    totalRequestRenderMs: 0,
+    totalCacheHitMs: 0,
+    totalDiffChangedMs: 0,
     byMode: {
-      attached: { dataLoadCount: 0, readModelBuildCount: 0 },
-      global: { dataLoadCount: 0, readModelBuildCount: 0 },
+      attached: emptyPanelModeSummary(),
+      global: emptyPanelModeSummary(),
     },
     lastCounts: {},
     events: [],
@@ -320,6 +353,23 @@ export function recordTmuxCommand(input: TmuxProfileInput): void {
   })
 }
 
+function panelDefaultCaller(kind: PanelProfileEventKind): string {
+  if (kind === 'dataLoad') return 'teamPanel.dataSource'
+  if (kind === 'readModelBuild') return 'teamPanel.readModel'
+  if (kind === 'render') return 'teamPanel.render'
+  if (kind === 'requestRender') return 'teamPanel.requestRender'
+  return 'teamPanel.refresh'
+}
+
+function panelDefaultCategory(kind: PanelProfileEventKind): string {
+  if (kind === 'dataLoad') return 'panel:dataLoad'
+  if (kind === 'readModelBuild') return 'panel:readModel'
+  if (kind === 'render') return 'panel:render'
+  if (kind === 'requestRender') return 'panel:requestRender'
+  if (kind === 'cacheHit') return 'panel:cacheHit'
+  return 'panel:diffChanged'
+}
+
 export function recordPanelProfileEvent(input: PanelProfileInput): void {
   if (!isProfilingEnabled()) return
   const durationMs = safeDurationMs(input.durationMs)
@@ -328,8 +378,8 @@ export function recordPanelProfileEvent(input: PanelProfileInput): void {
     kind: input.kind,
     mode: input.mode,
     durationMs,
-    caller: safeProfileText(input.caller, input.kind === 'dataLoad' ? 'teamPanel.dataSource' : 'teamPanel.readModel'),
-    category: safeProfileText(input.category, input.kind === 'dataLoad' ? 'panel:dataLoad' : 'panel:readModel'),
+    caller: safeProfileText(input.caller, panelDefaultCaller(input.kind)),
+    category: safeProfileText(input.category, panelDefaultCategory(input.kind)),
     ...counts,
   }
   summary.panel.events.push(event)
@@ -340,9 +390,25 @@ export function recordPanelProfileEvent(input: PanelProfileInput): void {
     summary.panel.dataLoadCount += 1
     summary.panel.totalDataLoadMs += durationMs
     modeSummary.dataLoadCount += 1
-  } else {
+  } else if (input.kind === 'readModelBuild') {
     summary.panel.readModelBuildCount += 1
     summary.panel.totalReadModelBuildMs += durationMs
     modeSummary.readModelBuildCount += 1
+  } else if (input.kind === 'render') {
+    summary.panel.renderCount += 1
+    summary.panel.totalRenderMs += durationMs
+    modeSummary.renderCount += 1
+  } else if (input.kind === 'requestRender') {
+    summary.panel.requestRenderCount += 1
+    summary.panel.totalRequestRenderMs += durationMs
+    modeSummary.requestRenderCount += 1
+  } else if (input.kind === 'cacheHit') {
+    summary.panel.cacheHitCount += 1
+    summary.panel.totalCacheHitMs += durationMs
+    modeSummary.cacheHitCount += 1
+  } else {
+    summary.panel.diffChangedCount += 1
+    summary.panel.totalDiffChangedMs += durationMs
+    modeSummary.diffChangedCount += 1
   }
 }

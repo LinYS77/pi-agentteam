@@ -185,7 +185,7 @@ function handleActionMenuInput(
     return
   }
 
-  if (action.id === 'refresh') {
+  if (action.id === 'refresh' || action.id === 'sync') {
     state.interactionMode = 'browse'
     state.actionMenu = undefined
     deps.refresh()

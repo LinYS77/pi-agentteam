@@ -8,7 +8,8 @@ import {
 } from './teamPanel/viewModel.js'
 import { loadPanelData } from './teamPanel/dataSource.js'
 import { panelDataFingerprint, panelStateFingerprint } from './teamPanel/fingerprint.js'
-import type { TeamPanelResult } from './teamPanel/viewModel.js'
+import { recordPanelProfileEvent } from './runtime/profiling.js'
+import type { PanelData, TeamPanelResult } from './teamPanel/viewModel.js'
 
 export type { TeamPanelResult } from './teamPanel/viewModel.js'
 
@@ -19,6 +20,7 @@ export async function openTeamPanel(
   return ctx.ui.custom<TeamPanelResult | undefined>((tui, theme, _kb, done) => {
     let data = loadPanelData(teamName)
     let dataFingerprint = panelDataFingerprint(data)
+    const panelMode = () => data.mode as PanelData['mode']
     const panelState = createInitialPanelState()
     clampPanelStateToData(panelState, data)
     let renderScheduled = false
@@ -28,9 +30,15 @@ export async function openTeamPanel(
       if (renderScheduled) return
       renderScheduled = true
       flushRenderPromise = Promise.resolve().then(() => {
+        const startedAt = Date.now()
         renderScheduled = false
         flushRenderPromise = null
         tui.requestRender()
+        recordPanelProfileEvent({
+          kind: 'requestRender',
+          mode: panelMode(),
+          durationMs: Date.now() - startedAt,
+        })
       })
     }
 
@@ -45,8 +53,20 @@ export async function openTeamPanel(
       data = nextData
       clampPanelStateToData(panelState, data)
       const nextStateFingerprint = panelStateFingerprint(panelState)
-      if (nextFingerprint === dataFingerprint && nextStateFingerprint === beforeStateFingerprint) return
+      if (nextFingerprint === dataFingerprint && nextStateFingerprint === beforeStateFingerprint) {
+        recordPanelProfileEvent({
+          kind: 'cacheHit',
+          mode: panelMode(),
+          durationMs: 0,
+        })
+        return
+      }
       dataFingerprint = nextFingerprint
+      recordPanelProfileEvent({
+        kind: 'diffChanged',
+        mode: panelMode(),
+        durationMs: 0,
+      })
       requestRenderOnce()
     }
 
@@ -62,14 +82,21 @@ export async function openTeamPanel(
         })
       },
       render(width: number): string[] {
+        const startedAt = Date.now()
         const selection = buildPanelSelectionView(data, panelState)
-        return renderTeamPanelLines(theme, {
+        const lines = renderTeamPanelLines(theme, {
           width,
           height: tui.terminal.rows,
           data,
           state: panelState,
           selection,
         })
+        recordPanelProfileEvent({
+          kind: 'render',
+          mode: panelMode(),
+          durationMs: Date.now() - startedAt,
+        })
+        return lines
       },
     }
   })

@@ -6,6 +6,7 @@ docs/*
 !docs/perf/
 docs/perf/*
 !docs/perf/v0.4.14-state-read-model-baseline.md
+!docs/perf/v0.4.15-team-panel-tmux-refresh.md
 
 # Dependencies
 node_modules/

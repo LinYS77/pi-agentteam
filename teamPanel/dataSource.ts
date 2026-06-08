@@ -67,7 +67,7 @@ function prepareTeamForPanel(
 
 function loadAttachedPanelData(teamName: string, deps: PanelDataSourceDeps): AttachedPanelData | null {
   const startedAt = Date.now()
-  const panelTeam = prepareTeamForPanel(deps, teamName, 'attached')
+  const panelTeam = prepareTeamForPanel(deps, teamName, 'attached', { mode: 'light' })
   if (!panelTeam) return null
   const members = Object.values(panelTeam.members)
     .filter(member => member.name !== TEAM_LEAD)
