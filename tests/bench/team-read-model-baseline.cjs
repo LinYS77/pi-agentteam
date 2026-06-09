@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { buildFixtureProfileMetadata, buildKernelMetadata, normalizeFixtureProfileName, normalizeKernelMode } = require('./kernelMetadata.cjs')
 
 const FIXTURE = Object.freeze({
   teamName: 'bench-state-read-model-baseline',
@@ -11,8 +13,30 @@ const FIXTURE = Object.freeze({
   warmupIterations: 1,
   iterations: 5,
 })
+const STRESS_FIXTURE = Object.freeze({
+  teamName: 'bench-state-read-model-stress',
+  workerCount: 6,
+  taskCount: 500,
+  mailboxCount: 2_000,
+  warmupIterations: 1,
+  iterations: 3,
+})
+const FIXTURE_PROFILES = Object.freeze({
+  baseline: FIXTURE,
+  large: STRESS_FIXTURE,
+  stress: STRESS_FIXTURE,
+})
 const BENCH_SENTINEL = 'BENCH_STATE_READ_MODEL_FULL_BODY_SENTINEL_SHOULD_NOT_LEAK'
 const BASE_TIME = 1700005000000
+
+function resolveFixtureProfileName(profileName = 'baseline') {
+  const normalized = normalizeFixtureProfileName(profileName)
+  return Object.prototype.hasOwnProperty.call(FIXTURE_PROFILES, normalized) ? normalized : 'baseline'
+}
+
+function fixtureForProfile(profileName = 'baseline') {
+  return FIXTURE_PROFILES[resolveFixtureProfileName(profileName)]
+}
 
 function percentile(values, percentileValue) {
   const finite = values.filter(value => Number.isFinite(value)).sort((a, b) => a - b)
@@ -277,26 +301,67 @@ function runPanelIterations(input) {
     }
     profiling.resetProfiling()
     const durations = []
+    let latestData = null
     for (let index = 0; index < iterations; index += 1) {
       const startedAt = Number(process.hrtime.bigint()) / 1_000_000
       const data = panelDataSource.loadPanelData(teamName, { stateRepository, runtimeRepository })
       durations.push(Number(process.hrtime.bigint()) / 1_000_000 - startedAt)
       if (data.mode !== 'attached') throw new Error(`Expected attached panel data, got ${data.mode}`)
       if (data.tasks.length !== taskCount) throw new Error(`Expected ${taskCount} tasks, got ${data.tasks.length}`)
+      latestData = data
     }
     const summary = profiling.readProfilingSummary()
-    return { durations, summary }
+    return { durations, summary, latestData }
   } finally {
     if (previousProfile === undefined) delete process.env.PI_AGENTTEAM_PROFILE
     else process.env.PI_AGENTTEAM_PROFILE = previousProfile
   }
 }
 
+function hashFingerprint(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 16)
+}
+
+function shouldRunShadow(requestedMode = process.env.PI_AGENTTEAM_KERNEL) {
+  const mode = normalizeKernelMode(requestedMode)
+  return mode === 'go' || mode === 'auto'
+}
+
+function buildShadowReport(input) {
+  const { kernelModule, panelData, requestedMode = process.env.PI_AGENTTEAM_KERNEL, helperPath = process.env.PI_AGENTTEAM_KERNEL_HELPER || process.env.AGENTTEAM_GO_KERNEL_HELPER } = input
+  if (!shouldRunShadow(requestedMode)) return undefined
+  const adapter = kernelModule.createAgentTeamKernelAdapter({ mode: requestedMode, helperPath: helperPath || undefined })
+  const startedAt = Number(process.hrtime.bigint()) / 1_000_000
+  const tsResult = kernelModule.createAgentTeamKernelAdapter({ mode: 'typescript', env: {} }).compactReadModelFingerprint(panelData)
+  const kernelResult = adapter.compactReadModelFingerprint(panelData)
+  const elapsedMs = Number(process.hrtime.bigint()) / 1_000_000 - startedAt
+  const metadata = adapter.metadata().kernel
+  return {
+    requested: normalizeKernelMode(requestedMode),
+    enabled: metadata.enabled,
+    calls: metadata.calls,
+    fallbacks: metadata.fallbacks,
+    parityMatched: tsResult.fingerprint === kernelResult.fingerprint,
+    tsFingerprint: hashFingerprint(tsResult.fingerprint),
+    kernelFingerprint: hashFingerprint(kernelResult.fingerprint),
+    elapsedMs,
+    inputKind: kernelResult.inputKind,
+    readOnly: kernelResult.readOnly,
+    fullTextIncluded: kernelResult.fullTextIncluded,
+    stateFilesRead: kernelResult.stateFilesRead,
+    stateFilesWritten: kernelResult.stateFilesWritten,
+    ...(metadata.fallbackReason ? { fallbackReason: metadata.fallbackReason } : {}),
+    ...(metadata.fallbackKind ? { fallbackKind: metadata.fallbackKind } : {}),
+  }
+}
+
 function buildBaselineResult(input) {
-  const { fixture, durations, profilingSummary, runtimeCalls } = input
+  const { fixture, durations, profilingSummary, runtimeCalls, fixtureProfile = 'baseline', shadow } = input
   const result = {
     name: 'team-read-model-baseline',
     note: 'baseline only; not a release target pass/fail gate',
+    ...buildKernelMetadata(),
+    fixtureProfile: buildFixtureProfileMetadata(fixtureProfile),
     fixture: {
       leaders: 1,
       workers: fixture.workerCount,
@@ -310,6 +375,7 @@ function buildBaselineResult(input) {
     panel: summarizePanel(profilingSummary, durations),
     fsStore: summarizeFsStore(profilingSummary),
     tmux: summarizeTmux(profilingSummary, runtimeCalls),
+    ...(shadow ? { shadow } : {}),
   }
   const serialized = JSON.stringify(result)
   if (serialized.includes(BENCH_SENTINEL)) throw new Error('Bench output leaked full body sentinel')
@@ -317,8 +383,11 @@ function buildBaselineResult(input) {
 }
 
 function runBaselineWithModules(input) {
-  const { modules, profiling, panelDataSource, stateRepository, options = {} } = input
-  const fixture = { ...FIXTURE, ...options }
+  const { modules, profiling, panelDataSource, stateRepository, kernelModule, options = {} } = input
+  const fixtureProfile = resolveFixtureProfileName(options.fixtureProfile ?? process.env.AGENTTEAM_BENCH_FIXTURE ?? 'baseline')
+  const fixtureDefaults = fixtureForProfile(fixtureProfile)
+  const { fixtureProfile: _fixtureProfile, ...fixtureOptions } = options
+  const fixture = { ...fixtureDefaults, ...fixtureOptions }
   const created = createFixture(modules, fixture)
   const runtime = createStubRuntimeRepository(created.livePaneIds)
   const run = runPanelIterations({
@@ -337,6 +406,8 @@ function runBaselineWithModules(input) {
     durations: run.durations,
     profilingSummary: run.summary,
     runtimeCalls: runtime.calls,
+    fixtureProfile,
+    shadow: kernelModule && run.latestData ? buildShadowReport({ kernelModule, panelData: run.latestData }) : undefined,
   })
 }
 
@@ -449,10 +520,16 @@ function runCli() {
       profiling: requireDist('runtime/profiling.js'),
       panelDataSource: requireDist('teamPanel/dataSource.js'),
       stateRepository: requireDist('state/repository.js').createStateRepository(),
-      options: {
-        iterations: Number(process.env.AGENTTEAM_BENCH_ITERATIONS || FIXTURE.iterations),
-        warmupIterations: Number(process.env.AGENTTEAM_BENCH_WARMUP || FIXTURE.warmupIterations),
-      },
+      kernelModule: requireDist('core/kernel.js'),
+      options: (() => {
+        const fixtureProfile = resolveFixtureProfileName(process.env.AGENTTEAM_BENCH_FIXTURE || 'baseline')
+        const fixtureDefaults = fixtureForProfile(fixtureProfile)
+        return {
+          fixtureProfile,
+          iterations: Number(process.env.AGENTTEAM_BENCH_ITERATIONS || fixtureDefaults.iterations),
+          warmupIterations: Number(process.env.AGENTTEAM_BENCH_WARMUP || fixtureDefaults.warmupIterations),
+        }
+      })(),
     })
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
   } finally {
@@ -470,9 +547,16 @@ module.exports = {
   BASE_TIME,
   BENCH_SENTINEL,
   FIXTURE,
+  FIXTURE_PROFILES,
+  STRESS_FIXTURE,
   buildBaselineResult,
+  buildShadowReport,
+  fixtureForProfile,
+  hashFingerprint,
+  shouldRunShadow,
   createFixture,
   createStubRuntimeRepository,
+  resolveFixtureProfileName,
   runBaselineWithModules,
   runPanelIterations,
   stats,

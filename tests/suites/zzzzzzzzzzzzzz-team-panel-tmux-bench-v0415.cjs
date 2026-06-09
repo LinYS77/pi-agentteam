@@ -72,6 +72,8 @@ module.exports = {
     assert.equal(typeof bench.buildBenchResult, 'function', 'panel/tmux bench should export buildBenchResult')
     assert.equal(typeof bench.summarizePanel, 'function', 'panel/tmux bench should export summarizePanel')
     assert.equal(typeof bench.summarizeTmux, 'function', 'panel/tmux bench should export summarizeTmux')
+    assert.equal(typeof bench.fixtureForProfile, 'function', 'panel/tmux bench should export fixtureForProfile')
+    assert.equal(typeof bench.resolveFixtureProfileName, 'function', 'panel/tmux bench should export resolveFixtureProfileName')
 
     const sampleProfile = samplePanelSummary()
     const panel = bench.summarizePanel(sampleProfile)
@@ -106,9 +108,29 @@ module.exports = {
       },
     })
     assert.equal(sample.note, 'baseline only; not a release target pass/fail gate')
+    assert.equal(sample.implementation, 'typescript')
+    assert.deepEqual(sample.kernel, {
+      requestedMode: 'typescript',
+      mode: 'typescript',
+      enabled: false,
+      calls: 0,
+      fallbacks: 0,
+      requestedKnownKernel: true,
+      protocolVersion: 1,
+      adapterVersion: '0.3.0-read-model-shadow',
+      helperVersion: '0.3.0-read-model-shadow',
+      capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'],
+      businessPathsConnected: false,
+    })
+    assert.deepEqual(sample.fixtureProfile, { name: 'baseline', stress: false })
     assertScenarioShape('sample attached', sample.attached)
     assertScenarioShape('sample global', sample.global)
     assert.equal(JSON.stringify(sample).includes(bench.BENCH_SENTINEL), false, 'sample bench output should not leak full body sentinel')
+    assert.equal(bench.resolveFixtureProfileName('stress'), 'stress')
+    assert.equal(bench.resolveFixtureProfileName('unknown-fixture'), 'baseline')
+    const stressFixture = bench.fixtureForProfile('stress')
+    assert.ok(stressFixture.attached.taskCount > bench.DEFAULT_FIXTURE.attached.taskCount, 'stress fixture should increase attached task count')
+    assert.ok(stressFixture.global.teamCount > bench.DEFAULT_FIXTURE.global.teamCount, 'stress fixture should increase global team count')
 
     await withTempHome(env.modules, 'tiny', async () => {
       const result = await bench.runPanelTmuxBenchWithModules({
@@ -126,6 +148,11 @@ module.exports = {
       assert.equal(result.iterations.measured, 1)
       assert.equal(result.fixture.attached.workers, 1)
       assert.equal(result.fixture.global.teams, 2)
+      assert.equal(result.implementation, 'typescript')
+      assert.equal(result.kernel.enabled, false)
+      assert.equal(result.kernel.calls, 0)
+      assert.equal(result.kernel.fallbacks, 0)
+      assert.deepEqual(result.fixtureProfile, { name: 'baseline', stress: false })
       assertScenarioShape('tiny attached', result.attached)
       assertScenarioShape('tiny global', result.global)
       assert.ok(result.attached.panel.events.render >= 1, 'tiny bench should record attached render events')

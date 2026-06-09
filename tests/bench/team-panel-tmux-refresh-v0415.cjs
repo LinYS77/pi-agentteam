@@ -2,6 +2,7 @@
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { buildFixtureProfileMetadata, buildKernelMetadata, normalizeFixtureProfileName } = require('./kernelMetadata.cjs')
 
 const BASE_TIME = 1700006000000
 const BENCH_SENTINEL = 'BENCH_PANEL_TMUX_V0415_FULL_BODY_SENTINEL_SHOULD_NOT_LEAK'
@@ -23,6 +24,37 @@ const DEFAULT_FIXTURE = Object.freeze({
     mailboxCount: 25,
   },
 })
+const STRESS_FIXTURE = Object.freeze({
+  warmupIterations: 1,
+  iterations: 3,
+  attached: {
+    teamName: 'bench-panel-tmux-v0415-attached-stress',
+    workerCount: 6,
+    taskCount: 500,
+    mailboxCount: 2_000,
+  },
+  global: {
+    teamPrefix: 'bench-panel-tmux-v0415-global-stress',
+    teamCount: 25,
+    workerCount: 6,
+    taskCount: 40,
+    mailboxCount: 100,
+  },
+})
+const FIXTURE_PROFILES = Object.freeze({
+  baseline: DEFAULT_FIXTURE,
+  large: STRESS_FIXTURE,
+  stress: STRESS_FIXTURE,
+})
+
+function resolveFixtureProfileName(profileName = 'baseline') {
+  const normalized = normalizeFixtureProfileName(profileName)
+  return Object.prototype.hasOwnProperty.call(FIXTURE_PROFILES, normalized) ? normalized : 'baseline'
+}
+
+function fixtureForProfile(profileName = 'baseline') {
+  return FIXTURE_PROFILES[resolveFixtureProfileName(profileName)]
+}
 
 function percentile(values, percentileValue) {
   const finite = values.filter(value => Number.isFinite(value)).sort((a, b) => a - b)
@@ -282,11 +314,14 @@ function createFixtures(modules, options) {
 }
 
 function mergeFixtureOptions(options = {}) {
+  const fixtureProfile = resolveFixtureProfileName(options.fixtureProfile ?? process.env.AGENTTEAM_BENCH_FIXTURE ?? 'baseline')
+  const defaults = fixtureForProfile(fixtureProfile)
   return {
-    warmupIterations: options.warmupIterations ?? DEFAULT_FIXTURE.warmupIterations,
-    iterations: options.iterations ?? DEFAULT_FIXTURE.iterations,
-    attached: { ...DEFAULT_FIXTURE.attached, ...(options.attached || {}) },
-    global: { ...DEFAULT_FIXTURE.global, ...(options.global || {}) },
+    fixtureProfile,
+    warmupIterations: options.warmupIterations ?? defaults.warmupIterations,
+    iterations: options.iterations ?? defaults.iterations,
+    attached: { ...defaults.attached, ...(options.attached || {}) },
+    global: { ...defaults.global, ...(options.global || {}) },
   }
 }
 
@@ -401,6 +436,8 @@ function buildBenchResult(input) {
   const result = {
     name: 'team-panel-tmux-refresh-v0415',
     note: 'baseline only; not a release target pass/fail gate',
+    ...buildKernelMetadata(),
+    fixtureProfile: buildFixtureProfileMetadata(fixture.fixture.fixtureProfile),
     fixture: {
       attached: {
         leaders: 1,
@@ -563,10 +600,15 @@ async function runCli() {
       profiling: requireDist('runtime/profiling.js'),
       panelModule: requireDist('teamPanel.js'),
       tmuxClient: requireDist('tmux/client.js'),
-      options: {
-        iterations: Number(process.env.AGENTTEAM_BENCH_ITERATIONS || DEFAULT_FIXTURE.iterations),
-        warmupIterations: Number(process.env.AGENTTEAM_BENCH_WARMUP || DEFAULT_FIXTURE.warmupIterations),
-      },
+      options: (() => {
+        const fixtureProfile = resolveFixtureProfileName(process.env.AGENTTEAM_BENCH_FIXTURE || 'baseline')
+        const fixtureDefaults = fixtureForProfile(fixtureProfile)
+        return {
+          fixtureProfile,
+          iterations: Number(process.env.AGENTTEAM_BENCH_ITERATIONS || fixtureDefaults.iterations),
+          warmupIterations: Number(process.env.AGENTTEAM_BENCH_WARMUP || fixtureDefaults.warmupIterations),
+        }
+      })(),
     })
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
   } finally {
@@ -587,11 +629,15 @@ module.exports = {
   BASE_TIME,
   BENCH_SENTINEL,
   DEFAULT_FIXTURE,
+  FIXTURE_PROFILES,
+  STRESS_FIXTURE,
   buildBenchResult,
+  fixtureForProfile,
   createBenchTeam,
   createCountingTmuxClient,
   createFixtures,
   mergeFixtureOptions,
+  resolveFixtureProfileName,
   runPanelTmuxBenchWithModules,
   stats,
   summarizePanel,

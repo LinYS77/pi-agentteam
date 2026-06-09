@@ -1,3 +1,4 @@
+import { createAgentTeamKernelAdapter } from '../core/kernel.js'
 import { runTmuxNoThrow } from './client.js'
 
 export type TmuxPaneSnapshotItem = {
@@ -33,7 +34,7 @@ function emptySnapshot(capturedAt: number, ok = true, error?: string): TmuxSnaps
   }
 }
 
-export function parseTmuxPaneSnapshot(stdout: string, capturedAt = Date.now()): TmuxSnapshot {
+function parseTmuxPaneSnapshotWithTypeScript(stdout: string, capturedAt = Date.now()): TmuxSnapshot {
   const byPaneId: Record<string, TmuxPaneSnapshotItem> = {}
   const order: string[] = []
 
@@ -60,6 +61,10 @@ export function parseTmuxPaneSnapshot(stdout: string, capturedAt = Date.now()): 
     byPaneId,
     ok: true,
   }
+}
+
+export function parseTmuxPaneSnapshot(stdout: string, capturedAt = Date.now()): TmuxSnapshot {
+  return createAgentTeamKernelAdapter().parseTmuxPaneSnapshot(stdout, capturedAt, parseTmuxPaneSnapshotWithTypeScript)
 }
 
 export function findPaneInSnapshot(snapshot: TmuxSnapshot, paneId: string): TmuxPaneSnapshotItem | null {

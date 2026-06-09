@@ -1,12 +1,19 @@
 # Runtime state — never ship
 data/
 
-# Local development notes/checklists — keep README as the only public doc for now
+# Local development notes/checklists — ignore by default; allow-list tracked planning/perf records
 docs/*
+!docs/baseline-v0.5.0.md
+!docs/go-kernel-port-audit.md
+!docs/decisions/
+docs/decisions/*
+!docs/decisions/0001-replaceable-go-kernel.md
 !docs/perf/
 docs/perf/*
 !docs/perf/v0.4.14-state-read-model-baseline.md
 !docs/perf/v0.4.15-team-panel-tmux-refresh.md
+!docs/perf/go-kernel-parity-scaffolding.md
+!docs/perf/go-kernel-slice7-checkpoint.md
 
 # Dependencies
 node_modules/

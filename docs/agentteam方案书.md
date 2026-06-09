@@ -33,7 +33,15 @@ AgentTeam 当前不是一个独立 daemon，也不是 native binary 产品；它
 - file-backed state 相关实现集中在 `state/` 与 `adapters/runtime/*Ports.ts`。
 - task/message/report 应用逻辑集中在 `app/`。
 
-结论：v0.5.0 必须保留 TypeScript/pi extension facade。Rust/Go 只能作为后续局部 helper 候选，不能作为 v0.5 的整体重写方向。
+结论：v0.5.0 必须保留 TypeScript/pi extension facade。Rust/Go 只能作为后续局部 helper 候选，不能作为 v0.5 的整体重写方向。Slice 0 进一步确认 Go 方向只允许作为 replaceable high-performance kernel/helper：TypeScript/pi control plane 仍负责工具、命令、hooks、prompts、`/team`、治理和 npm 发布面；Go kernel 必须可关闭、可替换、可回退到 TypeScript 实现。
+
+#### Slice 0 决策记录与端口审计
+
+- 决策记录：`docs/decisions/0001-replaceable-go-kernel.md`。
+- 端口审计：`docs/go-kernel-port-audit.md`。
+- 本 Slice 仅记录方向和边界，不实现 Go 代码、不引入 native binary、不改变 `package.json` version、不执行 `npm version` 或 `npm publish`。
+- Go kernel 的候选职责仅限 profiling 证明的 compact deterministic hot path，例如 panel/read-model projection、fingerprint/diff、tmux snapshot parsing/indexing；不得成为第二个控制平面、daemon、worker、scheduler 或 full-text reader。
+- 任意未来 Go slice 必须先补 TypeScript port contract、fallback、characterization fixture、missing/timeout/version-mismatch failure tests，并保持 legacy state compatibility。
 
 ### 0.2 当前实现事实
 
@@ -105,6 +113,7 @@ v0.5.0 的 release 标准：
 - 不能只写“显著缓解”，必须有 baseline、p95 指标和对比。
 - 不能把 project/team identity、state read model、tmux/panel 重构推迟到 v0.6。
 - 不能用 Rust/Go rewrite 替代当前 TypeScript seam 重构。
+- 不能把 Go kernel 作为默认控制平面或必需运行时；它只能作为可替换、可禁用、可回退的 helper 候选。
 - 不能通过默认 autopilot 掩盖 report/task governance 的可靠性问题。
 
 ---
@@ -795,16 +804,18 @@ v0.4.13 已完成修复范围：
 
 修复范围：
 
-- 写入 Rust/Go 评估结论。
+- 写入 Rust/Go 评估结论与 Slice 0 Go kernel decision record。
 - profiling-first。
 - TypeScript seam refactor。
-- native helper 只作为 v0.5 后按 profiling 触发的候选。
+- native helper 只作为按 profiling 触发的 replaceable optional kernel/helper 候选。
+- port audit 明确哪些 seam 可做 compact deterministic acceleration，哪些 seam 因治理/full-text/worker lifecycle 必须保留在 TypeScript control plane。
 
 验收：
 
 - 方案和 release plan 不承诺整体 Rust/Go。
+- 方案和 release plan 明确 Go kernel 不是默认 runtime、不是 daemon、不是 worker、不是 hidden scheduler/autopilot。
 - 性能改善必须通过 baseline/profiling 证明。
-- native binary 发布矩阵不进入 v0.5 scope。
+- native binary 发布矩阵不进入 v0.5 scope；任何未来 Go helper 都必须保持 TypeScript fallback 和 legacy compatibility。
 
 ---
 
@@ -814,6 +825,7 @@ v0.5.0 不做：
 
 - 不整体 Rust rewrite。
 - 不整体 Go rewrite。
+- 不把 Go kernel 作为必需 runtime、独立 daemon、第二控制平面或 worker lifecycle owner。
 - 不引入 native binary 发布矩阵。
 - 不默认 autopilot。
 - 不做 hidden scheduler。
@@ -837,9 +849,9 @@ v0.5.0 不做：
 
 ## 6. 版本切片与 patch plan
 
-### Slice 0 — Baseline and characterization
+### Slice 0 — Baseline, characterization, and Go-kernel decision
 
-目标：先测量，不猜瓶颈。
+目标：先测量，不猜瓶颈；同时把 JS/TS control plane + replaceable Go high-performance kernel/helper 的方向正式记录为文档决策。
 
 交付：
 
@@ -848,12 +860,50 @@ v0.5.0 不做：
 - 当前 fsStore lock/read/parse/write baseline。
 - 当前 known bug fixtures。
 - 当前 task/message/report 行为快照。
+- Go kernel decision record：保留 TypeScript/pi facade，Go 仅作为可替换、可禁用、可回退的 optional helper。
+- Go kernel port audit：梳理 `app/ports.ts`、`state/repository.ts`、runtime/tmux/outbox/config seams，区分 compact acceleration 候选与必须留在 TypeScript 的治理/full-text/worker lifecycle 边界。
 
 验证：
 
 - profiling 开关可用。
 - fixture 可重复运行。
 - 当前行为输出被记录，用于后续等价性对比。
+- 文档 lint/链接/grep 检查确认决策记录和端口审计被方案书与 release planning docs 引用。
+- 不改 `package.json` version，不执行 `npm version`、`npm publish`，不实现 Go code。
+
+### Go Kernel Prep Slice 1 — Profiling parity scaffolding
+
+目标：保持 TypeScript path 为默认实现，同时让未来 `PI_AGENTTEAM_KERNEL=go` 与 TypeScript fallback 的 benchmark/parity 对比有稳定 JSON metadata 和 stress fixture。
+
+交付：
+
+- State/read-model 与 panel/tmux bench JSON 输出 `implementation`、`kernel`、`fixtureProfile` metadata。
+- 当前实现固定为 `implementation: "typescript"`；`PI_AGENTTEAM_KERNEL=go` 在 Go 未实现时只记录 requested mode/fallback reason，不调用 native helper。
+- `AGENTTEAM_BENCH_FIXTURE=stress` 提供较大 state/panel fixture，用于 scalability shape，不声明 release pass/fail。
+- perf 文档说明未来 Go parity run 必须与 `PI_AGENTTEAM_KERNEL=typescript` 使用相同 fixture/iterations 对比，并先验证 compact output equivalence。
+
+验证：
+
+- 保留 full-body sentinel leak checks、tmux command count expectations、compact/read-only boundary assertions。
+- 增加 focused bench contract tests 锁定 metadata shape 与 stress fixture shape。
+- 不改 `package.json` version，不执行 `npm version`、`npm publish`，不实现 Go code/native binary。
+
+### Go Kernel Slice 7 — Perf checkpoint summary（GitHub-only）
+
+目标：把 Go kernel Slice 0-6 的 optional/helper/shadow 工作整理为可 review 的 benchmark/perf checkpoint，而不是 runtime UI 或 npm release 指南。
+
+交付：
+
+- `docs/perf/go-kernel-slice7-checkpoint.md` 汇总 Slice 0-6 artifacts：决策记录、端口审计、benchmark metadata、source-only helper、tmux parser seam、read-model shadow parity、benchmark-only shadow reporting、failure/fallback diagnostics。
+- 记录 reviewer commands：default benches、stress benches、`PI_AGENTTEAM_KERNEL=go` missing-helper fallback bench、可选本地 helper build shadow bench、Go helper smoke、typecheck、boundary check、`git diff --check`、package/native sanity。
+- 说明 compact `shadow` fields、`fallbackKind` vocabulary 与解读规则：diagnostic-only，不进入 `/team`，不作为 p95 hard gate，除非后续 release checklist 明确门槛。
+- README 只轻量链接 checkpoint，不把 Go kernel 描述为默认 runtime、authoritative path 或 npm/package release surface。
+
+验证：
+
+- 文档/reference test 确认 checkpoint 引用关键文件且包含 non-default/non-authoritative/no-runtime-UI 约束。
+- 继续保持 Go 不接管 repository writes、sidecar writes、task/report/PlanRun governance、full-text boundaries、tmux pane lifecycle 或 npm package/version control。
+- 不改 `package.json` version，不执行 `npm version`、`npm publish`、commit、tag 或 push。
 
 ### Slice 1 — Config Bootstrap/Schema
 
@@ -1120,6 +1170,7 @@ worker no-report state appears as waiting-for-report attention
 | PlanRun | user-approved；approve no task；explicit one-step advance；leader close 后多步推进；terminal done；report_done waiting_review；report_blocked/question paused；signal_failure validation/test failed；check_limits limit_reached；pause/resume/cancel；dryRun no mutation；`/team` compact visibility；全程可审计 |
 | Config | v1 schema；legacy compatibility；first-run bootstrap；effective model 可见 |
 | Performance | baseline + p95 + 相对改善数据齐全 |
+| Go Kernel | TypeScript/pi control plane 保留；Go 仅 optional/replaceable/fallback helper；port audit 完成；无 Go code/native binary/package version change |
 
 ---
 
@@ -1141,7 +1192,8 @@ worker no-report state appears as waiting-for-report attention
 1. v0.5.0 的准确定位是 `core refactor + performance baseline + bug burn-down release`。
 2. Team Identity、State Store/Read Model、Tmux Adapter、`/team` Panel、Task/Report/PlanRun、Config Bootstrap/Schema 是 v0.5 六条核心重构主线。
 3. v0.5 不整体 Rust/Go 重写；先保留 TypeScript/pi extension facade，完成内部 seam、profiling 和可测优化。
-4. `/team` 是 cockpit，不是 mailbox full-text reader；不能改变 `agentteam_receive` 的 read boundary。
-5. PlanRun 只允许在用户批准具体 planner report 后运行，并且一次只推进一个 leader-gated task。
-6. worker no-report 是协议可靠性 bug，必须通过 completion contract、attention、nudge 和 diagnostics 修复，不能用伪造 report 掩盖。
-7. legacy `teams/-` 必须安全保留；v0.5 不做破坏性 migration。
+4. Go 方向被限定为 replaceable optional high-performance kernel/helper：只能加速 profiling 证明的 compact deterministic hot path，必须有 TypeScript fallback，不能接管治理、full-text boundary、tmux worker lifecycle 或 release/package control plane。
+5. `/team` 是 cockpit，不是 mailbox full-text reader；不能改变 `agentteam_receive` 的 read boundary。
+6. PlanRun 只允许在用户批准具体 planner report 后运行，并且一次只推进一个 leader-gated task。
+7. worker no-report 是协议可靠性 bug，必须通过 completion contract、attention、nudge 和 diagnostics 修复，不能用伪造 report 掩盖。
+8. legacy `teams/-` 必须安全保留；v0.5 不做破坏性 migration。
