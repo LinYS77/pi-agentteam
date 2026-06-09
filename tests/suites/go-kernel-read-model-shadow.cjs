@@ -3,9 +3,9 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
+const fixtures = require('../fixtures/kernel/read-model/panelCases.cjs')
 
-const MAILBOX_SENTINEL = 'GO_KERNEL_SHADOW_MAILBOX_TEXT_SHOULD_NOT_LEAK'
-const REPORT_SENTINEL = 'GO_KERNEL_SHADOW_REPORT_TEXT_SHOULD_NOT_LEAK'
+const MALFORMED_SENTINEL = 'READ_MODEL_MALFORMED_HELPER_SHOULD_NOT_LEAK'
 
 function hasGoToolchain() {
   return spawnSync('go', ['version'], { encoding: 'utf8' }).status === 0
@@ -24,105 +24,118 @@ function buildGoHelper(extRoot) {
   return out
 }
 
-function compactFixture(size = 4) {
-  const members = Array.from({ length: Math.max(1, Math.min(size, 8)) }, (_, index) => ({
-    name: `worker-${index + 1}`,
-    role: ['researcher', 'planner', 'implementer'][index % 3],
-    status: index % 4 === 0 ? 'busy' : 'idle',
-    paneId: `%shadow-${index + 1}`,
-    windowTarget: 'shadow:@1',
-    bridgeAvailable: true,
-    bridgeVersion: 'test',
-    bridgeLastSeenAt: 1700000000000 + index,
-    bridgeLastDeliveryAt: 1700000000100 + index,
-    bridgeWorkRequestCount: index,
-    lastWakeReason: index % 2 === 0 ? 'assignment' : undefined,
-  }))
-  const tasks = Array.from({ length: size }, (_, index) => ({
-    id: `T${String(index + 1).padStart(3, '0')}`,
-    title: `Shadow task ${index + 1}`,
-    description: `Compact description ${index + 1}`,
-    status: index % 5 === 0 ? 'blocked' : 'open',
-    owner: members[index % members.length].name,
-    blockedBy: index % 5 === 0 ? ['compact blocker'] : [],
-    createdAt: 1700000010000 + index,
-    updatedAt: 1700000020000 + index,
-    history: {
-      taskId: `T${String(index + 1).padStart(3, '0')}`,
-      reports: index % 3,
-      events: index % 4,
-      messageRefs: index % 5,
-    },
-    watchdog: index % 7 === 0 ? {
-      state: 'waiting_for_report',
-      needsNudge: true,
-      latestAssignmentAt: 1700000030000 + index,
-      workerStatus: 'idle',
-    } : undefined,
-  }))
-  const taskMap = Object.fromEntries(tasks.map(task => [task.id, task]))
-  const team = {
-    version: 1,
-    name: 'shadow-team',
-    identity: {
-      teamId: 'team-shadow',
-      projectKey: 'project-shadow',
-      displayName: 'Shadow Team',
-      slug: 'shadow-team',
-    },
-    createdAt: 1700000000000,
-    leaderCwd: '/tmp/shadow-team',
-    members: Object.fromEntries(members.map(member => [member.name, member])),
-    tasks: taskMap,
-    planRuns: [],
-    nextTaskSeq: size + 1,
-    revision: 42,
-  }
-  const mailbox = Array.from({ length: Math.max(1, Math.min(size, 12)) }, (_, index) => ({
-    id: `M${String(index + 1).padStart(3, '0')}`,
-    from: members[index % members.length].name,
-    to: 'team-lead',
-    type: index % 3 === 0 ? 'report_blocked' : 'inform',
-    summary: `Compact mailbox ${index + 1}`,
-    priority: index % 3 === 0 ? 'high' : 'normal',
-    taskId: tasks[index % tasks.length].id,
-    createdAt: 1700000040000 + index,
-    readAt: index % 2 === 0 ? undefined : 1700000050000 + index,
-    deliveredAt: index % 4 === 0 ? 1700000060000 + index : undefined,
-  }))
-  return {
-    mode: 'attached',
-    team,
-    members,
-    tasks,
-    mailbox,
-    outboxDiagnostics: { pending: 0, failed: 0, latest: [] },
-  }
+function runGoHelper(helperPath, request) {
+  return spawnSync(helperPath, [], {
+    input: `${JSON.stringify(request)}\n`,
+    encoding: 'utf8',
+    timeout: 30_000,
+    maxBuffer: 8 * 1024 * 1024,
+    env: { PATH: process.env.PATH || '' },
+  })
 }
 
-function withFullTextSentinels(data) {
-  const clone = JSON.parse(JSON.stringify(data))
-  clone.mailbox[0].text = `${MAILBOX_SENTINEL} full mailbox body`
-  clone.team.taskReports = {
-    TR001: {
-      id: 'TR001',
-      taskId: clone.tasks[0].id,
-      text: `${REPORT_SENTINEL} full report body`,
-      summary: 'Compact report summary',
-    },
+function writeHelper(name, source) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `agentteam-read-model-helper-${name}-`))
+  const file = path.join(dir, `${name}.cjs`)
+  fs.writeFileSync(file, source, 'utf8')
+  fs.chmodSync(file, 0o755)
+  return { dir, file }
+}
+
+function assertNoTextKeys(label, value) {
+  function walk(item, pathParts = []) {
+    if (!item || typeof item !== 'object') return
+    if (Array.isArray(item)) {
+      item.forEach((child, index) => walk(child, [...pathParts, String(index)]))
+      return
+    }
+    for (const [key, child] of Object.entries(item)) {
+      assert.notEqual(key, 'text', `${label} must not include text key at ${[...pathParts, key].join('.')}`)
+      walk(child, [...pathParts, key])
+    }
   }
-  clone.tasks[0].history.latestReport = {
-    id: 'TR001',
-    summary: 'Compact report summary',
-  }
-  return clone
+  walk(value)
 }
 
 function assertNoSentinel(label, value) {
-  const json = JSON.stringify(value)
-  assert.equal(json.includes(MAILBOX_SENTINEL), false, `${label} must not include full mailbox sentinel`)
-  assert.equal(json.includes(REPORT_SENTINEL), false, `${label} must not include full report sentinel`)
-  assert.equal(json.includes('"text"'), false, `${label} must not expose text fields`)
+  const serialized = JSON.stringify(value)
+  for (const sentinel of Object.values(fixtures.SENTINELS)) {
+    assert.equal(serialized.includes(sentinel), false, `${label} must not include sentinel ${sentinel}`)
+  }
+  assert.equal(serialized.includes(MALFORMED_SENTINEL), false, `${label} must not include malformed helper sentinel`)
+  assertNoTextKeys(label, value)
+}
+
+function assertReadOnlyResult(label, result) {
+  assert.equal(result.ok, true, `${label} ok`)
+  assert.equal(result.inputKind, 'compact-panel-data', `${label} inputKind`)
+  assert.equal(result.readOnly, true, `${label} readOnly`)
+  assert.equal(result.fullTextIncluded, false, `${label} fullTextIncluded`)
+  assert.equal(result.stateFilesRead, false, `${label} stateFilesRead`)
+  assert.equal(result.stateFilesWritten, false, `${label} stateFilesWritten`)
+  assertNoSentinel(label, result)
+}
+
+function assertProjectionShape(label, projection, testCase) {
+  assert.equal(projection.mode, testCase.expect.mode, `${label} mode`)
+  if (projection.mode === 'attached') {
+    assert.equal(projection.tasks.length, testCase.expect.taskCount ?? projection.tasks.length, `${label} task count`)
+    assert.equal(projection.mailbox.length, testCase.expect.mailboxCount ?? projection.mailbox.length, `${label} mailbox count`)
+    if (testCase.expect.hasConfig) {
+      assert.ok(projection.team.config, `${label} should include compact config projection`)
+      assert.equal(projection.team.config.exists, true)
+      assert.ok(Array.isArray(projection.team.config.roleModels), `${label} config roleModels`)
+    }
+    if (testCase.expect.hasPlanRun) {
+      assert.ok(Array.isArray(projection.team.planRuns), `${label} should include compact PlanRun projection`)
+      assert.ok(projection.team.planRuns.some(run => run.planRunId === 'PR-RM-001' && run.taskId === 'T001'), `${label} should include PlanRun task hint`)
+    }
+    if (testCase.expect.legacyIdentity) {
+      assert.equal(projection.team.name, 'legacy-team')
+      assert.equal(projection.team.displayName, 'Legacy Team')
+      assert.equal(projection.team.slug, 'legacy-team')
+      assert.equal(projection.team.projectKey, 'legacy-project')
+      assert.equal(projection.team.teamId, 'legacy-team-id')
+    }
+    const blocked = projection.tasks.find(task => task.status === 'blocked')
+    if (blocked) {
+      assert.ok(blocked.blockedBy.length > 0, `${label} blocked task should keep compact blockedBy`)
+    }
+    const watchdogTask = projection.tasks.find(task => task.watchdog)
+    if (watchdogTask) {
+      assert.equal(watchdogTask.watchdog?.state, 'waiting_for_report', `${label} watchdog state`)
+      assert.equal(watchdogTask.watchdog?.needsNudge, true, `${label} watchdog needsNudge`)
+    }
+    const historyTask = projection.tasks.find(task => task.id === 'T001')
+    if (historyTask) {
+      assert.equal(typeof historyTask.history.reports, 'number', `${label} history reports`)
+      assert.equal(typeof historyTask.history.events, 'number', `${label} history events`)
+      assert.equal(typeof historyTask.history.messageRefs, 'number', `${label} history messageRefs`)
+    }
+  } else {
+    assert.equal(projection.teams.length, testCase.expect.teamCount ?? projection.teams.length, `${label} team count`)
+    assert.equal(projection.orphanPanes.length, testCase.expect.orphanPaneCount ?? projection.orphanPanes.length, `${label} orphan count`)
+    assert.ok(projection.teamSummaries['global-a'], `${label} should include team summary`)
+    assert.ok(projection.teamMailboxes['global-a'], `${label} should include team mailbox projection`)
+    assert.ok(Array.isArray(projection.quarantinedTeams), `${label} quarantinedTeams`)
+  }
+  if (testCase.expect.large) {
+    assert.ok(projection.tasks.length >= 36, `${label} should keep efficient large fixture shape`)
+    assert.ok(String(JSON.stringify(projection)).length > 1000, `${label} should be non-trivial`)
+  }
+}
+
+function assertSourceBoundaries(env) {
+  const goSource = fs.readFileSync(path.join(env.helpers.extRoot, 'kernel/go/agentteam-kernel/main.go'), 'utf8')
+  for (const forbidden of ['os.Open', 'os.ReadFile', 'os.WriteFile', 'os.Create', 'PI_AGENTTEAM_HOME', 'team.json', 'inboxes', 'sidecar', 'repository', 'cache.json', 'index.json', 'indexes']) {
+    assert.equal(goSource.includes(forbidden), false, `Go helper must not contain ${forbidden}`)
+  }
+  for (const rel of ['teamPanel/dataSource.ts', 'state/repository.ts', 'app/taskApplication.ts', 'app/taskReportWorkflow.ts', 'app/planRunApplication.ts', 'runtime/leaderAttention.ts']) {
+    const source = env.helpers.readSource(rel)
+    assert.equal(source.includes('compactReadModelFingerprint'), false, `${rel} must not call Go read-model shadow method`)
+    assert.equal(source.includes('PI_AGENTTEAM_KERNEL'), false, `${rel} must not read kernel env`)
+    assert.equal(source.includes('fallbackKind'), false, `${rel} must not expose kernel fallback diagnostics`)
+  }
 }
 
 module.exports = {
@@ -130,57 +143,83 @@ module.exports = {
   async run(env) {
     const kernel = env.helpers.requireDist('core/kernel.js')
     const fingerprint = env.helpers.requireDist('core/readModelFingerprint.js')
-    const compactInput = compactFixture(8)
-    const unsafeInput = withFullTextSentinels(compactInput)
-    const tsResult = kernel.createAgentTeamKernelAdapter({ env: {} }).compactReadModelFingerprint(unsafeInput)
-    const directProjection = fingerprint.compactReadModelProjection(unsafeInput)
-    const directFingerprint = fingerprint.compactPanelReadModelFingerprint(directProjection)
+    const cases = fixtures.cases()
 
-    assert.equal(tsResult.ok, true)
-    assert.equal(tsResult.inputKind, 'compact-panel-data')
-    assert.equal(tsResult.readOnly, true)
-    assert.equal(tsResult.fullTextIncluded, false)
-    assert.equal(tsResult.stateFilesRead, false)
-    assert.equal(tsResult.stateFilesWritten, false)
-    assert.deepEqual(tsResult.projection, directProjection)
-    assert.equal(tsResult.fingerprint, directFingerprint)
-    assertNoSentinel('TS shadow projection', tsResult.projection)
-    assertNoSentinel('TS shadow result', tsResult)
+    for (const testCase of cases) {
+      const projection = fingerprint.compactReadModelProjection(testCase.input)
+      const fingerprintValue = fingerprint.compactPanelReadModelFingerprint(projection)
+      assert.equal(fingerprint.compactPanelReadModelFingerprint(testCase.input), fingerprintValue, `${testCase.name} projection/fingerprint parity`)
+      assertProjectionShape(`TS projection ${testCase.name}`, projection, testCase)
+      assertNoSentinel(`TS projection ${testCase.name}`, projection)
+      if (testCase.equivalentTo) {
+        assert.equal(fingerprint.compactPanelReadModelFingerprint(testCase.equivalentTo), fingerprintValue, `${testCase.name} unordered object keys should be stable`)
+      }
 
-    const largeResult = kernel.createAgentTeamKernelAdapter({ env: {} }).compactReadModelFingerprint(compactFixture(40))
-    assert.equal(largeResult.ok, true)
-    assert.equal(largeResult.readOnly, true)
-    assert.ok(String(largeResult.fingerprint).length > 100, 'large fixture should produce a non-trivial fingerprint')
+      const tsResult = kernel.createAgentTeamKernelAdapter({ mode: 'typescript', env: {} }).compactReadModelFingerprint(testCase.input)
+      assertReadOnlyResult(`TS adapter ${testCase.name}`, tsResult)
+      assert.deepEqual(tsResult.projection, projection, `${testCase.name} TS adapter projection`)
+      assert.equal(tsResult.fingerprint, fingerprintValue, `${testCase.name} TS adapter fingerprint`)
+    }
 
+    const sentinelCase = cases.find(testCase => testCase.name === 'attached sentinels sanitized')
+    const tsSentinel = kernel.createAgentTeamKernelAdapter({ mode: 'typescript', env: {} }).compactReadModelFingerprint(sentinelCase.input)
     const missingGo = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: path.join(os.tmpdir(), 'missing-agentteam-kernel') })
-    const missingResult = missingGo.compactReadModelFingerprint(unsafeInput)
-    assert.deepEqual(missingResult, tsResult, 'missing Go helper should fall back to TS compact projection/fingerprint')
+    const missingResult = missingGo.compactReadModelFingerprint(sentinelCase.input)
+    assert.deepEqual(missingResult, tsSentinel, 'missing Go helper should fall back to TS compact projection/fingerprint')
     assert.equal(missingGo.metadata().kernel.mode, 'typescript')
     assert.equal(missingGo.metadata().kernel.fallbacks, 1)
+    assert.equal(missingGo.metadata().kernel.fallbackKind, 'missing-helper')
     assert.match(missingGo.metadata().kernel.fallbackReason, /using TypeScript fallback/)
 
-    for (const rel of ['teamPanel/dataSource.ts', 'state/repository.ts', 'app/taskApplication.ts', 'app/taskReportWorkflow.ts', 'app/planRunApplication.ts']) {
-      const source = env.helpers.readSource(rel)
-      assert.equal(source.includes('compactReadModelFingerprint'), false, `${rel} must not call Go read-model shadow method`)
-      assert.equal(source.includes('PI_AGENTTEAM_KERNEL'), false, `${rel} must not read kernel env`)
+    const malformedHelper = writeHelper('malformed', `#!/usr/bin/env node
+process.stdout.write('{not json ${MALFORMED_SENTINEL}\\n')
+`)
+    try {
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: malformedHelper.file })
+      const malformedResult = adapter.compactReadModelFingerprint(sentinelCase.input)
+      assert.deepEqual(malformedResult, tsSentinel, 'malformed helper should fall back to TS compact projection/fingerprint')
+      assert.equal(adapter.metadata().kernel.fallbackKind, 'helper-malformed-json')
+      assert.equal(JSON.stringify(adapter.metadata()).includes(MALFORMED_SENTINEL), false, 'metadata should not leak malformed helper stdout')
+    } finally {
+      fs.rmSync(malformedHelper.dir, { recursive: true, force: true })
     }
 
-    const goSource = fs.readFileSync(path.join(env.helpers.extRoot, 'kernel/go/agentteam-kernel/main.go'), 'utf8')
-    for (const forbidden of ['os.Open', 'os.ReadFile', 'os.WriteFile', 'os.Create', 'PI_AGENTTEAM_HOME', 'team.json', 'inboxes', 'sidecar']) {
-      assert.equal(goSource.includes(forbidden), false, `Go helper must not contain ${forbidden}`)
-    }
+    assertSourceBoundaries(env)
 
     if (!hasGoToolchain()) return
     const helperPath = buildGoHelper(env.helpers.extRoot)
     try {
+      for (const testCase of cases) {
+        const compactInput = fingerprint.compactReadModelProjection(testCase.input)
+        const expectedFingerprint = fingerprint.compactPanelReadModelFingerprint(compactInput)
+        const directRun = runGoHelper(helperPath, {
+          jsonrpc: '2.0',
+          id: `read-model-${testCase.name}`,
+          method: 'compactReadModelFingerprint',
+          params: { input: compactInput },
+        })
+        assert.equal(directRun.status, 0, directRun.stderr)
+        const response = JSON.parse(directRun.stdout.trim())
+        assert.equal(response.jsonrpc, '2.0')
+        assert.equal(response.id, `read-model-${testCase.name}`)
+        assertReadOnlyResult(`direct Go ${testCase.name}`, response.result)
+        assert.deepEqual(response.result.projection, compactInput, `${testCase.name} direct Go projection`)
+        assert.equal(response.result.fingerprint, expectedFingerprint, `${testCase.name} direct Go fingerprint`)
+      }
+
       const goAdapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
-      const goResult = goAdapter.compactReadModelFingerprint(unsafeInput)
-      assert.deepEqual(goResult, tsResult, 'Go compact read-model shadow output should match TS output')
-      assertNoSentinel('Go shadow result', goResult)
+      for (const testCase of cases) {
+        const expectedProjection = fingerprint.compactReadModelProjection(testCase.input)
+        const expectedFingerprint = fingerprint.compactPanelReadModelFingerprint(expectedProjection)
+        const goResult = goAdapter.compactReadModelFingerprint(testCase.input)
+        assertReadOnlyResult(`Go adapter ${testCase.name}`, goResult)
+        assert.deepEqual(goResult.projection, expectedProjection, `${testCase.name} Go adapter projection`)
+        assert.equal(goResult.fingerprint, expectedFingerprint, `${testCase.name} Go adapter fingerprint`)
+      }
       const metadata = goAdapter.metadata()
       assert.equal(metadata.kernel.mode, 'go')
       assert.equal(metadata.kernel.enabled, true)
-      assert.equal(metadata.kernel.calls, 2)
+      assert.equal(metadata.kernel.calls, cases.length + 1, 'first adapter call should include health preflight, then one call per fixture')
       assert.equal(metadata.kernel.fallbacks, 0)
       assert.deepEqual(metadata.kernel.capabilities, ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'])
     } finally {

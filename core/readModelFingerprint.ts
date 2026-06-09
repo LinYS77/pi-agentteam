@@ -8,11 +8,61 @@ export function stableCompactStringify(value: unknown): string {
   }
   if (value && typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, entryValue]) => entryValue !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .filter(([, entryValue]) => entryValue !== undefined && entryValue !== null)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${stableCompactStringify(entryValue)}`).join(',')}}`
   }
   return JSON.stringify(value)
+}
+
+function stripTextFields(value: unknown, depth = 0): unknown {
+  if (!value || depth > 12) return value
+  if (Array.isArray(value)) return value.map(item => stripTextFields(item, depth + 1))
+  if (typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key, entryValue]) => key !== 'text' && entryValue !== undefined)
+      .map(([key, entryValue]) => [key, stripTextFields(entryValue, depth + 1)]),
+  )
+}
+
+function compactConfigProjection(config: any) {
+  if (!config || typeof config !== 'object') return undefined
+  return stripTextFields({
+    exists: config.exists,
+    path: config.path,
+    schemaVersion: config.schemaVersion,
+    diagnosticCount: config.diagnosticCount,
+    roleModels: (config.roleModels ?? []).map((role: any) => ({
+      role: role.role,
+      modelLabel: role.modelLabel,
+      modelSource: role.modelSource,
+    })),
+  })
+}
+
+function compactPlanRuns(planRuns: any) {
+  if (!Array.isArray(planRuns)) return []
+  return planRuns.map(run => stripTextFields({
+    planRunId: run.planRunId,
+    status: run.status,
+    stepIndex: run.stepIndex,
+    stepNumber: run.stepNumber,
+    stepStatus: run.stepStatus,
+    taskId: run.taskId,
+    pauseReason: run.pauseReason,
+    latestEventId: run.latestEventId,
+    latestEventType: run.latestEventType,
+    latestReportId: run.latestReportId,
+    watchdog: run.watchdog ? {
+      state: run.watchdog.state,
+      needsNudge: run.watchdog.needsNudge,
+      reason: run.watchdog.reason,
+      owner: run.watchdog.owner,
+      workerStatus: run.watchdog.workerStatus,
+    } : undefined,
+    nextAction: run.nextAction,
+  }))
 }
 
 function taskHistoryCounts(team: any, taskId: string, task?: any) {
@@ -41,7 +91,7 @@ export function compactPanelReadModelFingerprint(data: any): string {
     return stableCompactStringify({
       mode: data.mode,
       teams: (data.teams ?? []).map(teamIdentityFingerprint),
-      teamSummaries: data.teamSummaries,
+      teamSummaries: stripTextFields(data.teamSummaries),
       teamMailboxes: Object.fromEntries(Object.entries(data.teamMailboxes ?? {}).map(([teamName, mailbox]) => [teamName, {
         total: (mailbox as any).total,
         unread: (mailbox as any).unread,
@@ -56,8 +106,8 @@ export function compactPanelReadModelFingerprint(data: any): string {
           delivered: bool((mailbox as any).latestAttention.deliveredAt) || Boolean((mailbox as any).latestAttention.delivered),
         } : undefined,
       }])),
-      teamDiagnostics: data.teamDiagnostics,
-      quarantinedTeams: data.quarantinedTeams,
+      teamDiagnostics: stripTextFields(data.teamDiagnostics),
+      quarantinedTeams: stripTextFields(data.quarantinedTeams),
       orphanPanes: (data.orphanPanes ?? []).map((pane: any) => ({
         paneId: pane.paneId,
         target: pane.target,
@@ -69,7 +119,11 @@ export function compactPanelReadModelFingerprint(data: any): string {
 
   return stableCompactStringify({
     mode: data?.mode,
-    team: teamIdentityFingerprint(data?.team),
+    team: {
+      ...teamIdentityFingerprint(data?.team),
+      config: compactConfigProjection(data?.team?.config),
+      planRuns: compactPlanRuns(data?.team?.planRuns),
+    },
     members: (data?.members ?? []).map((member: any) => ({
       name: member.name,
       role: member.role,
@@ -112,7 +166,7 @@ export function compactPanelReadModelFingerprint(data: any): string {
       read: bool(item.readAt) || Boolean(item.read),
       delivered: bool(item.deliveredAt) || Boolean(item.delivered),
     })),
-    outboxDiagnostics: data?.outboxDiagnostics,
+    outboxDiagnostics: stripTextFields(data?.outboxDiagnostics),
   })
 }
 

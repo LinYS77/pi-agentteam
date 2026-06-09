@@ -38,7 +38,8 @@ function parseTmuxPaneSnapshotWithTypeScript(stdout: string, capturedAt = Date.n
   const byPaneId: Record<string, TmuxPaneSnapshotItem> = {}
   const order: string[] = []
 
-  for (const line of String(stdout || '').split('\n')) {
+  for (const rawLine of String(stdout || '').split('\n')) {
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
     if (!line) continue
     const fields = line.split('\t')
     if (fields.length < 4) continue

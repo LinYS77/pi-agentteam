@@ -905,6 +905,34 @@ v0.5.0 不做：
 - 继续保持 Go 不接管 repository writes、sidecar writes、task/report/PlanRun governance、full-text boundaries、tmux pane lifecycle 或 npm package/version control。
 - 不改 `package.json` version，不执行 `npm version`、`npm publish`、commit、tag 或 push。
 
+### v0.4.17 — Go Kernel Contract Hardening（Slice 0）
+
+目标：在扩展 parity corpus 前，把 v0.4.16 GitHub-only Go kernel checkpoint 的 optional-helper contract 明确冻结为文档/reference-test 事实，而不是改变 runtime 行为。
+
+交付：
+
+- `docs/perf/v0.4.17-kernel-contract-hardening.md` 记录 `protocolVersion=1`、`0.3.0-read-model-shadow` adapter/helper label、capabilities、`businessPathsConnected=false`、modes、`fallbackKind` vocabulary、benchmark-only shadow reporting 与 source-only helper posture。
+- freeze line：protocol version 保持 `1`；adapter/helper label 只有在 wire/result shape 变化时才允许后续 slice 有意识地修改。
+- compatibility/non-authority 边界保持：TypeScript/pi control plane 继续权威；Go 仍是 optional/read-only/source-only helper，不接管 state writes、runtime `/team` diagnostics、task/report/PlanRun governance、full-text boundaries 或 npm/native packaging。
+
+验证：
+
+- 轻量 docs/reference test 确认 freeze doc 引用关键 constants/files，并且不暗示 Go default、authoritative、packaged、npm publish 或 p95 gate。
+- 不实现 Slice 1+ fixture corpus；不改 `package.json` version；不执行 `npm version`、`npm publish`；不添加 `go.mod`、`go.sum`、native binaries 或 lifecycle hooks。
+
+### v0.4.17 — Go Kernel Contract & Parity Corpus Hardening（Slice 7 checklist）
+
+目标：把 v0.4.17 Slice 0-6 的 contract freeze、JSON-RPC corpus、compatibility matrix、tmux parser corpus、read-model corpus、fallback/fail-closed policy、boundary guardrails 汇总成 GitHub-only reviewer checklist，而不是发布流程。
+
+交付：
+
+- `docs/perf/v0.4.17-kernel-release-checklist.md` 汇总 reviewer commands、expected signals、optional Go helper smokes、package/native sanity、boundary scans 与 review outcome template。
+- checklist 明确：不执行 `npm version`、不执行 `npm publish`、不 commit/tag/push；`package.json` version 保持 `0.6.8`；Go 仍是 optional/source-only/non-authoritative，不进入 runtime `/team` diagnostics，不引入 native packaging。
+
+验证：
+
+- `tests/suites/go-kernel-release-checklist-docs.cjs` 作为轻量 docs/reference guard，确保 checklist 引用关键 slice/files/commands，并且不暗示 Go default、packaged、authoritative 或 p95 hard gate。
+
 ### Slice 1 — Config Bootstrap/Schema
 
 目标：先降低首次使用门槛，并建立 versioned config。

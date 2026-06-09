@@ -2,6 +2,8 @@
 
 > Scope: GitHub-only review checkpoint for the optional Go kernel route through Slice 6. This is not an npm release, not runtime UI, not a p95 release hard gate, and not an instruction to run `npm version`, `npm publish`, commit, tag, or package a native binary.
 
+Follow-on v0.4.17 Slice 0 contract-freeze inventory lives at `docs/perf/v0.4.17-kernel-contract-hardening.md`; it records the current v0.4.16 facts without changing this checkpoint into an npm release or runtime-UI guide.
+
 ## Executive Summary
 
 Slice 0-6 establish a reviewable optional Go helper path for compact benchmark/perf diagnostics only. TypeScript remains the mandatory pi/npm control plane and the authoritative runtime implementation.

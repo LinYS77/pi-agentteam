@@ -14,6 +14,8 @@ docs/perf/*
 !docs/perf/v0.4.15-team-panel-tmux-refresh.md
 !docs/perf/go-kernel-parity-scaffolding.md
 !docs/perf/go-kernel-slice7-checkpoint.md
+!docs/perf/v0.4.17-kernel-contract-hardening.md
+!docs/perf/v0.4.17-kernel-release-checklist.md
 
 # Dependencies
 node_modules/

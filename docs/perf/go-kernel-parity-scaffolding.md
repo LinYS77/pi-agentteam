@@ -2,6 +2,8 @@
 
 > Scope: Slice 1 benchmark/test scaffolding, Slice 2 source-only helper skeleton, Slice 3 optional tmux snapshot parsing/indexing, Slice 4 read-only compact read-model shadow parity, Slice 5 benchmark-only shadow reporting, Slice 6 helper failure hardening, and Slice 7 perf checkpoint summary. No packaged native binary, package version change, `npm version`, or `npm publish` is part of these slices.
 
+v0.4.17 Slice 0 freezes the current v0.4.16 optional-helper contract before adding any broader parity corpus; see `docs/perf/v0.4.17-kernel-contract-hardening.md` for the protocol facts, compatibility rules, fallback vocabulary, source-only posture, and release constraints.
+
 ## Benchmark Metadata
 
 State/read-model and panel/tmux benchmarks now include compact implementation metadata in their JSON output:
