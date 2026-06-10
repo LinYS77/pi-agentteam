@@ -4,6 +4,8 @@
 
 v0.4.17 Slice 0 freezes the current v0.4.16 optional-helper contract before adding any broader parity corpus; see `docs/perf/v0.4.17-kernel-contract-hardening.md` for the protocol facts, compatibility rules, fallback vocabulary, source-only posture, and release constraints.
 
+v0.4.18 forward posture: the fallback behavior described here is pre-cutover migration scaffolding for parity/shadow safety, not the final architecture for future Go-owned modules. Future module cutover must follow `docs/decisions/0002-module-owned-go-kernel-cutover.md` and `docs/perf/v0.4.18-go-module-cutover-checklist.md`: use a cutover gate, keep a fallback deletion plan, and after cutover fail closed with compact diagnostics plus GitHub tag/npm version release rollback instead of hidden runtime TypeScript fallback. This preserves the historical v0.4.17 facts: Go remains optional/source-only/non-authoritative here, with no package/native release and no runtime `/team` diagnostics.
+
 ## Benchmark Metadata
 
 State/read-model and panel/tmux benchmarks now include compact implementation metadata in their JSON output:

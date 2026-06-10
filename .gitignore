@@ -8,6 +8,7 @@ docs/*
 !docs/decisions/
 docs/decisions/*
 !docs/decisions/0001-replaceable-go-kernel.md
+!docs/decisions/0002-module-owned-go-kernel-cutover.md
 !docs/perf/
 docs/perf/*
 !docs/perf/v0.4.14-state-read-model-baseline.md
@@ -16,6 +17,9 @@ docs/perf/*
 !docs/perf/go-kernel-slice7-checkpoint.md
 !docs/perf/v0.4.17-kernel-contract-hardening.md
 !docs/perf/v0.4.17-kernel-release-checklist.md
+!docs/perf/v0.4.18-go-module-cutover-checklist.md
+!docs/perf/v0.4.18-tmux-snapshot-parse-cutover.md
+!docs/perf/v0.4.18-go-cutover-fail-closed-diagnostics.md
 
 # Dependencies
 node_modules/

@@ -4,6 +4,8 @@
 
 Follow-on v0.4.17 Slice 0 contract-freeze inventory lives at `docs/perf/v0.4.17-kernel-contract-hardening.md`; it records the current v0.4.16 facts without changing this checkpoint into an npm release or runtime-UI guide.
 
+v0.4.18 forward posture: this checkpoint's optional/fail-open fallback path is pre-cutover migration behavior, not the final architecture for future Go-owned modules. Future module ownership must follow `docs/decisions/0002-module-owned-go-kernel-cutover.md` and `docs/perf/v0.4.18-go-module-cutover-checklist.md`: pass a cutover gate, delete the TypeScript runtime fallback, and after cutover fail closed with compact diagnostics plus GitHub tag/npm version release rollback instead of hidden runtime fallback. The Slice 7 facts remain unchanged: Go is optional/source-only/non-authoritative here, with no package/native release and no runtime `/team` diagnostics.
+
 ## Executive Summary
 
 Slice 0-6 establish a reviewable optional Go helper path for compact benchmark/perf diagnostics only. TypeScript remains the mandatory pi/npm control plane and the authoritative runtime implementation.
