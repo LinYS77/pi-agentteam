@@ -14,10 +14,10 @@ v0.4.18 changes the planning question from "can a replaceable helper exist safel
 
 AgentTeam will treat optional TypeScript/Go fallback as transitional migration tooling, not a permanent runtime architecture. A future module may become Go-owned only after it passes an explicit cutover gate and has a documented fallback deletion and release rollback plan.
 
-The lifecycle for each candidate module is defined by the per-module checklist in `docs/perf/v0.4.18-go-module-cutover-checklist.md` and the fail-closed diagnostics contract in `docs/perf/v0.4.18-go-cutover-fail-closed-diagnostics.md`:
+The lifecycle for each candidate module is defined by the per-module checklist in `docs/perf/v0.4.18-go-module-cutover-checklist.md`, the fail-closed diagnostics contract in `docs/perf/v0.4.18-go-cutover-fail-closed-diagnostics.md`, and the v0.4.19 runtime prerequisite matrix in `docs/perf/v0.4.19-go-runtime-prerequisites.md`:
 
 1. Migration parity/shadow: TypeScript remains the active runtime. Go may run in disabled, explicit, benchmark, smoke, or shadow contexts to prove equivalent output and characterize failure modes.
-2. Cutover gate: reviewers confirm parity corpus PASS, focused smoke/bench PASS, protocol/version compatibility, runtime packaging prerequisites, fail-closed diagnostics, fallback deletion steps, and release rollback instructions.
+2. Cutover gate: reviewers confirm parity corpus PASS, focused smoke/bench PASS, protocol/version compatibility, runtime prerequisite signoff, packaging prerequisites when applicable, fail-closed diagnostics, fallback deletion steps, and release rollback instructions.
 3. Go-owned runtime: TypeScript/pi still invokes the module through the stable port, but Go is the only runtime implementation for that module in the shipped path.
 4. TypeScript runtime fallback deletion: the old TypeScript implementation is removed from runtime fallback paths instead of being kept as a hidden alternate production implementation.
 5. Release rollback: if the Go-owned module is wrong after release, rollback happens by reverting to a prior GitHub tag/npm version or publishing a corrected release, not by silently re-enabling the deleted TypeScript fallback.
@@ -54,9 +54,10 @@ This decision does not approve or implement:
 - a Go control plane, daemon, scheduler, worker lifecycle owner, or tmux process manager.
 - movement of state writes, repository writes, sidecar/outbox writes, task/report governance, PlanRun authority, mailbox/report full-text boundaries, or `/team` authority into Go.
 - npm version changes, `npm version`, `npm publish`, GitHub tagging, committing, or release publication.
+- default Go runtime approval without `docs/perf/v0.4.19-go-runtime-prerequisites.md` signoff.
 - native binary packaging, package manager lifecycle hooks, `go.mod`, `go.sum`, or checked-in native artifacts.
 - runtime behavior changes in v0.4.18 Slice A.
 
 ## Consequences
 
-This keeps v0.4.16/v0.4.17 optional-helper work useful as migration evidence while preventing permanent dual-runtime ambiguity. Future Go work must choose narrow modules, prove readiness with `docs/perf/v0.4.18-go-module-cutover-checklist.md` before cutover, delete the TypeScript runtime fallback after cutover, fail closed when the Go-owned module cannot run, and rely on normal release rollback instead of hidden production fallback paths.
+This keeps v0.4.16/v0.4.17 optional-helper work useful as migration evidence while preventing permanent dual-runtime ambiguity. Future Go work must choose narrow modules, prove readiness with `docs/perf/v0.4.18-go-module-cutover-checklist.md`, obtain runtime prerequisite signoff through `docs/perf/v0.4.19-go-runtime-prerequisites.md` before any shipped/default cutover, delete the TypeScript runtime fallback only after that signoff, fail closed when the Go-owned module cannot run, and rely on normal release rollback instead of hidden production fallback paths.

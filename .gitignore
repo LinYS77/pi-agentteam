@@ -20,6 +20,11 @@ docs/perf/*
 !docs/perf/v0.4.18-go-module-cutover-checklist.md
 !docs/perf/v0.4.18-tmux-snapshot-parse-cutover.md
 !docs/perf/v0.4.18-go-cutover-fail-closed-diagnostics.md
+!docs/perf/v0.4.19-go-runtime-prerequisites.md
+!docs/perf/v0.4.19-tmux-snapshot-fail-closed-readiness.md
+!docs/perf/v0.4.19-team-refresh-parser-unavailable-safety.md
+!docs/perf/v0.4.19-go-helper-smoke-readiness.md
+!docs/perf/v0.4.19-go-kernel-readiness-checkpoint.md
 
 # Dependencies
 node_modules/

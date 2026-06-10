@@ -944,6 +944,7 @@ v0.5.0 不做：
 - cutover 前：允许 TS/Go parity、shadow、fallback，用来降低迁移风险。
 - cutover 后：该模块 runtime 只保留 Go-owned path；缺失/版本不兼容时 fail closed，并提供明确诊断和 release rollback 指引。
 - release rollback 通过 GitHub tag/npm version，而不是 runtime 中长期偷偷走旧 TS path。
+- v0.4.19 runtime prerequisite matrix：`docs/perf/v0.4.19-go-runtime-prerequisites.md` 是删除 TS runtime fallback 前的 stop/go gate；source-only/manual helper path 只代表 GitHub-only readiness，explicit user-provided helper path 只用于 local smoke，native packaging matrix 暂缓。
 
 建议首个 cutover 候选：
 
@@ -965,6 +966,89 @@ v0.4.18 交付：
 - 每个未来 Go-owned 模块必须有 fallback deletion plan。
 - fail closed diagnostics 与 release rollback 取代永久 runtime fallback。
 - 仍不做 `npm version`、不做 `npm publish`、不引入 native binary 发布矩阵。
+
+### v0.4.19 — Go Runtime Prerequisites & tmuxSnapshotParse Cutover Readiness（Slice 1）
+
+目标：在任何 Go-owned runtime 真正删除 TS fallback 前，先明确 helper runtime availability 的可接受模型，避免把 source-only/manual helper readiness 误当成 shipped/default runtime 能力。
+
+交付：
+
+- 新增 runtime prerequisite decision matrix：`docs/perf/v0.4.19-go-runtime-prerequisites.md`。
+- Model A：source-only/manual helper path 只作为 pre-cutover/GitHub-only readiness；runtime availability 未解决前不发布 Go-owned runtime，也不删除 TS fallback。
+- Model B：explicit user-provided helper path 只允许 experimental/local cutover smoke；不是 packaged/default release path。
+- Model C：native packaging matrix 是 shipped/default cutover 前置条件，但明确 deferred/out of v0.4.19 scope。
+- stop/go gate：fallback deletion is blocked until runtime prerequisite signoff；继续保持 no package version change、no `npm version`、no `npm publish`、no lifecycle hooks、no package locks、no `go.mod`/`go.sum`、no checked-in native binaries、no `kernel/` package inclusion。
+
+验收：
+
+- `tests/suites/go-kernel-v0419-runtime-prereq-docs.cjs` 作为 docs/reference guard，确认 v0.4.19 doc 被 v0.4.18 cutover docs 链接，并且没有把 Go 变成 default runtime、native package、control plane、tmux/worker lifecycle owner、state/governance/full-text owner。
+
+### v0.4.19 — tmuxSnapshotParse Fail-Closed Readiness（Slice 2）
+
+目标：在不删除 TS parser fallback、不改变 default runtime behavior 的前提下，定义 `tmuxSnapshotParse` 未来 cutover-owned parser mode 的 fail-closed readiness。
+
+交付：
+
+- 新增 readiness doc：`docs/perf/v0.4.19-tmux-snapshot-fail-closed-readiness.md`。
+- 明确 operation class：current migration parser mode may fail open to TypeScript；future cutover-owned parser mode must fail closed with compact diagnostics。
+- 覆盖 future cutover failure classes：missing/disabled helper、unsupported protocol/version/capability、timeout、spawn error/crash/nonzero exit、empty response、malformed JSON、JSON-RPC error、incompatible/unsafe response shape、previous helper failure。
+- 定义 safe unavailable/unknown result shape：`ok:false` or equivalent、compact `cutoverFailureKind`、short sanitized reason、no false successful empty snapshot。
+- 明确 leak prohibitions：no helper stdout/stderr bodies、no full helper/repo paths、no mailbox/report text、no sidecar/cache/index/raw state contents、no hidden runtime state。
+- 继续引用 parity coverage：`tests/fixtures/kernel/tmux/snapshotCases.cjs` 与 `tests/suites/go-kernel-tmux-snapshot-parser.cjs`；fallback deletion remains blocked until runtime prerequisite signoff。
+
+验收：
+
+- `tests/suites/go-kernel-v0419-tmux-readiness-docs.cjs` 作为 docs/reference guard，确认 readiness doc 被 prerequisite/cutover docs 链接，并且不暗示 runtime fallback deletion、Go default runtime、native packaging、tmux/worker lifecycle movement 或 state/governance/full-text movement。
+
+### v0.4.19 — Team Refresh Parser-Unavailable Safety（Slice 3）
+
+目标：证明 future `tmuxSnapshotParse` parser-unavailable snapshot 是 unknown/stale，不是 pane disappearance；ordinary light/global `/team` refresh 不能因 parser failure destructively mutate pane/worker state。
+
+交付：
+
+- 新增 safety doc：`docs/perf/v0.4.19-team-refresh-parser-unavailable-safety.md`。
+- 区分 tmux capture failure、parser failure、successful empty snapshot；parser failure/capture failure 都不能被当成 false successful empty pane list。
+- Guard light attached refresh：`snapshot.ok === false` 时不得 clear `paneId/windowTarget`、mark workers `error`、写 `pane lost`/`tmux pane disappeared`、kill panes、force reconcile 或 destructively mutate members。
+- Guard global refresh：parser failure 不得清空 known pane bindings；live tmux fallback/retry 若存在必须是 explicit TypeScript/pi behavior，不是 hidden parser success。
+- 继续保持 TypeScript/pi owner：tmux execution、pane lifecycle、worker lifecycle、`/team`、state/governance/full-text boundaries。
+
+验收：
+
+- `tests/suites/go-kernel-v0419-refresh-parser-unavailable-safety.cjs` 作为 focused docs/characterization guard，确认 docs/source/runtime injection 下的 `ok:false` refresh safety；不改 runtime behavior、不删除 fallback、不让 Go default。
+
+### v0.4.19 — Go Helper Smoke Command Normalization（Slice 4）
+
+目标：规范 reviewer source-only Go helper smoke/readiness commands，避免把临时本地 helper build 扩大成 package/native release scope。
+
+交付：
+
+- 新增 helper smoke readiness doc：`docs/perf/v0.4.19-go-helper-smoke-readiness.md`。
+- 规范 temp helper build under `/tmp`：`helper="$(mktemp /tmp/agentteam-v0419-kernel.XXXXXX)"`；`(cd kernel/go/agentteam-kernel && GO111MODULE=off go build -o "$helper" .)`；使用后 `rm -f "$helper"`。
+- 只允许显式 env 使用 helper：`PI_AGENTTEAM_KERNEL=go PI_AGENTTEAM_KERNEL_HELPER="$helper"`；missing Go toolchain 记为 optional-skip/manual-smoke unavailable，不是 default TypeScript runtime failure。
+- 记录 expected health/smoke signals：`protocolVersion=1`、`helperVersion=0.3.0-read-model-shadow`、capabilities include `health/profile/tmuxSnapshotParse/compactReadModelFingerprint`、`businessPathsConnected=false`、enabled true with helper、fallbacks 0、parity matched where applicable、`readOnly:true`、`fullTextIncluded:false`、`stateFilesRead:false`、`stateFilesWritten:false`、no runtime `/team` diagnostics。
+- 记录 package/native sanity：package version `0.6.8`、package files exclude `kernel/`、no package scripts、no lifecycle hooks、no package locks/npm-shrinkwrap、no `go.mod`/`go.sum`、no checked-in native artifacts。
+
+验收：
+
+- `tests/suites/go-kernel-v0419-helper-smoke-docs.cjs` 作为 docs/reference guard；不要求 Go toolchain，不新增 package scripts，不改 runtime behavior。
+
+### v0.4.19 — Go Kernel Readiness Checkpoint（Slice 5）
+
+目标：汇总 Slice 1-4 readiness results，给出 stop/go recommendation，并运行最终 validation；该 Slice 仍是 docs/tests/checkpoint summary only。
+
+交付：
+
+- 新增 checkpoint doc：`docs/perf/v0.4.19-go-kernel-readiness-checkpoint.md`。
+- 汇总 runtime prerequisites：Model A GitHub-only readiness、Model B local smoke only、Model C deferred、fallback deletion blocked until runtime prerequisite signoff。
+- 汇总 tmux fail-closed readiness：future cutover failure classes、safe unavailable/unknown shape、no leaks、parity references。
+- 汇总 refresh safety：parser unavailable = unknown/stale not pane disappearance；light/global refresh non-destructive；explicit TypeScript/pi live tmux fallback behavior。
+- 汇总 helper smoke commands：`/tmp` helper、`GO111MODULE=off`、explicit env、cleanup、expected health/bench/package-native signals。
+- 记录 package/native sanity：package version `0.6.8`、package files exclude `kernel/`、no lifecycle hooks/package locks/npm-shrinkwrap/`go.mod`/`go.sum`/native artifacts。
+- Stop/go recommendation：Do NOT proceed to actual `tmuxSnapshotParse` fallback deletion in v0.4.19；v0.4.20 cutover only if user explicitly approves and runtime prerequisite signoff is accepted；otherwise return to broader v0.5 core refactor。
+
+验收：
+
+- `tests/suites/go-kernel-v0419-readiness-checkpoint-docs.cjs` 作为 docs/reference guard；最终 validation 包括 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check`、package/native sanity，optional `npm run --silent bench:team-panel-tmux`。
 
 ### Slice 1 — Config Bootstrap/Schema
 
