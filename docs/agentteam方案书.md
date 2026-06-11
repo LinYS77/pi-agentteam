@@ -1319,6 +1319,97 @@ v0.4.18 交付：
 
 - syntax check 和 focused checkpoint suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check` 通过；不 commit/tag/push。
 
+### v0.4.23 — Compact Native Failure Diagnostics and Release Decision Gate（Slice 1）
+
+目标：新增 diagnostics surface audit and contract，定义 future compact native failure diagnostics 与 release decision gate foundation；该 Slice 只做 docs/tests，不实现 runtime UI diagnostics，不改 native/package/default behavior，不启动 Slice 2。
+
+交付：
+
+- 新增 diagnostics/audit doc：`docs/perf/v0.4.23-compact-native-failure-diagnostics.md`。
+- 新增 docs/reference guard suite：`tests/suites/go-kernel-v0423-compact-diagnostics-docs.cjs`。
+- 链接 prior checkpoint：`docs/perf/v0.4.22-native-helper-package-metadata-checkpoint.md`，并引用 relevant v0.4.20/v0.4.21 docs。
+- 记录 current-state audit：default/unset disabled/TypeScript；`go-cutover` 与 explicit-only `go-packaged-preview` 对 `tmuxSnapshotParse` fail closed；`compactReadModelFingerprint` non-cutover；runtime `/team` currently quiet。
+- 定义 safe compact diagnostic fields：module、capability、status/resultMarker、failure kind、short remediation、supported-platform/freshness hint、release decision pointer。
+- 定义 forbidden leaks：helper path、stdout/stderr、repo/cwd、raw `cutoverReason`、raw state/team JSON、sidecar/cache/index contents、raw manifests/checksums/provenance payloads、worker prompts、stack traces、mailbox/report text、package internals。
+- 明确 release decision gate：real package metadata/native artifact/default resolver/fallback deletion require explicit user approval after diagnostics、generated artifacts、clean install、unsupported-platform behavior、rollback proven。
+
+验收：
+
+- syntax check 和 focused diagnostics suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不改 main `package.json`、optionalDependencies、lifecycle hooks、lockfiles、Go modules、native artifacts、npm version/publish、default Go、current `go-cutover`、`go-packaged-preview` availability semantics 或 TypeScript fallback。
+
+### v0.4.23 — Compact Diagnostics Model / Failure Mapping（Slice 2）
+
+目标：新增 compact internal diagnostics model/failure mapping for `tmuxSnapshotParse` cutover/packaged-preview parser unavailability；该 Slice 只做 pure/read-only model 与 no-leak tests，不实现 runtime UI/panel diagnostics，不启动 Slice 3。
+
+交付：
+
+- 新增 pure internal helper：`core/kernelDiagnostics.ts`。
+- 新增 focused guard suite：`tests/suites/go-kernel-v0423-compact-diagnostics-model.cjs`。
+- 更新 diagnostics/audit doc：`docs/perf/v0.4.23-compact-native-failure-diagnostics.md` 的 Slice 2 model/mapping evidence。
+- 覆盖 representative failure kinds：`missing-helper`、`helper-unsupported-version`、`helper-unsupported-protocol`、`helper-unsupported-capability`、`helper-timeout`、`helper-spawn-error`、`helper-crash`、`helper-nonzero-exit`、`helper-empty-response`、`helper-malformed-json`、`helper-jsonrpc-error`、`helper-incompatible-response`、`helper-unsafe-response-shape`、`previous-helper-failure`。
+- 断言 diagnostics only safe fields：module、capability、status/resultMarker、failureKind、short remediation、optional platform/freshness hint、release decision pointer；forbidden leak sentinels 不出现在 serialized diagnostics。
+- 断言 default/unset disabled/TypeScript、`go-packaged-preview` explicit-only、current `go-cutover` unchanged、`compactReadModelFingerprint` non-cutover、runtime `/team` quiet、package/native sanity unchanged。
+
+验收：
+
+- syntax check 和 focused model suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不改 package/default/native behavior，不改 `go-cutover` 或 `go-packaged-preview` availability semantics，不删除 TypeScript fallback。
+
+### v0.4.23 — Parser Failure Policy / No-Leak Regression（Slice 3）
+
+目标：新增 parser failure policy/no-leak regression，绑定 compact diagnostics contract 与 current `tmuxSnapshotParse` fail-closed behavior；覆盖 `go-cutover` 和 `go-packaged-preview` failure paths，不实现 runtime UI/panel diagnostics，不启动 Slice 4。
+
+交付：
+
+- 新增 focused regression suite：`tests/suites/go-kernel-v0423-parser-failure-policy.cjs`。
+- 更新 diagnostics/audit doc：`docs/perf/v0.4.23-compact-native-failure-diagnostics.md` 的 Slice 3 failure-policy evidence。
+- 覆盖 representative failure paths：missing helper、wrong version packaged helper、unsafe helper response。
+- 使用 throwing TypeScript parser fallback callback，断言 cutover/preview failure paths 不调用 fallback。
+- 断言 fail-closed snapshot shape：`ok:false`、`status:"unknown"`、`resultMarker:"stale"`、empty `panes`/`byPaneId`、module/capability `tmuxSnapshotParse`、compact `cutoverFailureKind`。
+- 断言 no migration `fallbackKind`/`fallbackReason`、`fallbacks:0`、compact diagnostic mapping exists for same failure kind and only safe fields。
+- 断言 forbidden sentinels 不泄漏到 snapshot、metadata、diagnostic、readiness-relevant serialized surfaces；`/team` remains quiet，不渲染 helper path、raw cutover reason、releaseDecision、platform/freshness hints 或 remediation。
+- 断言 parser-unavailable panel/orphan boundary remains safe：不 hidden live TS parser fallback、不 false successful empty snapshot、不 force reconcile/kill panes/worker lifecycle mutation。
+
+验收：
+
+- syntax check 和 focused policy suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不改 package/default/native behavior，不改 `go-cutover` 或 `go-packaged-preview` availability semantics，不删除 TypeScript fallback，不扩大 Go authority。
+
+### v0.4.23 — Compact Diagnostics Readiness / Summary Surface（Slice 4）
+
+目标：新增 constrained read-only readiness/summary formatter/helper，把 internal compact diagnostics model 转成 safe compact object/string，供 future commands/tests 使用；不渲染 `/team`，不改变 runtime panel behavior，不启动 Slice 5。
+
+交付：
+
+- 在 `core/kernelDiagnostics.ts` 增加 pure readiness helpers：`summarizeTmuxSnapshotParseFailureDiagnostic()` 和 `formatTmuxSnapshotParseFailureReadiness()`。
+- 新增 focused guard suite：`tests/suites/go-kernel-v0423-compact-diagnostics-readiness.cjs`。
+- 更新 diagnostics/audit doc：`docs/perf/v0.4.23-compact-native-failure-diagnostics.md` 的 Slice 4 readiness/summary evidence。
+- 覆盖 representative diagnostics：missing helper、unsupported version/protocol/capability、timeout/spawn/crash、malformed/incompatible/unsafe response、previous-helper-failure。
+- 断言 readiness output compact/stable，包含 remediation 与 release decision pointer，仅使用 safe diagnostic contract text，不泄漏 forbidden sentinels。
+- 断言 helper pure/read-only：无 fs/tmux/process/env/state/package/panel access。
+- 断言 default/preview/cutover/read-model/package invariants unchanged，`/team` panel/runtime surfaces remain quiet。
+
+验收：
+
+- syntax check 和 focused readiness suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不改 package/default/native behavior，不改 `go-cutover` 或 `go-packaged-preview` availability semantics，不删除 TypeScript fallback，不渲染 runtime UI diagnostics，不扩大 Go authority。
+
+### v0.4.23 — Compact Diagnostics Release Decision Checkpoint（Slice 5）
+
+目标：新增 final GitHub-only compact native failure diagnostics + release decision gate checkpoint，汇总 Slice 1-4 evidence、runtime/package unchanged facts、GO/STOP decision、remaining blockers、validation matrix；不 commit/tag/push。
+
+交付：
+
+- 新增 final checkpoint doc：`docs/perf/v0.4.23-compact-native-failure-diagnostics-checkpoint.md`。
+- 新增 checkpoint guard suite：`tests/suites/go-kernel-v0423-compact-diagnostics-checkpoint-docs.cjs`。
+- checkpoint link prior checkpoint：`docs/perf/v0.4.22-native-helper-package-metadata-checkpoint.md`。
+- checkpoint link all v0.4.23 artifacts：`docs/perf/v0.4.23-compact-native-failure-diagnostics.md`、`core/kernelDiagnostics.ts`、Slice 1 docs guard、Slice 2 model guard、Slice 3 parser failure policy guard、Slice 4 readiness guard。
+- 明确 GO only for GitHub-only v0.4.23 compact diagnostics/release decision gate checkpoint after leader approval。
+- 明确 STOP for runtime UI diagnostics rendering、command integration、npm/default/native cutover、real package inclusion、`package.json` metadata/version changes、optionalDependencies、lifecycle hooks/downloads、lockfiles/go modules/native artifacts、diagnostics/readiness as normal-user native availability proof、default Go、current `go-cutover` changes、`go-packaged-preview` availability semantics changes、TypeScript fallback deletion。
+- 记录 remaining blockers：user approval、generated artifacts/checksums/provenance/license/executable validation、clean install smokes、unsupported-platform remediation、rollback story、command/UI diagnostics design if desired、package release ownership、parser failure policy in normal-user default path。
+- 包含 validation matrix：focused v0.4.23 suites、`node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check`、default bench、preview bench、package/native sanity。
+
+验收：
+
+- syntax check 和 focused checkpoint suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check` 通过；不改 package/default/native behavior，不改 `go-cutover` 或 `go-packaged-preview` availability semantics，不删除 TypeScript fallback，不渲染 runtime UI diagnostics，不扩大 Go authority，不 commit/tag/push。
+
 ### Slice 1 — Config Bootstrap/Schema
 
 目标：先降低首次使用门槛，并建立 versioned config。

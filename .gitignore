@@ -36,6 +36,8 @@ docs/perf/*
 !docs/perf/v0.4.21-go-runtime-availability-checkpoint.md
 !docs/perf/v0.4.22-native-helper-package-metadata.md
 !docs/perf/v0.4.22-native-helper-package-metadata-checkpoint.md
+!docs/perf/v0.4.23-compact-native-failure-diagnostics.md
+!docs/perf/v0.4.23-compact-native-failure-diagnostics-checkpoint.md
 
 # Dependencies
 node_modules/
