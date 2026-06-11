@@ -1,4 +1,4 @@
-import { createAgentTeamKernelAdapter } from '../core/kernel.js'
+import { createAgentTeamKernelAdapter, type AgentTeamKernelCutoverFailureKind } from '../core/kernel.js'
 import { runTmuxNoThrow } from './client.js'
 
 export type TmuxPaneSnapshotItem = {
@@ -14,6 +14,12 @@ export type TmuxSnapshot = {
   byPaneId: Record<string, TmuxPaneSnapshotItem>
   ok?: boolean
   error?: string
+  status?: 'unknown'
+  resultMarker?: 'stale'
+  module?: 'tmuxSnapshotParse'
+  capability?: 'tmuxSnapshotParse'
+  cutoverFailureKind?: AgentTeamKernelCutoverFailureKind
+  reason?: string
 }
 
 export type TmuxSnapshotPaneBinding = {
@@ -30,6 +36,7 @@ function emptySnapshot(capturedAt: number, ok = true, error?: string): TmuxSnaps
     panes: [],
     byPaneId: {},
     ok,
+    ...(ok === false ? { status: 'unknown' as const, resultMarker: 'stale' as const } : {}),
     ...(error === undefined ? {} : { error }),
   }
 }

@@ -550,6 +550,7 @@ module.exports = {
   FIXTURE_PROFILES,
   STRESS_FIXTURE,
   buildBaselineResult,
+  buildKernelMetadata,
   buildShadowReport,
   fixtureForProfile,
   hashFingerprint,

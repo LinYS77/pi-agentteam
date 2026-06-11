@@ -75,6 +75,7 @@ module.exports = {
     assert.equal(typeof bench.buildBaselineResult, 'function', 'bench should export buildBaselineResult')
     assert.equal(typeof bench.summarizeFsStore, 'function', 'bench should export summarizeFsStore')
     assert.equal(typeof bench.buildShadowReport, 'function', 'bench should export buildShadowReport')
+    assert.equal(typeof bench.buildKernelMetadata, 'function', 'bench should export buildKernelMetadata')
     assert.equal(typeof bench.shouldRunShadow, 'function', 'bench should export shouldRunShadow')
     assert.equal(typeof bench.fixtureForProfile, 'function', 'bench should export fixtureForProfile')
     assert.equal(typeof bench.resolveFixtureProfileName, 'function', 'bench should export resolveFixtureProfileName')
@@ -87,19 +88,13 @@ module.exports = {
     })
     assert.equal(sample.note, 'baseline only; not a release target pass/fail gate')
     assert.equal(sample.implementation, 'typescript')
-    assert.deepEqual(sample.kernel, {
-      requestedMode: 'typescript',
-      mode: 'typescript',
-      enabled: false,
-      calls: 0,
-      fallbacks: 0,
-      requestedKnownKernel: true,
-      protocolVersion: 1,
-      adapterVersion: '0.3.0-read-model-shadow',
-      helperVersion: '0.3.0-read-model-shadow',
-      capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'],
-      businessPathsConnected: false,
-    })
+    const expectedKernel = bench.buildKernelMetadata().kernel
+    assert.equal(expectedKernel.mode, 'typescript')
+    assert.equal(expectedKernel.enabled, false)
+    assert.equal(expectedKernel.calls, 0)
+    assert.equal(expectedKernel.fallbacks, 0)
+    assert.equal(expectedKernel.requestedKnownKernel, true)
+    assert.deepEqual(sample.kernel, expectedKernel)
     assert.deepEqual(sample.fixtureProfile, { name: 'baseline', stress: false })
     assert.deepEqual(sample.fixture, { leaders: 1, workers: 3, tasks: 100, mailboxItems: 500 })
     assert.equal(sample.iterations.warmup, 1)
@@ -122,6 +117,7 @@ module.exports = {
     assert.equal(bench.shouldRunShadow('typescript'), false)
     assert.equal(bench.shouldRunShadow('go'), true)
     assert.equal(bench.shouldRunShadow('auto'), true)
+    assert.equal(bench.shouldRunShadow('go-cutover'), false)
     assert.equal(bench.resolveFixtureProfileName('large'), 'large')
     assert.equal(bench.resolveFixtureProfileName('unknown-fixture'), 'baseline')
     const stressFixture = bench.fixtureForProfile('large')

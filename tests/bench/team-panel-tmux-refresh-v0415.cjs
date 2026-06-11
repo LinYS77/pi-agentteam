@@ -632,6 +632,7 @@ module.exports = {
   FIXTURE_PROFILES,
   STRESS_FIXTURE,
   buildBenchResult,
+  buildKernelMetadata,
   fixtureForProfile,
   createBenchTeam,
   createCountingTmuxClient,

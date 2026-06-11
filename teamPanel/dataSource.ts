@@ -101,6 +101,18 @@ function loadAttachedPanelData(teamName: string, deps: PanelDataSourceDeps): Att
   return data
 }
 
+function snapshotForOrphanDiscovery(snapshot: Parameters<RuntimeRepository['listAgentTeamPanes']>[0]): Parameters<RuntimeRepository['listAgentTeamPanes']>[0] {
+  const cutoverParserUnavailable = snapshot?.ok === false
+    && snapshot.status === 'unknown'
+    && snapshot.resultMarker === 'stale'
+    && snapshot.module === 'tmuxSnapshotParse'
+    && snapshot.capability === 'tmuxSnapshotParse'
+    && Boolean(snapshot.cutoverFailureKind)
+  if (cutoverParserUnavailable) return snapshot
+  // v0.4.19 generic parser-unavailable fallback remains equivalent to listAgentTeamPanes(snapshot.ok === false ? undefined : snapshot); only cutover parser-unavailable snapshots avoid hidden live orphan parsing.
+  return snapshot?.ok === false ? undefined : snapshot
+}
+
 function loadGlobalPanelData(deps: PanelDataSourceDeps): GlobalPanelData {
   const startedAt = Date.now()
   return deps.runtimeRepository.withRuntimeSnapshot(snapshot => {
@@ -128,7 +140,7 @@ function loadGlobalPanelData(deps: PanelDataSourceDeps): GlobalPanelData {
       teamDiagnostics[panelTeam.name] = { outbox: deps.stateRepository.readOutboxDiagnosticsSummary(panelTeam.name) }
     }
 
-    const orphanPanes = deps.runtimeRepository.listAgentTeamPanes(snapshot.ok === false ? undefined : snapshot)
+    const orphanPanes = deps.runtimeRepository.listAgentTeamPanes(snapshotForOrphanDiscovery(snapshot))
       .filter(pane => !knownPaneIds.has(pane.paneId))
       .sort((a, b) => a.paneId.localeCompare(b.paneId))
 

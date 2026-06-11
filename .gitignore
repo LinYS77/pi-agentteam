@@ -25,6 +25,8 @@ docs/perf/*
 !docs/perf/v0.4.19-team-refresh-parser-unavailable-safety.md
 !docs/perf/v0.4.19-go-helper-smoke-readiness.md
 !docs/perf/v0.4.19-go-kernel-readiness-checkpoint.md
+!docs/perf/v0.4.20-go-cutover-helper-smoke.md
+!docs/perf/v0.4.20-go-cutover-checkpoint.md
 
 # Dependencies
 node_modules/

@@ -1,4 +1,4 @@
-const VALID_KERNEL_MODES = new Set(['disabled', 'typescript', 'go', 'auto'])
+const VALID_KERNEL_MODES = new Set(['disabled', 'typescript', 'go', 'auto', 'go-cutover'])
 const KERNEL_PROTOCOL_VERSION = 1
 const KERNEL_ADAPTER_VERSION = '0.3.0-read-model-shadow'
 const KERNEL_HELPER_VERSION = '0.3.0-read-model-shadow'

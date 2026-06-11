@@ -1050,6 +1050,25 @@ v0.4.18 交付：
 
 - `tests/suites/go-kernel-v0419-readiness-checkpoint-docs.cjs` 作为 docs/reference guard；最终 validation 包括 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check`、package/native sanity，optional `npm run --silent bench:team-panel-tmux`。
 
+### v0.4.20 — tmuxSnapshotParse Experimental Go-Owned Cutover（Slice 7 checkpoint）
+
+目标：汇总 v0.4.20 Slice 1-6 的 `PI_AGENTTEAM_KERNEL=go-cutover` 实现、fail-closed 行为、refresh safety、boundary guardrails、helper smoke 和 package/native sanity，给出 GitHub-only checkpoint readiness，而不是 npm/default/native cutover approval。
+
+交付：
+
+- 新增 final checkpoint doc：`docs/perf/v0.4.20-go-cutover-checkpoint.md`。
+- 确认 `go-cutover` 仍是 explicit/local-only mode，unset/default 仍是 disabled/TypeScript，`go`/`auto`/`typescript` 保持 migration fail-open。
+- 确认唯一 cutover-owned module 是 `tmuxSnapshotParse`；`compactReadModelFingerprint` 在 `go-cutover` 下仍是 TypeScript fallback / non-cutover。
+- 汇总 fail-closed shape：`ok:false`、`status:"unknown"`、`resultMarker:"stale"`、`module/capability:"tmuxSnapshotParse"`、compact `cutoverFailureKind`、empty panes/byPaneId、no TypeScript parser fallback callback。
+- 汇总 `/team` attached/global refresh 与 orphan discovery safety：cutover parser unavailable 不等于 pane disappearance；generic non-cutover `ok:false` orphan fallback 保持 prior behavior。
+- 汇总 Go helper boundary：parser-only/stdin-stdout；no tmux execution、state/repository writes、network、worker lifecycle、PlanRun/governance/full-text/package/release authority。
+- 汇总 package/native sanity：package version `0.6.8`、package files exclude `kernel/`、no helper build/download/package scripts、no lifecycle hooks、no lockfiles、no `go.mod`/`go.sum`、no checked-in native artifacts。
+- Decision：GO for GitHub-only experimental checkpoint after leader approval；STOP for npm/default/native cutover until separate native packaging/runtime prerequisite signoff。
+
+验收：
+
+- `tests/suites/go-kernel-v0420-checkpoint-docs.cjs` 作为 docs/reference guard；最终 validation 包括 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check`、`npm run --silent bench:team-panel-tmux`、package/native sanity，以及可用时的 `/tmp` source-only helper smoke。
+
 ### Slice 1 — Config Bootstrap/Schema
 
 目标：先降低首次使用门槛，并建立 versioned config。

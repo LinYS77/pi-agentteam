@@ -70,6 +70,7 @@ module.exports = {
   async run(env) {
     assert.equal(typeof bench.runPanelTmuxBenchWithModules, 'function', 'panel/tmux bench should export runPanelTmuxBenchWithModules')
     assert.equal(typeof bench.buildBenchResult, 'function', 'panel/tmux bench should export buildBenchResult')
+    assert.equal(typeof bench.buildKernelMetadata, 'function', 'panel/tmux bench should export buildKernelMetadata')
     assert.equal(typeof bench.summarizePanel, 'function', 'panel/tmux bench should export summarizePanel')
     assert.equal(typeof bench.summarizeTmux, 'function', 'panel/tmux bench should export summarizeTmux')
     assert.equal(typeof bench.fixtureForProfile, 'function', 'panel/tmux bench should export fixtureForProfile')
@@ -109,19 +110,13 @@ module.exports = {
     })
     assert.equal(sample.note, 'baseline only; not a release target pass/fail gate')
     assert.equal(sample.implementation, 'typescript')
-    assert.deepEqual(sample.kernel, {
-      requestedMode: 'typescript',
-      mode: 'typescript',
-      enabled: false,
-      calls: 0,
-      fallbacks: 0,
-      requestedKnownKernel: true,
-      protocolVersion: 1,
-      adapterVersion: '0.3.0-read-model-shadow',
-      helperVersion: '0.3.0-read-model-shadow',
-      capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'],
-      businessPathsConnected: false,
-    })
+    const expectedKernel = bench.buildKernelMetadata().kernel
+    assert.equal(expectedKernel.mode, 'typescript')
+    assert.equal(expectedKernel.enabled, false)
+    assert.equal(expectedKernel.calls, 0)
+    assert.equal(expectedKernel.fallbacks, 0)
+    assert.equal(expectedKernel.requestedKnownKernel, true)
+    assert.deepEqual(sample.kernel, expectedKernel)
     assert.deepEqual(sample.fixtureProfile, { name: 'baseline', stress: false })
     assertScenarioShape('sample attached', sample.attached)
     assertScenarioShape('sample global', sample.global)

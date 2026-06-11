@@ -9,9 +9,29 @@ export const AGENTTEAM_KERNEL_HELPER_VERSION = '0.3.0-read-model-shadow'
 export const AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'] as const
 export const AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED = false
 
-export type AgentTeamKernelKnownMode = 'disabled' | 'typescript' | 'go' | 'auto'
+export type AgentTeamKernelKnownMode = 'disabled' | 'typescript' | 'go' | 'auto' | 'go-cutover'
 export type AgentTeamKernelActiveMode = 'typescript' | 'go'
 export type AgentTeamKernelCapability = typeof AGENTTEAM_KERNEL_CAPABILITIES[number]
+export const AGENTTEAM_KERNEL_CUTOVER_MODULE = 'tmuxSnapshotParse' as const
+export const AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS = [
+  'missing-helper',
+  'disabled-helper',
+  'helper-unsupported-protocol',
+  'helper-unsupported-version',
+  'helper-unsupported-capability',
+  'helper-timeout',
+  'helper-spawn-error',
+  'helper-crash',
+  'helper-nonzero-exit',
+  'helper-empty-response',
+  'helper-malformed-json',
+  'helper-jsonrpc-error',
+  'helper-incompatible-response',
+  'helper-unsafe-response-shape',
+  'previous-helper-failure',
+] as const
+export type AgentTeamKernelCutoverFailureKind = typeof AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS[number]
+export type AgentTeamKernelCutoverStatus = 'active' | 'unavailable'
 export type AgentTeamKernelFallbackKind =
   | 'unsupported-mode'
   | 'missing-helper'
@@ -25,6 +45,8 @@ export type AgentTeamKernelFallbackKind =
   | 'helper-unsupported-protocol'
   | 'helper-unsupported-version'
   | 'helper-unsupported-capability'
+
+type AgentTeamKernelHelperFailureKind = AgentTeamKernelFallbackKind | 'helper-crash' | 'helper-unsafe-response-shape' | 'previous-helper-failure'
 
 export type AgentTeamKernelMetadata = {
   implementation: AgentTeamKernelActiveMode
@@ -43,6 +65,10 @@ export type AgentTeamKernelMetadata = {
     helperPath?: string
     fallbackReason?: string
     fallbackKind?: AgentTeamKernelFallbackKind
+    cutoverModule?: typeof AGENTTEAM_KERNEL_CUTOVER_MODULE
+    cutoverStatus?: AgentTeamKernelCutoverStatus
+    cutoverFailureKind?: AgentTeamKernelCutoverFailureKind
+    cutoverReason?: string
   }
 }
 
@@ -102,6 +128,12 @@ export type AgentTeamKernelTmuxSnapshot = {
   byPaneId: Record<string, AgentTeamKernelTmuxPaneSnapshotItem>
   ok?: boolean
   error?: string
+  status?: 'unknown'
+  resultMarker?: 'stale'
+  module?: typeof AGENTTEAM_KERNEL_CUTOVER_MODULE
+  capability?: typeof AGENTTEAM_KERNEL_CUTOVER_MODULE
+  cutoverFailureKind?: AgentTeamKernelCutoverFailureKind
+  reason?: string
 }
 
 export type AgentTeamKernelCompactReadModelResult = {
@@ -130,7 +162,7 @@ export type AgentTeamKernelAdapterOptions = {
   timeoutMs?: number
 }
 
-const KNOWN_MODES = new Set(['disabled', 'typescript', 'go', 'auto'])
+const KNOWN_MODES = new Set(['disabled', 'typescript', 'go', 'auto', 'go-cutover'])
 const KERNEL_DIAGNOSTIC_TEXT_LIMIT = 160
 
 function compactKernelText(value: unknown, fallback = ''): string {
@@ -149,6 +181,24 @@ function fallbackMessage(kind: AgentTeamKernelFallbackKind, detail?: unknown): s
   const safeDetail = compactKernelText(detail)
   const suffix = safeDetail ? `: ${safeDetail}` : ''
   return `Go kernel fallback (${kind})${suffix}; using TypeScript fallback`
+}
+
+function cutoverMessage(kind: AgentTeamKernelCutoverFailureKind, detail?: unknown): string {
+  const safeDetail = compactKernelText(detail)
+  const suffix = safeDetail ? `: ${safeDetail}` : ''
+  return `Go kernel cutover unavailable (${kind})${suffix}`
+}
+
+function toCutoverFailureKind(kind: AgentTeamKernelHelperFailureKind): AgentTeamKernelCutoverFailureKind {
+  if (kind === 'unsupported-mode') return 'disabled-helper'
+  return kind
+}
+
+function toMigrationFallbackKind(kind: AgentTeamKernelHelperFailureKind): AgentTeamKernelFallbackKind {
+  if (kind === 'helper-crash') return 'helper-nonzero-exit'
+  if (kind === 'helper-unsafe-response-shape') return 'helper-incompatible-response'
+  if (kind === 'previous-helper-failure') return 'missing-helper'
+  return kind
 }
 
 export function normalizeAgentTeamKernelMode(value?: unknown): string {
@@ -240,13 +290,19 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
   const helperPath = options.helperPath === null ? undefined : (options.helperPath?.trim() || defaultAgentTeamKernelHelperPath(env))
   const helperAvailable = Boolean(helperPath && existsSync(helperPath))
   const requestedKnownKernel = isKnownAgentTeamKernelMode(requestedMode)
-  const initialUseGo = requestedKnownKernel && (requestedMode === 'go' || requestedMode === 'auto') && helperAvailable
+  const cutoverRequested = requestedMode === 'go-cutover'
+  const initialUseGo = requestedKnownKernel && (requestedMode === 'go' || requestedMode === 'auto' || cutoverRequested) && helperAvailable
   const timeoutMs = Math.max(100, Math.min(10_000, Math.floor(options.timeoutMs ?? 2_000)))
-  const startupFallback = initialFallback({ requestedMode, helperPath, helperAvailable })
+  const startupFallback = cutoverRequested ? undefined : initialFallback({ requestedMode, helperPath, helperAvailable })
+  const startupCutoverFailureKind: AgentTeamKernelCutoverFailureKind | undefined = cutoverRequested && !helperAvailable ? 'missing-helper' : undefined
   let helperCalls = 0
   let fallbackCount = startupFallback ? 1 : 0
   let fallbackReason = startupFallback?.reason
   let fallbackKind = startupFallback?.kind
+  let cutoverFailureKind: AgentTeamKernelCutoverFailureKind | undefined = startupCutoverFailureKind
+  let cutoverReason = startupCutoverFailureKind
+    ? cutoverMessage(startupCutoverFailureKind, helperPath ? `helper not found: ${compactHelperPath(helperPath)}` : 'PI_AGENTTEAM_KERNEL_HELPER is not set')
+    : undefined
   let helperDisabledAfterFailure = false
   let helperPreflightPassed = false
 
@@ -273,17 +329,34 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         ...(helperPath && activeMode === 'go' ? { helperPath: compactHelperPath(helperPath) } : {}),
         ...(fallbackReason ? { fallbackReason } : {}),
         ...(fallbackKind ? { fallbackKind } : {}),
+        ...(cutoverRequested ? {
+          cutoverModule: AGENTTEAM_KERNEL_CUTOVER_MODULE,
+          cutoverStatus: cutoverFailureKind ? 'unavailable' as const : 'active' as const,
+        } : {}),
+        ...(cutoverFailureKind ? { cutoverFailureKind } : {}),
+        ...(cutoverReason ? { cutoverReason } : {}),
       },
     }
   }
 
-  function recordRuntimeFallback(kind: AgentTeamKernelFallbackKind, detail?: unknown): void {
+  function recordCutoverUnavailable(kind: AgentTeamKernelCutoverFailureKind, detail?: unknown): void {
+    helperDisabledAfterFailure = true
+    cutoverFailureKind = kind
+    cutoverReason = cutoverMessage(kind, detail)
+  }
+
+  function recordRuntimeFallback(kind: AgentTeamKernelHelperFailureKind, detail?: unknown): void {
+    if (cutoverRequested) {
+      recordCutoverUnavailable(toCutoverFailureKind(kind), detail)
+      return
+    }
+    const migrationKind = toMigrationFallbackKind(kind)
     if (!helperDisabledAfterFailure) {
       fallbackCount += 1
     }
     helperDisabledAfterFailure = true
-    fallbackKind = kind
-    fallbackReason = fallbackMessage(kind, detail)
+    fallbackKind = migrationKind
+    fallbackReason = fallbackMessage(migrationKind, detail)
   }
 
   function isCapability(value: unknown): value is AgentTeamKernelCapability {
@@ -347,6 +420,48 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         taskReportPlanRunConnected: false,
       },
     }
+  }
+
+  function cutoverUnavailableSnapshot(capturedAt: number): AgentTeamKernelTmuxSnapshot {
+    if (!cutoverFailureKind) {
+      recordCutoverUnavailable('previous-helper-failure', 'helper unavailable')
+    }
+    const reason = cutoverReason ?? cutoverMessage(cutoverFailureKind ?? 'previous-helper-failure')
+    return {
+      capturedAt,
+      panes: [],
+      byPaneId: {},
+      ok: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      module: AGENTTEAM_KERNEL_CUTOVER_MODULE,
+      capability: AGENTTEAM_KERNEL_CUTOVER_MODULE,
+      cutoverFailureKind: cutoverFailureKind ?? 'previous-helper-failure',
+      reason,
+      error: reason,
+    }
+  }
+
+  function classifyUnsafeTmuxSnapshotResult(value: unknown): { kind: AgentTeamKernelHelperFailureKind; detail: string } | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const snapshot = value as Record<string, unknown>
+    const sensitiveKeys = [
+      'text',
+      'mail' + 'box',
+      'reports',
+      'report' + 'Text',
+      'task' + 'Report' + 'Body',
+      'state',
+      'raw' + 'State',
+      'side' + 'car',
+      'ca' + 'che',
+      'in' + 'dex',
+      'hidden' + 'Runtime' + 'State',
+    ]
+    if (sensitiveKeys.some(key => Object.prototype.hasOwnProperty.call(snapshot, key))) return { kind: 'helper-unsafe-response-shape', detail: 'unsafe tmux snapshot fields' }
+    if (Array.isArray(snapshot.panes) && snapshot.panes.some(item => item && typeof item === 'object' && Object.prototype.hasOwnProperty.call(item, 'text'))) return { kind: 'helper-unsafe-response-shape', detail: 'unsafe pane fields' }
+    if (snapshot.byPaneId && typeof snapshot.byPaneId === 'object' && Object.values(snapshot.byPaneId as Record<string, unknown>).some(item => item && typeof item === 'object' && Object.prototype.hasOwnProperty.call(item, 'text'))) return { kind: 'helper-unsafe-response-shape', detail: 'unsafe byPaneId fields' }
+    return undefined
   }
 
   function validateTmuxSnapshotResult(value: unknown): AgentTeamKernelTmuxSnapshot | undefined {
@@ -440,7 +555,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     return undefined
   }
 
-  function classifySpawnError(error: unknown): { kind: AgentTeamKernelFallbackKind; detail: string } {
+  function classifySpawnError(error: unknown): { kind: AgentTeamKernelHelperFailureKind; detail: string } {
     const err = (error ?? {}) as { code?: unknown; message?: unknown; name?: unknown }
     const code = typeof err.code === 'string' ? err.code : ''
     const message = String(err.message ?? '')
@@ -450,7 +565,8 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     return { kind: 'helper-spawn-error', detail: code ? `code=${compactKernelText(code)}` : compactKernelText(err.name, 'spawn error') }
   }
 
-  function invokeHelper<T>(method: AgentTeamKernelCapability, params?: Record<string, unknown>): { ok: true; result: T } | { ok: false; kind: AgentTeamKernelFallbackKind; detail?: string } {
+  function invokeHelper<T>(method: AgentTeamKernelCapability, params?: Record<string, unknown>): { ok: true; result: T } | { ok: false; kind: AgentTeamKernelHelperFailureKind; detail?: string } {
+    if (helperDisabledAfterFailure) return { ok: false, kind: cutoverRequested ? 'previous-helper-failure' : 'missing-helper', detail: 'helper disabled after prior failure' }
     if (!usesGo() || !helperPath) return { ok: false, kind: 'missing-helper', detail: 'helper unavailable' }
     helperCalls += 1
     const request = createKernelJsonRpcRequest(method, params)
@@ -465,6 +581,8 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       return { ok: false, ...classifySpawnError(result.error) }
     }
     if (result.status !== 0) {
+      const signal = typeof result.signal === 'string' && result.signal ? result.signal : ''
+      if (signal) return { ok: false, kind: 'helper-crash', detail: `signal=${compactKernelText(signal)}` }
       return { ok: false, kind: 'helper-nonzero-exit', detail: `status=${result.status ?? 'unknown'}` }
     }
     const responseText = String(result.stdout || '').split('\n').find(line => line.trim())
@@ -517,6 +635,10 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
   }
 
   function callHelper<T>(method: AgentTeamKernelCapability, params?: Record<string, unknown>): T | undefined {
+    if (helperDisabledAfterFailure && cutoverRequested) {
+      recordCutoverUnavailable('previous-helper-failure', 'helper disabled after prior failure')
+      return undefined
+    }
     if (!usesGo() || !helperPath) return undefined
     if (method !== 'health' && !ensureHelperCompatible(method)) return undefined
     const helperCall = invokeHelper<T>(method, params)
@@ -557,15 +679,20 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     },
     parseTmuxPaneSnapshot(stdout, capturedAt, fallback) {
       const helperResult = callHelper<unknown>('tmuxSnapshotParse', { stdout, capturedAt })
-      const parsed = validateTmuxSnapshotResult(helperResult)
-      if (parsed) return parsed
-      if (helperResult !== undefined) {
-        recordRuntimeFallback('helper-incompatible-response', 'tmuxSnapshotParse result shape')
+      const unsafe = helperResult !== undefined ? classifyUnsafeTmuxSnapshotResult(helperResult) : undefined
+      if (!unsafe) {
+        const parsed = validateTmuxSnapshotResult(helperResult)
+        if (parsed) return parsed
       }
+      if (helperResult !== undefined) {
+        recordRuntimeFallback(unsafe?.kind ?? 'helper-incompatible-response', unsafe?.detail ?? 'tmuxSnapshotParse result shape')
+      }
+      if (cutoverRequested) return cutoverUnavailableSnapshot(capturedAt)
       return fallback(stdout, capturedAt)
     },
     compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint) {
       const compactInput = sanitizeCompactReadModelInput(input)
+      if (cutoverRequested) return fallback(compactInput)
       const helperResult = callHelper<unknown>('compactReadModelFingerprint', { input: compactInput })
       const parsed = validateCompactReadModelResult(helperResult)
       if (parsed) return parsed
