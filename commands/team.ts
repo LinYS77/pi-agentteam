@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent'
 import { handleTeamConfigCommand } from './config.js'
+import { handleTeamReadinessCommand } from './readiness.js'
 import { getCurrentTeamName } from '../session.js'
 import { openTeamPanel } from '../teamPanel.js'
 import type { TeamPanelResult } from '../teamPanel.js'
@@ -86,15 +87,18 @@ async function handlePanelResult(
 
 export function registerTeamCommands(pi: ExtensionAPI, deps: CommandHandlerDeps): void {
   pi.registerCommand('team', {
-    description: 'Open the agentteam console. Use /team config init|show|validate|migrate --dry-run for subagent model config.',
+    description: 'Open the agentteam console. Use /team config init|show|validate|migrate --dry-run for subagent model config, or /team readiness for explicit compact diagnostics readiness.',
     getArgumentCompletions: (prefix: string) => {
-      const options = ['config init', 'config show', 'config validate', 'config migrate --dry-run']
+      const options = ['config init', 'config show', 'config validate', 'config migrate --dry-run', 'readiness']
       const filtered = options.filter(option => option.startsWith(prefix.trimStart()))
       return filtered.length > 0 ? filtered.map(value => ({ value, label: value })) : null
     },
     handler: async (args, ctx) => {
       const configResult = handleTeamConfigCommand(args, ctx)
       if (configResult.handled) return
+
+      const readinessResult = handleTeamReadinessCommand(args, ctx)
+      if (readinessResult.handled) return
 
       let teamName: string | null | undefined = getCurrentTeamName(ctx)
       let shouldReopen = true

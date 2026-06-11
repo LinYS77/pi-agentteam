@@ -1410,6 +1410,97 @@ v0.4.18 交付：
 
 - syntax check 和 focused checkpoint suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check` 通过；不改 package/default/native behavior，不改 `go-cutover` 或 `go-packaged-preview` availability semantics，不删除 TypeScript fallback，不渲染 runtime UI diagnostics，不扩大 Go authority，不 commit/tag/push。
 
+### v0.4.24 — Explicit Readiness Command Integration Contract（Slice 1）
+
+目标：启动 v0.4.24 Explicit Readiness Command Integration Checkpoint，定义 explicit opt-in reviewer command/readiness surface for compact diagnostics；该 Slice 只做 docs/tests，不实现 command integration，不渲染 `/team`，不启动 Slice 2。
+
+交付：
+
+- 新增 contract doc：`docs/perf/v0.4.24-explicit-readiness-command-integration.md`。
+- 新增 docs/reference guard：`tests/suites/go-kernel-v0424-readiness-command-contract-docs.cjs`。
+- 链接 v0.4.23 final checkpoint：`docs/perf/v0.4.23-compact-native-failure-diagnostics-checkpoint.md`。
+- 链接 compact diagnostics helper：`core/kernelDiagnostics.ts`。
+- 定义 allowed command/readiness output：module、capability、status、resultMarker、failureKind、remediation、hint、releaseDecision fields/text from v0.4.23 helpers。
+- 定义 forbidden leaks：helper path、stdout/stderr、repo/cwd、raw cutoverReason、raw state/team JSON、sidecar/cache/index、raw manifests/checksums/provenance、worker prompts、stack traces、mailbox/report text、package internals、env bodies、full-text content。
+- 定义 read-only behavior：no state writes、no mailbox/report full-text reads、no task/report governance mutation、no tmux execution/capture beyond existing product paths、no worker lifecycle mutation、no pane reconcile/kill。
+- 记录 runtime/package invariants：default disabled/TypeScript、`go-packaged-preview` explicit-only/non-default、current `go-cutover` unchanged、`compactReadModelFingerprint` non-cutover、`/team` quiet、no package/native/default/fallback changes。
+
+验收：
+
+- syntax check 和 focused contract suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不实现 command integration，不渲染 `/team`，不改 package/default/native behavior，不改 `go-cutover` 或 `go-packaged-preview` availability semantics，不删除 TypeScript fallback，不扩大 Go authority。
+
+### v0.4.24 — Command Surface Discovery and Seam Selection（Slice 2）
+
+目标：audit existing command/tool surfaces and choose smallest explicit read-only readiness command integration seam for future Slice 3；该 Slice 只做 docs/tests，不实现 command integration，不渲染 `/team`，不启动 Slice 3。
+
+交付：
+
+- 更新 contract doc：`docs/perf/v0.4.24-explicit-readiness-command-integration.md` 的 Slice 2 seam audit。
+- 新增 focused guard：`tests/suites/go-kernel-v0424-readiness-command-seam-docs.cjs`。
+- 记录 audited surfaces：`api/commands.ts`、`commands/team.ts`、`commands/config.ts`、`commands/shared.ts`、`api/tools.ts`、`tools/`、`tests/suites/commands.cjs`、`tests/suites/public-output-leak-guards.cjs`。
+- 推荐 smallest future seam：explicit `/team readiness` subcommand handled before `openTeamPanel()`，沿用 `/team config` subcommand dispatch style，输出 compact reviewer-facing notification text，不进入 `/team` panel rendering。
+- 说明 why not tools/panel/package seams：tools authority too broad；`/team` ambient rendering violates quiet invariant；package/native resolver behavior remains out of scope。
+- 定义 Slice 3 may/must-not：may add explicit read-only command using `core/kernelDiagnostics.ts` safe fields；must not implement ambient UI、model-callable tool、runtime behavior changes、state writes、full-text reads、task/report mutation、tmux capture/reconcile/kill、package/native/default changes。
+
+验收：
+
+- syntax check 和 focused seam suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；command/tool public surfaces remain unchanged；不实现 command integration，不渲染 `/team`，不改 runtime/package/default/native behavior，不删除 TypeScript fallback，不扩大 Go authority。
+
+### v0.4.24 — Explicit Readiness Command Integration（Slice 3）
+
+目标：实现最小 explicit read-only `/team readiness` subcommand integration，使用 v0.4.23 compact diagnostics readiness helpers；必须 opt-in/deterministic，不由 normal `/team` panel refresh 触发，不启动 Slice 4。
+
+交付：
+
+- 新增 command handler：`commands/readiness.ts`。
+- 在 `commands/team.ts` 中 before `openTeamPanel()` 路由 `/team readiness`。
+- 输出 compact reviewer-facing notification text，来源于 `listTmuxSnapshotParseFailureDiagnostics()` 和 `formatTmuxSnapshotParseFailureReadiness()`。
+- 输出仅包含 safe fields/text：module、capability、status、resultMarker、failureKind、remediation、hint、releaseDecision，并声明 readiness diagnostics are not normal-user native availability proof。
+- 新增 focused integration guard：`tests/suites/go-kernel-v0424-readiness-command-integration.cjs`。
+- 更新 `docs/perf/v0.4.24-explicit-readiness-command-integration.md` 的 Slice 3 implementation evidence 和 STOP gates。
+- 保持 `/team` ambient UI quiet；normal `/team` 仍打开 panel；不读 mailbox/report full text，不写 state，不改 task/report governance，不执行/capture tmux，不 reconcile/kill panes，不改 worker lifecycle。
+
+验收：
+
+- syntax check 和 focused integration suite 通过；affected command/seam suites 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不改 runtime resolver/default/package/native behavior，不改 `go-cutover` 或 `go-packaged-preview` availability semantics，不删除 TypeScript fallback，不扩大 Go authority。
+
+### v0.4.24 — Readiness Command Sunset and Containment Plan（Slice 4）
+
+目标：纠正路线方向，明确 `/team readiness` 是 transitional reviewer/readiness tooling，不是 long-term product feature；新增 sunset/containment/deletion guardrails，防止扩展到 ambient `/team` UI、model-callable tools、runtime control plane、package/native/default behavior 或 permanent user-facing feature；不启动 Slice 5。
+
+交付：
+
+- 更新 `docs/perf/v0.4.24-explicit-readiness-command-integration.md` 的 Slice 4 sunset/containment section。
+- 新增 focused guard：`tests/suites/go-kernel-v0424-readiness-command-sunset-docs.cjs`。
+- 记录 Go mainline：replace proven deterministic hot-path modules with Go-owned implementations after cutover gates, not add product features。
+- 定义 containment rules：no additional readiness subcommands without explicit user approval、no ambient `/team` panel rendering、no model-callable tool surface、no package/native/default behavior、no state writes/full-text reads/tmux execution/worker lifecycle/task governance/pane reconcile/kill、no broad Go authority。
+- 定义 sunset paths：delete `/team readiness` after formal native diagnostics/default path matures；or merge into separately approved diagnostics UX；or keep developer/reviewer-only hidden/internal only if explicitly approved。
+- 定义 deletion criteria：generated artifacts and clean-install proof、unsupported-platform remediation and rollback、normal-user diagnostics UX if needed、separate TypeScript fallback deletion/default cutover decision。
+
+验收：
+
+- syntax check 和 focused sunset suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不移除 `/team readiness`，不新增 command features/tools，不渲染 `/team`，不改 runtime/package/default/native behavior，不删除 TypeScript fallback，不扩大 Go authority。
+
+### v0.4.24 — Explicit Readiness Command Integration Checkpoint（Slice 5）
+
+目标：新增 final GitHub-only explicit readiness command integration checkpoint，汇总 Slice 1-4 evidence、validation matrix、GO/STOP decision、readiness sunset/containment、runtime/package/default/native/fallback invariants；docs/tests only，不启动后续 slice。
+
+交付：
+
+- 新增 final checkpoint doc：`docs/perf/v0.4.24-explicit-readiness-command-integration-checkpoint.md`。
+- 新增 checkpoint guard：`tests/suites/go-kernel-v0424-readiness-command-checkpoint-docs.cjs`。
+- checkpoint link prior checkpoint：`docs/perf/v0.4.23-compact-native-failure-diagnostics-checkpoint.md`。
+- checkpoint link v0.4.24 artifacts：contract doc、`commands/readiness.ts`、`commands/team.ts`、Slice 1 contract guard、Slice 2 seam guard、Slice 3 integration guard、Slice 4 sunset guard。
+- 汇总 Slice 1-4：contract、seam selection、minimal read-only implementation、transitional containment/sunset/deletion/merge paths。
+- 明确 GO only for GitHub-only v0.4.24 checkpoint after leader/user approval。
+- 明确 STOP for expanding `/team readiness`、additional subcommands/options、ambient `/team` UI/panel diagnostics、model-callable tools、runtime control plane、npm/default/native cutover、package/native artifacts、package metadata/version changes、diagnostics/readiness as normal-user native availability proof、default Go、current `go-cutover` changes、`go-packaged-preview` semantics changes、TypeScript fallback deletion、broader Go authority。
+- 重申 Go mainline：future work returns to Go core replacement、generated artifacts、clean install proof、module cutover gate、separately approved fallback deletion/default cutover plan。
+- 包含 validation matrix：focused v0.4.24 suites、`node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check`、default bench、preview bench、package/native sanity。
+
+验收：
+
+- syntax check 和 focused checkpoint suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check` 通过；不扩展或移除 `/team readiness`，不新增 command features/tools，不渲染 `/team`，不改 runtime/package/default/native behavior，不删除 TypeScript fallback，不扩大 Go authority，不 commit/tag/push。
+
 ### Slice 1 — Config Bootstrap/Schema
 
 目标：先降低首次使用门槛，并建立 versioned config。
