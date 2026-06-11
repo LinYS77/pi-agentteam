@@ -27,6 +27,13 @@ docs/perf/*
 !docs/perf/v0.4.19-go-kernel-readiness-checkpoint.md
 !docs/perf/v0.4.20-go-cutover-helper-smoke.md
 !docs/perf/v0.4.20-go-cutover-checkpoint.md
+!docs/perf/v0.4.21-go-runtime-availability.md
+!docs/perf/v0.4.21-go-native-artifact-contract.md
+!docs/perf/v0.4.21-go-package-policy-guardrails.md
+!docs/perf/v0.4.21-go-resolver-diagnostics-design.md
+!docs/perf/v0.4.21-go-packaged-preview-resolver.md
+!docs/perf/v0.4.21-go-artifact-prototype.md
+!docs/perf/v0.4.21-go-runtime-availability-checkpoint.md
 
 # Dependencies
 node_modules/

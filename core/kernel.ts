@@ -9,7 +9,7 @@ export const AGENTTEAM_KERNEL_HELPER_VERSION = '0.3.0-read-model-shadow'
 export const AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'] as const
 export const AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED = false
 
-export type AgentTeamKernelKnownMode = 'disabled' | 'typescript' | 'go' | 'auto' | 'go-cutover'
+export type AgentTeamKernelKnownMode = 'disabled' | 'typescript' | 'go' | 'auto' | 'go-cutover' | 'go-packaged-preview'
 export type AgentTeamKernelActiveMode = 'typescript' | 'go'
 export type AgentTeamKernelCapability = typeof AGENTTEAM_KERNEL_CAPABILITIES[number]
 export const AGENTTEAM_KERNEL_CUTOVER_MODULE = 'tmuxSnapshotParse' as const
@@ -155,14 +155,18 @@ export type AgentTeamKernelAdapter = {
   compactReadModelFingerprint(input: unknown, fallback?: (input: unknown) => AgentTeamKernelCompactReadModelResult): AgentTeamKernelCompactReadModelResult
 }
 
+export type AgentTeamKernelPackagedHelperStatus = 'available' | 'unsupported-platform' | 'integrity-failed'
+
 export type AgentTeamKernelAdapterOptions = {
   mode?: string | null
   env?: Record<string, string | undefined>
   helperPath?: string | null
+  packagedHelperPath?: string | null
+  packagedHelperStatus?: AgentTeamKernelPackagedHelperStatus | string | null
   timeoutMs?: number
 }
 
-const KNOWN_MODES = new Set(['disabled', 'typescript', 'go', 'auto', 'go-cutover'])
+const KNOWN_MODES = new Set(['disabled', 'typescript', 'go', 'auto', 'go-cutover', 'go-packaged-preview'])
 const KERNEL_DIAGNOSTIC_TEXT_LIMIT = 160
 
 function compactKernelText(value: unknown, fallback = ''): string {
@@ -217,6 +221,25 @@ export function defaultAgentTeamKernelHelperPath(env: Record<string, string | un
   const path = env.PI_AGENTTEAM_KERNEL_HELPER || env.AGENTTEAM_GO_KERNEL_HELPER
   const trimmed = path?.trim()
   return trimmed || undefined
+}
+
+export function defaultAgentTeamKernelPackagedHelperPath(env: Record<string, string | undefined> = process.env): string | undefined {
+  const path = env.PI_AGENTTEAM_KERNEL_PACKAGED_HELPER
+  const trimmed = path?.trim()
+  return trimmed || undefined
+}
+
+function normalizeAgentTeamKernelPackagedHelperStatus(value?: unknown): AgentTeamKernelPackagedHelperStatus {
+  const raw = String(value ?? '').trim().toLowerCase()
+  if (raw === 'unsupported-platform') return 'unsupported-platform'
+  if (raw === 'integrity-failed') return 'integrity-failed'
+  return 'available'
+}
+
+function packagedPreviewResolverFailure(status: AgentTeamKernelPackagedHelperStatus): { kind: AgentTeamKernelCutoverFailureKind; detail: string } | undefined {
+  if (status === 'unsupported-platform') return { kind: 'missing-helper', detail: 'unsupported platform' }
+  if (status === 'integrity-failed') return { kind: 'helper-incompatible-response', detail: 'integrity check failed' }
+  return undefined
 }
 
 export function createKernelJsonRpcRequest(
@@ -287,21 +310,34 @@ function fallbackProfile(metadata: AgentTeamKernelMetadata, params: Record<strin
 export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOptions = {}): AgentTeamKernelAdapter {
   const env = options.env ?? process.env
   const requestedMode = normalizeAgentTeamKernelMode(options.mode ?? env.PI_AGENTTEAM_KERNEL)
-  const helperPath = options.helperPath === null ? undefined : (options.helperPath?.trim() || defaultAgentTeamKernelHelperPath(env))
-  const helperAvailable = Boolean(helperPath && existsSync(helperPath))
+  const explicitHelperPath = options.helperPath === null ? undefined : (options.helperPath?.trim() || defaultAgentTeamKernelHelperPath(env))
+  const packagedPreviewRequested = requestedMode === 'go-packaged-preview'
+  const packagedHelperStatus = normalizeAgentTeamKernelPackagedHelperStatus(options.packagedHelperStatus ?? env.PI_AGENTTEAM_KERNEL_PACKAGED_HELPER_STATUS)
+  const packagedResolverFailure = packagedPreviewRequested && !explicitHelperPath ? packagedPreviewResolverFailure(packagedHelperStatus) : undefined
+  const packagedHelperPath = packagedPreviewRequested && !explicitHelperPath && !packagedResolverFailure
+    ? (options.packagedHelperPath === null ? undefined : (options.packagedHelperPath?.trim() || defaultAgentTeamKernelPackagedHelperPath(env)))
+    : undefined
+  const helperPath = explicitHelperPath || packagedHelperPath
+  const helperAvailable = Boolean(helperPath && !packagedResolverFailure && existsSync(helperPath))
   const requestedKnownKernel = isKnownAgentTeamKernelMode(requestedMode)
-  const cutoverRequested = requestedMode === 'go-cutover'
+  const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested
   const initialUseGo = requestedKnownKernel && (requestedMode === 'go' || requestedMode === 'auto' || cutoverRequested) && helperAvailable
   const timeoutMs = Math.max(100, Math.min(10_000, Math.floor(options.timeoutMs ?? 2_000)))
   const startupFallback = cutoverRequested ? undefined : initialFallback({ requestedMode, helperPath, helperAvailable })
-  const startupCutoverFailureKind: AgentTeamKernelCutoverFailureKind | undefined = cutoverRequested && !helperAvailable ? 'missing-helper' : undefined
+  const startupCutoverFailure = cutoverRequested
+    ? packagedResolverFailure ?? (!helperAvailable ? {
+      kind: 'missing-helper' as const,
+      detail: helperPath ? `helper not found: ${compactHelperPath(helperPath)}` : (packagedPreviewRequested ? 'packaged helper not configured' : 'PI_AGENTTEAM_KERNEL_HELPER is not set'),
+    } : undefined)
+    : undefined
+  const startupCutoverFailureKind: AgentTeamKernelCutoverFailureKind | undefined = startupCutoverFailure?.kind
   let helperCalls = 0
   let fallbackCount = startupFallback ? 1 : 0
   let fallbackReason = startupFallback?.reason
   let fallbackKind = startupFallback?.kind
   let cutoverFailureKind: AgentTeamKernelCutoverFailureKind | undefined = startupCutoverFailureKind
-  let cutoverReason = startupCutoverFailureKind
-    ? cutoverMessage(startupCutoverFailureKind, helperPath ? `helper not found: ${compactHelperPath(helperPath)}` : 'PI_AGENTTEAM_KERNEL_HELPER is not set')
+  let cutoverReason = startupCutoverFailure
+    ? cutoverMessage(startupCutoverFailure.kind, startupCutoverFailure.detail)
     : undefined
   let helperDisabledAfterFailure = false
   let helperPreflightPassed = false

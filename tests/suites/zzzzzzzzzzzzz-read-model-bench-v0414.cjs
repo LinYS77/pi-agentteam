@@ -118,6 +118,8 @@ module.exports = {
     assert.equal(bench.shouldRunShadow('go'), true)
     assert.equal(bench.shouldRunShadow('auto'), true)
     assert.equal(bench.shouldRunShadow('go-cutover'), false)
+    assert.equal(bench.shouldRunShadow('go-packaged-preview'), false)
+    assert.equal(bench.buildKernelMetadata({ requestedMode: 'go-packaged-preview' }).kernel.requestedKnownKernel, true)
     assert.equal(bench.resolveFixtureProfileName('large'), 'large')
     assert.equal(bench.resolveFixtureProfileName('unknown-fixture'), 'baseline')
     const stressFixture = bench.fixtureForProfile('large')

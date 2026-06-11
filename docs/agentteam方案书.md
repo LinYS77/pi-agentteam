@@ -1069,6 +1069,132 @@ v0.4.18 交付：
 
 - `tests/suites/go-kernel-v0420-checkpoint-docs.cjs` 作为 docs/reference guard；最终 validation 包括 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check`、`npm run --silent bench:team-panel-tmux`、package/native sanity，以及可用时的 `/tmp` source-only helper smoke。
 
+### v0.4.21 — Go Runtime Availability Decision Matrix（Slice 1）
+
+目标：把 v0.4.19 runtime prerequisites、v0.4.20 GitHub-only `go-cutover` checkpoint、以及 T154 planner signoff 整理为 Model C0 normal-user availability decision；该 Slice 只做 docs/tests，不实现 native packaging/runtime resolver。
+
+交付：
+
+- 新增 decision matrix doc：`docs/perf/v0.4.21-go-runtime-availability.md`。
+- 明确 Model B explicit helper path 仍是 local/reviewer-only，不能证明 normal-user availability，也不能 justify default fallback deletion。
+- 明确 v0.4.21 Slice 1 是 Model C0 design/signoff only；preferred future Model C 是 companion native packages 或 generated release artifacts with checksum/provenance，而不是 postinstall downloads 或 install-time Go builds。
+- 比较 Model B、Model C0、future companion native packages、future bundled prebuilt binaries、source/user builds、postinstall/preinstall/prepare download、install-time `go build`。
+- 定义 minimum normal-user evidence：fresh install on supported OS/arch can locate/execute compatible helper without Go toolchain/source checkout/manual `/tmp` build/helper env override；platform/libc matrix、unsupported-platform policy、health/protocol/capability/version check、version-skew detection、offline/CI behavior。
+- 保持 package/native policy unchanged：package version `0.6.8`、no npm version/publish、no lifecycle hooks、no lockfiles、no `go.mod`/`go.sum`、no native binaries、no `kernel/` package inclusion、no helper build/download/package scripts。
+- STOP gates：no TS fallback deletion until normal-user availability signoff；future diagnostics can be compact but must not leak helper path/stdout/stderr/repo path/mailbox/report text/raw cutover reason；rollback via GitHub tag/npm corrected release, not hidden runtime fallback。
+
+验收：
+
+- `tests/suites/go-kernel-v0421-runtime-availability-docs.cjs` 作为 docs/reference guard；确认 docs 链接 v0.4.19 prerequisites 与 v0.4.20 checkpoint、不暗示 Go default/native packaging approval/npm publish/version/postinstall download/install-time Go build/checked-in binaries/fallback deletion approval，并保持 package/native sanity unchanged。
+
+### v0.4.21 — Go Native Artifact Contract（Slice 2）
+
+目标：在任何 native packaging/resolver implementation 前，定义 future generated helper artifact contract；该 Slice 只做 docs/tests，不改 package metadata、不加入 native artifacts、不实现 resolver、不 publish/version。
+
+交付：
+
+- 新增 native artifact contract doc：`docs/perf/v0.4.21-go-native-artifact-contract.md`。
+- 定义 future helper artifact naming/path convention：module/platform/version scoped，当前只属于 `tmuxSnapshotParse`，`compactReadModelFingerprint` 保持 non-cutover。
+- 定义 platform matrix requirements：OS、CPU arch、Linux libc target、executable extension/permissions、tmux/pi support assumptions、unsupported-platform fail-closed policy。
+- 定义 version/protocol/capability contract：JSON-RPC protocol version `1`、helper version `0.3.0-read-model-shadow` or approved successor、capability includes `tmuxSnapshotParse`、`businessPathsConnected:false`、package/helper version skew detection。
+- 定义 health/smoke and fail-closed contract：direct `health`、direct `tmuxSnapshotParse`、missing/corrupt/wrong-platform/non-executable/wrong-version/incompatible helper fail closed、future packaged/default path no silent TS parser fallback。
+- 定义 integrity/provenance and install behavior：checksums/manifest、provenance/attestation、license metadata、executable-bit validation、generated artifacts only/no checked-in binaries、offline/CI tarball/cache workflow、clean install future requirement、uninstall/upgrade cleanup。
+- 保持 Go helper boundary：parser-only/stdin-stdout；no tmux execution/capture、state/repository writes、network/listeners、worker lifecycle、PlanRun/governance、full-text、package/release authority。
+
+验收：
+
+- `tests/suites/go-kernel-v0421-native-artifact-contract-docs.cjs` 作为 docs/reference guard；确认 contract 链接 Slice 1 availability doc 与 v0.4.20 checkpoint，不暗示 native packaging approved/implemented、Go default、fallback deletion、npm publish/version、lifecycle downloads、install-time Go builds 或 checked-in binaries，并保持 package/native sanity unchanged。
+
+### v0.4.21 — Go Package Policy Guardrails（Slice 3）
+
+目标：冻结 v0.4.21 package/native policy，并定义 future Model C package implementation slice 才能有意改变的内容；该 Slice 只做 docs/tests，不改 package metadata、不加 package scripts/native artifacts/package inclusion/resolver、不 publish/version。
+
+交付：
+
+- 新增 package policy doc：`docs/perf/v0.4.21-go-package-policy-guardrails.md`。
+- 冻结当前 policy：package version `0.6.8`、`package.json#files` excludes `kernel/`、no lifecycle hooks、no helper build/install/download/package/version/publish scripts、no lockfiles、no root/helper `go.mod`/`go.sum`、no checked-in native artifacts、no optionalDependencies/native companion packages yet。
+- 定义 future package slice change-control：optional companion package metadata、package files for generated artifacts、resolver path、checksum manifests、CI artifact production、package dry-run/install smokes 只能在 explicit owner slice + docs guard + package/native sanity update + rollback story 下改变。
+- 明确 prohibited-by-default patterns：postinstall/preinstall/prepare downloads、install-time `go build`、checked-in generated binaries、implicit network fetch、default Go enablement、fallback deletion、broadening Go authority。
+- 记录 package sanity checklist：script scans、package files excludes `kernel/`、native artifact scan excluding node_modules/.git、lock/go module existence checks。
+
+验收：
+
+- `tests/suites/go-kernel-v0421-package-policy-guardrails.cjs` 作为 docs/reference/package-native guard；确认链接 Slice 1/2 docs、冻结 policy、package facts unchanged、no lock/go module/native artifacts，并且 docs 不暗示 native packaging approved、npm publish/version、lifecycle downloads、install-time builds、checked-in binaries、Go default 或 fallback deletion。
+
+### v0.4.21 — Go Resolver and Diagnostics UX Design（Slice 4）
+
+目标：在 future packaged-helper resolver implementation 前，指定 resolver precedence、preview/default-native mode constraints、compact `/team` diagnostics policy、failure vocabulary 和 STOP gates；该 Slice 只做 docs/tests，不实现 resolver/runtime behavior，不改 package/native behavior。
+
+交付：
+
+- 新增 resolver diagnostics design doc：`docs/perf/v0.4.21-go-resolver-diagnostics-design.md`。
+- 明确 current behavior unchanged：`go-cutover` 仍是 explicit/local-only helper-path mode；default/disabled/typescript/go/auto unchanged；`tmuxSnapshotParse` only cutover-owned module；`compactReadModelFingerprint` non-cutover。
+- 定义 future resolver precedence：explicit helper path remains Model B local/reviewer path；packaged helper resolver only active in separately approved preview/default-native mode；runtime authority paths must not read helper env directly except adapter/resolver seam。
+- 定义 future preview mode placeholder（例如 `go-packaged-preview`）和 gates：explicit opt-in only、package/native signoff required、no Go default、no TS fallback deletion、no silent TS parser fallback in packaged/default cutover path。
+- 定义 diagnostics UX：current `/team` quiet；future compact signal only after signoff；safe fields module/status/failure kind/remediation/platform hint/rollback pointer；forbidden helper path/stdout/stderr/repo/cwd/mailbox/report/raw cutover reason/raw state/sidecar/cache/index/worker prompts/stack traces/package internals。
+- 定义 failure vocabulary：existing cutover kinds remain compact；future candidates `unsupported-platform`、`helper-integrity-failed`、`helper-permission-denied` require docs/tests gate before runtime use。
+- 保持 Go helper boundary：parser-only/stdin-stdout；no tmux execution/capture、state/repository writes、network/listeners、worker lifecycle、PlanRun/governance、full-text、package/release authority。
+
+验收：
+
+- `tests/suites/go-kernel-v0421-resolver-diagnostics-docs.cjs` 作为 docs/reference/package-native guard；确认链接 Slice 1/2/3 和 v0.4.20 checkpoint、包含 resolver precedence/diagnostics/no-leak/failure vocabulary/STOP gates，并且不暗示 resolver implemented、Go default、native packaging approved、npm publish/version、package changes、fallback deletion、lifecycle downloads、install-time builds 或 checked-in binaries。
+
+### v0.4.21 — Go Packaged Helper Preview Resolver（Slice 5）
+
+目标：在 Slice 1-4 signoff 后实现 explicit/non-default packaged-helper preview resolver path；只允许 `go-packaged-preview` 本地显式启用，仍不改 package metadata/native artifacts/npm version/publish/default Go，不删除 TypeScript fallback。
+
+交付：
+
+- 新增 implementation doc：`docs/perf/v0.4.21-go-packaged-preview-resolver.md`。
+- `core/kernel.ts` 增加 known mode `go-packaged-preview`，只在该 mode 且无 explicit helper path 时读取 packaged preview helper path/status；default/disabled/typescript/go/auto/current `go-cutover` 不触发 packaged discovery。
+- resolver precedence：`PI_AGENTTEAM_KERNEL_HELPER` / `AGENTTEAM_GO_KERNEL_HELPER` / adapter `helperPath` 仍优先于 packaged preview path；packaged env 只在 kernel adapter seam 读取。
+- `go-packaged-preview` 对 `tmuxSnapshotParse` 使用 cutover/fail-closed behavior：missing/unsupported/integrity/permission/version/malformed/unsafe helper failure 返回 unknown/stale compact diagnostics，不调用 TypeScript parser fallback callback，不记录 migration fallback。
+- `compactReadModelFingerprint` 保持 TypeScript fallback/non-cutover，不调用 packaged helper。
+- 保持 package/native policy unchanged：package version `0.6.8`、no package scripts/lifecycle hooks/optionalDependencies/lockfiles/go modules/native artifacts/`kernel/` package inclusion/npm version/npm publish/commit/tag/push。
+
+验收：
+
+- `tests/suites/go-kernel-v0421-packaged-preview-resolver.cjs` 覆盖 mode normalization、default unchanged、explicit precedence、packaged success、missing/unsupported/integrity/permission/version/malformed/unsafe fail-closed、no-leak diagnostics、runtime authority env-boundary、package/native sanity。
+- existing boundary/bench guards 确认 `go-packaged-preview` 是 known metadata mode 但不启用 read-model shadow、不影响 `go-cutover` 或默认行为。
+
+### v0.4.21 — Go CI Package Artifact Prototype（Slice 6）
+
+目标：用 docs/tests/temp fixtures 原型化 future Go helper artifact、manifest、package dry-run 和 clean-install smoke 形状；只证明 CI/package artifact workflow 的 test-only shape，不改变当前 package/native/runtime 行为。
+
+交付：
+
+- 新增 prototype doc：`docs/perf/v0.4.21-go-artifact-prototype.md`。
+- 新增 `tests/suites/go-kernel-v0421-artifact-prototype.cjs`，在 `/tmp`/test temp dir 创建 fake executable helper、计算 size/sha256、生成 manifest、验证 executable bit，并在测试结束清理。
+- manifest shape 覆盖 package name/version、helper version、protocol version、module `tmuxSnapshotParse`、os/arch/libc tuple、filename、size、sha256、source revision/provenance placeholder、license metadata。
+- package dry-run shape 用 test helper 模拟 future companion/generated artifact package contents，只允许 `package.json`、`README.md`、`LICENSE`、manifest、helper executable；不包含 raw `kernel/` source，不含 scripts/lifecycle hooks/optionalDependencies。
+- clean-install smoke shape 从 temp installed layout 验证 manifest/integrity/executable/platform 后，只通过 explicit `go-packaged-preview` + packaged path injection 使用 helper；direct `health` 和 `tmuxSnapshotParse` smoke 通过；default/disabled/typescript/go/auto/current `go-cutover` 不触发 packaged discovery。
+- failure coverage：checksum mismatch/integrity failure、unsupported platform、wrong helper version/protocol/capability、non-executable helper fail closed；preview packaged path 不 silent invoke TypeScript parser fallback。
+- 保持 package/native policy unchanged：不改 `package.json`，无 optionalDependencies、lifecycle hooks/scripts、lockfiles、go modules、checked-in native artifacts、npm version/publish/commit/tag/push、default Go、fallback deletion。
+
+验收：
+
+- `tests/suites/go-kernel-v0421-artifact-prototype.cjs` 覆盖 artifact/manifest/package dry-run/clean-install/failure/cleanup/package-native sanity。
+- validation 包括 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check`、package/native sanity；可行时运行 `npm run --silent bench:team-panel-tmux`。
+
+### v0.4.21 — Go Runtime Availability Checkpoint（Slice 7）
+
+目标：汇总 Slice 1-6 runtime availability/native packaging evidence，给出 final signoff checkpoint recommendation；该 Slice 只做 docs/tests/checkpoint review，不实现 npm/default/native cutover，不删除 TypeScript fallback，不改 package/native metadata。
+
+交付：
+
+- 新增 final checkpoint doc：`docs/perf/v0.4.21-go-runtime-availability-checkpoint.md`。
+- 明确 decision split：GO for GitHub-only v0.4.21 runtime availability/signoff checkpoint after leader approval；STOP for npm/default/native cutover；STOP for TypeScript parser fallback deletion。
+- 汇总 Slice 1-6：Model C0 availability decision、native artifact contract、package policy guardrails、resolver diagnostics UX design、explicit/non-default `go-packaged-preview` resolver skeleton、temp-fixture artifact/package/install prototype。
+- 记录 runtime/package state unchanged：default/disabled/typescript/go/auto/current `go-cutover` unchanged；`go-packaged-preview` explicit-only/non-default/not normal-user availability proof；`tmuxSnapshotParse` only cutover-owned；`compactReadModelFingerprint` non-cutover；runtime `/team` quiet。
+- 记录 package/native policy unchanged：package version `0.6.8`、no optionalDependencies、lifecycle hooks、helper scripts、lockfiles、go.mod/go.sum、native artifacts、`kernel/` package inclusion、npm version/publish/commit/tag/push。
+- 记录 evidence：docs/tests guards、preview resolver tests、artifact manifest/prototype temp fixture tests、package/native sanity、bench metadata TypeScript/default and preview known/no-shadow。
+- 记录 remaining STOP gates：real package metadata owner slice、generated artifacts with provenance/checksums、supported platform clean install smokes、compact diagnostics/no-leak if needed、rollback/release process、no hidden TS fallback for future default cutover。
+
+验收：
+
+- `tests/suites/go-kernel-v0421-runtime-availability-checkpoint-docs.cjs` 确认 final checkpoint doc 链接 v0.4.20 checkpoint 与 Slice 1-6 docs，GO/STOP decision explicit，不暗示 npm publish/version、native/default cutover approval、fallback deletion approval、package metadata changes 或 checked-in native artifacts。
+- validation 包括 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check`、`npm run --silent bench:team-panel-tmux`、可行时 `PI_AGENTTEAM_KERNEL=go-packaged-preview npm run --silent bench:team-panel-tmux`、package/native sanity。
+
 ### Slice 1 — Config Bootstrap/Schema
 
 目标：先降低首次使用门槛，并建立 versioned config。
