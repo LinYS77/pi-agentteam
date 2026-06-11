@@ -1195,6 +1195,130 @@ v0.4.18 交付：
 - `tests/suites/go-kernel-v0421-runtime-availability-checkpoint-docs.cjs` 确认 final checkpoint doc 链接 v0.4.20 checkpoint 与 Slice 1-6 docs，GO/STOP decision explicit，不暗示 npm publish/version、native/default cutover approval、fallback deletion approval、package metadata changes 或 checked-in native artifacts。
 - validation 包括 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check`、`npm run --silent bench:team-panel-tmux`、可行时 `PI_AGENTTEAM_KERNEL=go-packaged-preview npm run --silent bench:team-panel-tmux`、package/native sanity。
 
+### v0.4.22 — Native Helper Package Metadata Owner Decision（Slice 1）
+
+目标：定义 future Native Helper Package Metadata Owner Slice 的 metadata ownership boundary；该 Slice 只做 docs/tests decision，不改 runtime resolver，不改 `package.json`/package metadata，不发布，不加入 native artifacts，不做 default/native cutover 或 TypeScript fallback deletion。
+
+交付：
+
+- 新增 metadata owner decision doc：`docs/perf/v0.4.22-native-helper-package-metadata.md`。
+- 链接 v0.4.21 prerequisites：runtime availability checkpoint、native artifact contract、package policy guardrails、artifact prototype、packaged preview resolver。
+- 明确 in-scope：package metadata schema、dry-run fixtures、manifest/package identity validation requirements、test-only package-layout fixtures、package/native sanity guards。
+- 明确 out-of-scope：package publication、resolver defaulting、real `package.json` metadata changes、optionalDependencies/native companion deps、lifecycle hooks/downloads、lockfiles/go modules/native artifacts、`kernel/` package inclusion、default/native cutover、TypeScript fallback deletion。
+- 记录 current runtime facts unchanged：default/unset disabled/TypeScript；`go`/`auto` migration unchanged；current `go-cutover` unchanged；`go-packaged-preview` explicit-only；`tmuxSnapshotParse` only cutover-owned；`compactReadModelFingerprint` non-cutover。
+- 保持 STOP gates：no npm version/publish、no package.json/version/package metadata changes、no optional native deps、no lifecycle hooks/downloads、no lockfiles/go.mod/go.sum、no checked-in native binaries/tarballs/artifacts、no `kernel/` package inclusion、no default/native cutover、no fallback deletion。
+
+验收：
+
+- `tests/suites/go-kernel-v0422-native-package-metadata-docs.cjs` 确认 doc exists/links prerequisites、GO/STOP language、package/native sanity unchanged、no lock/go module/native artifacts introduced。
+- validation 包括 focused guard、syntax check、可行时 `node tests/run.cjs`、`git diff --check`、package/native sanity。
+
+### v0.4.22 — Companion Package Metadata Schema Fixture（Slice 2）
+
+目标：用 temp/generated fixtures 定义并验证 future companion native package `package.json` metadata shape；该 Slice 只做测试夹具，不改 main `package.json`，不改 runtime resolver，不加入 native artifacts，不做 default/native cutover 或 fallback deletion。
+
+交付：
+
+- 新增 focused fixture suite：`tests/suites/go-kernel-v0422-native-package-metadata-fixtures.cjs`。
+- 在 `/tmp`/test temp dir 生成 sample companion package manifests，例如 `@earendil-works/pi-agentteam-go-helper-linux-x64`、Linux arm64、Darwin arm64、Windows x64。
+- fixture metadata 覆盖 `name`、`version: 0.6.8`、`license`、`os`、`cpu`、exact `files` allowlist（README/LICENSE/manifest/bin layout）、helper manifest/platform tuple 和 optional Linux libc marker。
+- fixture guard 拒绝 `scripts`、lifecycle hooks、`optionalDependencies`、dependencies/devDependencies、build/download/install metadata、raw `kernel/` paths，并验证 package name/platform tuple consistency。
+- 验证 main repo package/native state unchanged：package version `0.6.8`、no optionalDependencies、no lifecycle hooks、no `kernel/` files inclusion、no lockfiles/go modules/native artifacts。
+- 更新 `docs/perf/v0.4.22-native-helper-package-metadata.md` 的 Slice 2 fixture details，同时保持 Slice 1 STOP gates。
+
+验收：
+
+- syntax check 和 focused suite 通过；可行时 `node tests/run.cjs` 与 `git diff --check` 通过；temp fixture root cleaned up；source checkout 无 checked-in native artifacts/lockfiles/go modules。
+
+### v0.4.22 — Package Dry-Run Owner Simulation（Slice 3）
+
+目标：从 metadata fixtures 前进到 owner-verified companion package dry-run shape；继续只使用 temp/generated fixtures，不改 main package metadata/runtime，不产生 repo artifacts。
+
+交付：
+
+- 新增 focused dry-run suite：`tests/suites/go-kernel-v0422-native-package-dry-run.cjs`。
+- 在 temp package layout 中模拟 future companion package contents：`package.json`、`README.md`、`LICENSE`、`manifest/agentteam-go-helper-manifest.json`、`bin/agentteam-tmux-snapshot-helper`，Windows row 可使用 `.exe` helper filename。
+- 用 test helper 模拟 `npm pack --dry-run --ignore-scripts` contents，不运行 npm version/publish，不向 repo 写 tarball。
+- 强制 exact dry-run file list；拒绝 raw `kernel/` source、extra package files、package scripts/lifecycle hooks、optional deps、helper build/download/install metadata、tarballs、lockfiles/go modules、broad package contents。
+- 断言 README/license/manifest/helper placeholder 存在，helper placeholder 只在 temp root 下创建并 cleanup。
+- 验证 main package unchanged：no package.json changes、package version `0.6.8`、no optionalDependencies、no lifecycle hooks、no `kernel/` inclusion、no checked-in native artifacts/lockfiles/go modules。
+- 更新 `docs/perf/v0.4.22-native-helper-package-metadata.md` 的 Slice 3 dry-run evidence/requirements，同时保持 Slice 1/2 STOP gates。
+
+验收：
+
+- syntax check 和 focused dry-run suite 通过；可行时 `node tests/run.cjs` 与 `git diff --check` 通过；不启动 Slice 4。
+
+### v0.4.22 — Manifest Compatibility and Provenance Guard（Slice 4）
+
+目标：用 docs/tests/temp fixtures 强化 future helper manifest compatibility、provenance、license、checksum metadata validation；不改 runtime resolver，不改 main `package.json`，不加入真实 artifacts，不启动 Slice 5。
+
+交付：
+
+- 新增 focused manifest guard suite：`tests/suites/go-kernel-v0422-manifest-compatibility-guard.cjs`。
+- manifest schema 验证字段：`schemaVersion`、`package.name/version`、`helper.version/protocolVersion/module/os/arch/libc/filename/size/sha256/executable`、`provenance.sourceRevision/generatedBy/attestation`、`licenses`。
+- compatibility assertions：main package version `0.6.8`、helper version `0.3.0-read-model-shadow`、protocol `1`、module `tmuxSnapshotParse`、supported platform tuple、Linux libc marker、filename 与 package files 一致、size/sha256 匹配 temp helper placeholder、executable true。
+- rejection cases：mismatched package version、wrong helper version/protocol/module、unsupported platform、missing Linux libc/license/provenance/helper、non-executable helper、size mismatch、checksum mismatch、filename/package files mismatch。
+- 记录 version/protocol/package/platform/checksum skew must fail closed in future preview/native resolver paths；仅做概念映射到 compact fail-closed preview diagnostics vocabulary，不实现 resolver changes。
+- 更新 `docs/perf/v0.4.22-native-helper-package-metadata.md` 的 Slice 4 manifest compatibility/provenance/license/checksum requirements，同时保持 Slice 1-3 STOP gates。
+
+验收：
+
+- syntax check 和 focused manifest guard suite 通过；可行时 `node tests/run.cjs` 与 `git diff --check` 通过；不启动 Slice 5。
+
+### v0.4.22 — go-packaged-preview Runtime Invariants（Slice 5）
+
+目标：证明 metadata-owner work from Slices 1-4 不改变 runtime preview/cutover/default/read-model behavior；该 Slice 只做 tests/docs，不改 production runtime，不改 package metadata，不启动 Slice 6。
+
+交付：
+
+- 新增 focused invariant suite：`tests/suites/go-kernel-v0422-packaged-preview-invariants.cjs`。
+- 断言 default/unset remains disabled/TypeScript 且不 discover packaged helper。
+- 断言 `disabled`、`typescript`、`go`、`auto`、current `go-cutover` 不读取 packaged helper path/status、不调用 temp packaged helper；`go-cutover` explicit helper-path behavior unchanged。
+- 断言 `go-packaged-preview` explicit-only/non-default；explicit helper path still wins over packaged preview path；packaged helper only in explicit preview mode。
+- 断言 preview/cutover `tmuxSnapshotParse` failure stays fail-closed：`ok:false`、`status:'unknown'`、`resultMarker:'stale'`、module/capability `tmuxSnapshotParse`、compact `cutoverFailureKind`、no migration `fallbackKind`/`fallbackReason`、no TypeScript parser fallback callback。
+- 断言 `compactReadModelFingerprint` remains TypeScript fallback/non-cutover in `go-cutover` and `go-packaged-preview`。
+- 断言 `/team` runtime remains quiet per nearby guard conventions：不渲染 cutoverReason/helper path/packaged helper env/preview branch。
+- 更新 `docs/perf/v0.4.22-native-helper-package-metadata.md` 的 Slice 5 invariant requirements/evidence，同时保持 Slice 1-4 STOP gates。
+
+验收：
+
+- syntax check 和 focused invariant suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不启动 Slice 6。
+
+### v0.4.22 — Package/Native Guardrails（Slice 6）
+
+目标：新增 package/native guardrails，明确区分 allowed temp metadata/dry-run fixture text 与 forbidden source repo/package metadata changes；该 Slice 只做 docs/tests，不改 main `package.json`，不改 runtime resolver，不启动 Slice 7。
+
+交付：
+
+- 新增 focused package/native guard suite：`tests/suites/go-kernel-v0422-package-native-guardrails.cjs`。
+- 守住 main `package.json`：version `0.6.8`、`files` excludes `kernel/` and native/helper/generated artifact paths、no optionalDependencies、no native companion metadata、no lifecycle hooks、no helper build/install/download/package/version/publish scripts。
+- 扫描 scripts：不得调用 `npm version`、`npm publish`、`go build`、`go install`、`curl`、`wget`、`node-gyp`、`prebuild` 或 package `kernel/`。
+- 扫描 repo：no package lockfiles/npm shrinkwrap/root/helper go.mod/go.sum；no checked-in `.exe`、`.dll`、`.so`、`.dylib`、helper binary、package tarball、generated manifest/package artifact、native package fixture outside allowed docs/tests fixture sources。
+- 明确 allowed：JS test suites/docs 可以包含 temp fixture definitions/placeholder strings；temp roots 必须在 repo 外并由相关 suites assert cleanup；v0.4.22 metadata fixtures are not real package inclusion。
+- 更新 `docs/perf/v0.4.22-native-helper-package-metadata.md` 的 Slice 6 package/native guardrail requirements/evidence，同时保持 Slice 1-5 STOP gates。
+
+验收：
+
+- syntax check 和 focused package/native guard suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不启动 Slice 7。
+
+### v0.4.22 — Native Helper Package Metadata Checkpoint（Slice 7）
+
+目标：新增 GitHub-only native helper package metadata checkpoint，汇总 Slices 1-6 evidence、runtime/package unchanged facts、GO/STOP decision、validation commands 与 real native/package/default cutover 前 blockers；该 Slice 只做 docs/tests，不改 main `package.json`，不改 runtime resolver，不 commit/tag/push。
+
+交付：
+
+- 新增 checkpoint doc：`docs/perf/v0.4.22-native-helper-package-metadata-checkpoint.md`。
+- 新增 checkpoint guard suite：`tests/suites/go-kernel-v0422-native-package-metadata-checkpoint-docs.cjs`。
+- checkpoint link all v0.4.22 artifacts：metadata doc、metadata docs guard、metadata fixture suite、package dry-run suite、manifest compatibility guard、packaged preview invariants、package/native guardrails。
+- checkpoint link prior checkpoint：`docs/perf/v0.4.21-go-runtime-availability-checkpoint.md`。
+- 明确 GO only for GitHub-only v0.4.22 metadata-owner dry-run checkpoint after leader approval。
+- 明确 STOP for npm/default/native cutover、real package inclusion、`package.json` metadata/version changes、optionalDependencies、lifecycle hooks/downloads、lockfiles/go modules/native artifacts、preview/dry-run as normal-user availability proof、default Go、current `go-cutover` behavior changes、TypeScript fallback deletion。
+- 记录 remaining blockers before real native package metadata/default cutover，并包含 validation matrix：`node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check`、default bench、`PI_AGENTTEAM_KERNEL=go-packaged-preview` bench、package/native sanity。
+
+验收：
+
+- syntax check 和 focused checkpoint suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check` 通过；不 commit/tag/push。
+
 ### Slice 1 — Config Bootstrap/Schema
 
 目标：先降低首次使用门槛，并建立 versioned config。

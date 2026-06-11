@@ -34,6 +34,8 @@ docs/perf/*
 !docs/perf/v0.4.21-go-packaged-preview-resolver.md
 !docs/perf/v0.4.21-go-artifact-prototype.md
 !docs/perf/v0.4.21-go-runtime-availability-checkpoint.md
+!docs/perf/v0.4.22-native-helper-package-metadata.md
+!docs/perf/v0.4.22-native-helper-package-metadata-checkpoint.md
 
 # Dependencies
 node_modules/
