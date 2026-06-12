@@ -1501,6 +1501,114 @@ v0.4.18 交付：
 
 - syntax check 和 focused checkpoint suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check` 通过；不扩展或移除 `/team readiness`，不新增 command features/tools，不渲染 `/team`，不改 runtime/package/default/native behavior，不删除 TypeScript fallback，不扩大 Go authority，不 commit/tag/push。
 
+### v0.4.25 — Native Helper Availability Proof Checkpoint（Slice 1）
+
+目标：启动 v0.4.25 Native Helper Availability Proof Checkpoint，新增 docs/tests-only native availability owner contract，定义 default/native/fallback deletion 讨论前必须证明的 native helper availability evidence；冻结 TS/pi control-plane boundary 与 Go helper subprocess/stdin-stdout boundary；不启动 Slice 2。
+
+交付：
+
+- 新增 owner contract doc：`docs/perf/v0.4.25-native-helper-availability-proof.md`。
+- 新增 focused docs guard：`tests/suites/go-kernel-v0425-native-availability-contract-docs.cjs`。
+- 链接 prior artifacts：v0.4.21 runtime availability/native artifact/artifact prototype、v0.4.22 metadata checkpoint、v0.4.23 diagnostics checkpoint、v0.4.24 readiness checkpoint、Go kernel ADRs。
+- 记录 T013 pi runtime finding：pi extension/provider/tool surfaces are TS/JS/Node-based；no native Go pi extension/provider ABI assumed；TS/pi control plane mandatory；Go helper behind TS adapter/ports via subprocess/RPC/stdin-stdout。
+- 定义 in-scope proof areas：generated artifact shape、manifest/checksum/provenance/license/executable validation、clean-install smoke simulation、unsupported-platform behavior、rollback/version skew、resolver/default gate、module cutover/fallback deletion gate documentation。
+- 定义 out-of-scope/STOP gates：real artifacts/package metadata/default behavior、npm version/publish、native Go pi extension、default Go、TypeScript fallback deletion、`/team readiness` expansion、broad Go authority、package/runtime behavior changes。
+- 包含 native availability decision matrix：generated artifacts、clean install、diagnostics、unsupported platform、rollback、package release ownership、parser failure policy、user approval、current state / required before default/native/fallback deletion。
+
+验收：
+
+- syntax check 和 focused contract suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不实现 artifact validator/runtime resolver，不改 runtime/package/default/native behavior，不扩展 `/team readiness`，不删除 TypeScript fallback，不扩大 Go authority。
+
+### v0.4.25 — Generated Artifact Shape and Manifest Validator Prototype（Slice 2）
+
+目标：在 temp roots only 下证明 future generated Go helper artifact for `tmuxSnapshotParse` 可被 strict manifest/checksum/provenance/license/executable rules 描述和验证；该 Slice 是 docs/tests/temp-fixture prototype，不创建 real package/native behavior，不启动 Slice 3。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.25-native-helper-availability-proof.md` 的 Slice 2 prototype evidence。
+- 新增 focused prototype suite：`tests/suites/go-kernel-v0425-artifact-manifest-prototype.cjs`。
+- suite 只在 OS temp dirs runtime 创建 fake helper artifact，验证 manifest shape：schemaVersion、packageName/packageVersion、module、helperVersion、protocolVersion、capability、os/arch/linux libc、allowlisted path、size、sha256、executable、provenance、license metadata。
+- suite 验证 valid manifest passes，并 reject missing helper、wrong module/packageVersion/helperVersion/protocolVersion、missing capability、unsupported platform、missing linux libc、non-executable POSIX helper、size/checksum mismatch、missing provenance/license、outside allowlist、path traversal。
+- failure results 使用 compact availability/fail-closed vocabulary，不泄漏 helper path、repo/cwd、stdout/stderr、raw stack、raw manifest/provenance/license body。
+- 保持 T013 boundary：TS/pi control plane mandatory；no native Go pi extension/provider ABI assumed；Go helper behind TS adapter/ports via subprocess/RPC/stdin-stdout；parser-only `tmuxSnapshotParse` authority。
+
+验收：
+
+- syntax check 和 focused prototype suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不实现 production runtime resolver，不改 package metadata，不 check in native binaries/tarballs/generated manifests/artifacts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不扩展 `/team readiness`，不扩大 Go authority。
+
+### v0.4.25 — Clean-Install Smoke Simulation（Slice 3）
+
+目标：在 temp dirs only 下证明 future installed helper layout 可被定位并 smoke-tested，且不需要 Go toolchain、source checkout、manual helper env、lifecycle download、install-time build 或 hidden network fetch；该 Slice 是 docs/tests/temp-fixture simulation，不改 production resolver/default/package/native behavior，不启动 Slice 4。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.25-native-helper-availability-proof.md` 的 Slice 3 clean-install smoke evidence。
+- 新增 focused smoke suite：`tests/suites/go-kernel-v0425-clean-install-smoke.cjs`。
+- suite 只在 OS temp dirs runtime 创建 installed layout 和 fake helper，使用 package-relative manifest/helper paths。
+- suite 验证 explicit test/preview injection only 的 success case：locate + smoke helper；no Go toolchain；no source checkout；no manual helper env；no lifecycle download/install-time build/network fetch；no default resolver activation。
+- suite 验证 fail-closed cases：missing installed package/helper、corrupt helper output/malformed JSON、wrong platform helper、non-executable POSIX helper、wrong helper version、wrong protocol version、missing `tmuxSnapshotParse` capability、checksum mismatch、manifest/helper mismatch。
+- failure results 使用 compact availability/fail-closed vocabulary，不泄漏 helper absolute path、temp root、repo/cwd、stdout/stderr、raw manifest/helper output、stack traces、package internals；simulated explicit preview path 不 silent TS parser fallback。
+- 保持 T013 boundary 与 Slice 2 manifest context：TS/pi control plane mandatory；no native Go pi extension/provider ABI assumed；Go helper behind TS adapter/ports via subprocess/RPC/stdin-stdout；parser-only `tmuxSnapshotParse` authority。
+
+验收：
+
+- syntax check 和 focused smoke suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不实现 production runtime resolver，不改 package metadata，不 check in native binaries/tarballs/generated manifests/artifacts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不扩展 `/team readiness`，不扩大 Go authority，不启动 Slice 4。
+
+### v0.4.25 — Unsupported Platform and Rollback/Version-Skew Policy（Slice 4）
+
+目标：定义 unsupported platforms 与 unsafe helper/package states 的 fail-closed compact diagnostics/remediation，并明确 rollback/version-skew policy；该 Slice 是 docs/tests policy guard work，不实现 production resolver/default/package/native behavior，不启动 Slice 5。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.25-native-helper-availability-proof.md` 的 Slice 4 unsupported-platform/rollback/version-skew policy evidence。
+- 新增 focused policy suite：`tests/suites/go-kernel-v0425-unsupported-rollback-policy.cjs`。
+- 定义 unsupported-platform matrix rows/remediation：unsupported os/arch/libc、missing helper package/artifact、bad package metadata、checksum/provenance/license mismatch/missing、non-executable helper、stale helper、helper/package version skew、protocol skew、capability skew、corrupt helper output、broken diagnostics、bad resolver default、package unpublish/deprecation。
+- 定义 rollback scenarios/owners：bad metadata、bad helper artifact、checksum/provenance mismatch、unsupported platform、broken diagnostics、package unpublish/deprecation、stale helper、bad default resolver decision；owners include release/package/diagnostics/runtime/support-policy owners。
+- 明确 rollback 是 corrected release/tag/package/deprecation/default-disable policy，不是 hidden runtime TS fallback after cutover。
+- 明确 unsupported platforms fail closed with compact no-leak diagnostics，并继续 block default/native/fallback deletion，除非 support policy narrowed and approved。
+- future normal-user diagnostics UX 如需要，不能泄漏 helper path/stdout/stderr/repo/cwd/raw manifest/checksum/provenance/package internals/stack/mailbox/report text。
+
+验收：
+
+- syntax check 和 focused policy suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不实现 production runtime resolver，不改 package metadata，不 check in native binaries/tarballs/generated manifests/artifacts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不使用 hidden TS fallback as rollback，不扩展 `/team readiness`，不扩大 Go authority，不启动 Slice 5。
+
+### v0.4.25 — Resolver/Default and Module Cutover Gate（Slice 5）
+
+目标：将 v0.4.25 Slice 1-4 evidence 转换为 future gate，定义 `tmuxSnapshotParse` 何时可被考虑从 explicit preview/local cutover 走向 normal-user packaged/default availability 以及后续 TypeScript fallback deletion；该 Slice 是 docs/tests gate work，不实现 production resolver/default behavior，不启动 Slice 6。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.25-native-helper-availability-proof.md` 的 Slice 5 resolver/default and module cutover gate evidence。
+- 新增 focused gate suite：`tests/suites/go-kernel-v0425-resolver-default-cutover-gate.cjs`。
+- 定义 gate matrix：generated artifacts、manifest/checksum/provenance/license/executable validation、clean install、compact diagnostics/no-leak、unsupported-platform policy、rollback/default-disable/deprecation、package release ownership、parser failure policy in normal-user default path、package metadata/companion package ownership、explicit user approval、fallback deletion readiness。
+- 每个 gate 包含 current state、required evidence before packaged/default resolver can be considered、required evidence before `tmuxSnapshotParse` TypeScript fallback deletion can be considered。
+- 明确 v0.4.25 does not pass the gate；只定义 gate 并收集 temp/prototype evidence；不 approve packaged/default resolver 或 fallback deletion。
+- 保持 runtime/module invariants：default/unset disabled/TypeScript；`go-packaged-preview` explicit-only/non-default；current `go-cutover` helper-path based unchanged；packaged discovery 不在 default/disabled/typescript/go/auto/current `go-cutover` 运行；`tmuxSnapshotParse` only cutover-owned module；`compactReadModelFingerprint` TypeScript fallback/non-cutover。
+- 明确 Go authority stays parser-only stdin/stdout，不拥有 tmux execution/capture、state、worker lifecycle、task/report governance、PlanRun、full-text boundaries、package/release authority、UI rendering、command control plane；no hidden TS fallback after cutover。
+
+验收：
+
+- syntax check 和 focused gate suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不实现 production runtime resolver，不改 package metadata，不 check in native binaries/tarballs/generated manifests/artifacts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不使用 hidden TS fallback as rollback，不扩展 `/team readiness`，不扩大 Go authority，不启动 Slice 6。
+
+### v0.4.25 — Package/Native Guardrail and Final Checkpoint Hardening（Slice 6）
+
+目标：新增 final GitHub-only v0.4.25 native helper availability proof checkpoint docs/tests，总结 Slice 1-5 evidence、validation matrix、GO/STOP decision、remaining blockers，并冻结 runtime/package/default/native/fallback/readiness invariants；该 Slice 是 docs/tests only，不 commit/tag/push，不启动 later work。
+
+交付：
+
+- 新增 final checkpoint doc：`docs/perf/v0.4.25-native-helper-availability-proof-checkpoint.md`。
+- 新增 focused checkpoint guard：`tests/suites/go-kernel-v0425-native-availability-checkpoint-docs.cjs`。
+- 更新 owner contract doc：`docs/perf/v0.4.25-native-helper-availability-proof.md` 链接 final checkpoint，并更新 Slice 1-6 final recommendation。
+- checkpoint link prior checkpoint：`docs/perf/v0.4.24-explicit-readiness-command-integration-checkpoint.md`。
+- checkpoint link v0.4.25 artifacts/guards：owner doc、Slice 1 contract guard、Slice 2 artifact manifest prototype、Slice 3 clean-install smoke、Slice 4 unsupported rollback policy、Slice 5 resolver/default gate、Slice 6 checkpoint guard。
+- 总结 Slice 1-5 outcomes：owner contract/T013 TS-pi boundary、temp artifact/manifest prototype、temp clean-install smoke simulation、unsupported rollback/version-skew policy、resolver/default module cutover gate。
+- 明确 GO only for GitHub-only checkpoint after leader/user approval；GO for evidence only；STOP for npm/version/package metadata/optionalDependencies/lifecycle/downloads/scripts/lockfiles/go modules/native binaries/tarballs/generated artifacts/real package inclusion/default Go/go-cutover/go-packaged-preview/fallback deletion/hidden TS fallback/compactReadModelFingerprint cutover/broad Go authority/native Go pi extension/readiness expansion/commit-tag-push。
+- 明确 v0.4.25 still does not prove normal-user native availability and does not pass packaged/default/fallback deletion gate；列出 remaining blockers 与 validation matrix。
+
+验收：
+
+- syntax check 和 focused checkpoint suite 通过；`node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check` 通过；可行时 default bench 与 `PI_AGENTTEAM_KERNEL=go-packaged-preview` bench 通过；不实现 production runtime resolver，不改 package metadata，不 check in native binaries/tarballs/generated manifests/artifacts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不使用 hidden TS fallback as rollback，不扩展 `/team readiness`，不扩大 Go authority，不 commit/tag/push，不启动 later work。
+
 ### Slice 1 — Config Bootstrap/Schema
 
 目标：先降低首次使用门槛，并建立 versioned config。

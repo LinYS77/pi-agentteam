@@ -40,6 +40,8 @@ docs/perf/*
 !docs/perf/v0.4.23-compact-native-failure-diagnostics-checkpoint.md
 !docs/perf/v0.4.24-explicit-readiness-command-integration.md
 !docs/perf/v0.4.24-explicit-readiness-command-integration-checkpoint.md
+!docs/perf/v0.4.25-native-helper-availability-proof.md
+!docs/perf/v0.4.25-native-helper-availability-proof-checkpoint.md
 
 # Dependencies
 node_modules/
