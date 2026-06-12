@@ -42,6 +42,8 @@ docs/perf/*
 !docs/perf/v0.4.24-explicit-readiness-command-integration-checkpoint.md
 !docs/perf/v0.4.25-native-helper-availability-proof.md
 !docs/perf/v0.4.25-native-helper-availability-proof-checkpoint.md
+!docs/perf/v0.4.26-go-helper-artifact-pipeline.md
+!docs/perf/v0.4.26-go-helper-artifact-pipeline-checkpoint.md
 
 # Dependencies
 node_modules/

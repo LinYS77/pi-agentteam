@@ -1609,6 +1609,133 @@ v0.4.18 交付：
 
 - syntax check 和 focused checkpoint suite 通过；`node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check` 通过；可行时 default bench 与 `PI_AGENTTEAM_KERNEL=go-packaged-preview` bench 通过；不实现 production runtime resolver，不改 package metadata，不 check in native binaries/tarballs/generated manifests/artifacts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不使用 hidden TS fallback as rollback，不扩展 `/team readiness`，不扩大 Go authority，不 commit/tag/push，不启动 later work。
 
+### v0.4.26 — Pipeline Owner Contract / Release Boundary（Slice 1）
+
+目标：启动 v0.4.26 Go Helper Artifact Generation Pipeline Prototype Checkpoint，新增 docs/tests-only pipeline owner contract / release boundary，定义 artifact generation pipeline prototype scope 与 GitHub-only release/package boundary；该 Slice 是 GitHub-only evidence，不是 npm/package/default/native/fallback approval，不启动 Slice 2。
+
+交付：
+
+- 新增 owner contract doc：`docs/perf/v0.4.26-go-helper-artifact-pipeline.md`。
+- 新增 focused docs guard：`tests/suites/go-kernel-v0426-artifact-pipeline-contract-docs.cjs`。
+- 链接 v0.4.25 final checkpoint、owner doc、Slice 1-6 focused guards。
+- 记录 T013 runtime boundary：TS/pi control plane mandatory；Go helper behind TS adapter/ports via subprocess/RPC/stdin-stdout；no native Go pi extension/provider ABI assumption；Go authority parser-only `tmuxSnapshotParse`。
+- 定义 in-scope pipeline areas：build matrix definition、helper build command policy、artifact output path policy、local/CI artifact output prototype、manifest/checksum/provenance/license/executable generation prototype、attestation/signing placeholders、direct artifact smoke and clean-install handoff、storage/release/rollback policy、final checkpoint guardrail。
+- 定义 release/package boundary：GitHub-only checkpoint；no npm package metadata by default；GitHub Actions artifacts future prototype storage after approval；GitHub release assets future explicit release-policy gate；npm companion packages future package-owner gate；no postinstall/download/install-time build policy remains binding。
+- 定义 build matrix placeholders：linux-x64-glibc、linux-arm64-glibc、darwin-arm64、darwin-x64、win32-x64 as candidate rows；musl/win32-arm64/others future unsupported until proven；no support claim yet。
+- 定义 STOP gates：no helper build implementation、no CI workflow implementation、no generated artifacts/manifests、no npm/version/package metadata/optionalDependencies/lifecycle/downloads/scripts/lockfiles/go modules/native binaries/tarballs/GitHub release assets/npm package inclusion/default Go/go-cutover/go-packaged-preview/fallback deletion/native Go pi extension/readiness expansion/Slice 2。
+
+验收：
+
+- syntax check 和 focused contract suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不实现 helper build commands，不新增 CI workflow，不生成 artifacts/manifests，不实现 production runtime resolver，不改 package metadata，不 check in native binaries/tarballs/generated manifests/artifacts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不使用 hidden TS fallback as rollback，不扩展 `/team readiness`，不扩大 Go authority，不启动 Slice 2。
+
+### v0.4.26 — Build Matrix and Build Command Policy（Slice 2）
+
+目标：docs/tests-only 地定义 future Go helper artifact pipeline 的 build matrix 与 build command policy，冻结 candidate OS/arch/libc rows、executable naming、runner/toolchain assumptions、cross-compile vs native-runner policy，以及 `go build` 只能用于 explicit artifact-generation CI/local prototype after approval；不实现 helper build，不新增 CI workflow，不启动 Slice 3。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.26-go-helper-artifact-pipeline.md` 的 Slice 2 build matrix and command policy。
+- 新增 focused policy guard：`tests/suites/go-kernel-v0426-build-matrix-policy-docs.cjs`。
+- candidate/prototype rows：linux-x64-glibc、linux-arm64-glibc、darwin-arm64、darwin-x64、win32-x64；每行定义 OS、arch、libc/n/a、executable filename、permission behavior、runner assumption、validation expectation。
+- unsupported rows：linux-x64-musl、linux-arm64-musl、win32-arm64、other os/arch/libc targets；future unsupported until proven，fail-closed，no normal-user support claim。
+- build command policy：`go build` may be used only in explicit artifact-generation CI/local prototype after approval；never in npm lifecycle/package install/runtime resolver/default user path；no hidden network fetch、lifecycle download、install-time build、package scripts。
+- Go module policy：adding go.mod/go.sum remains STOP unless separately approved；future module need requires separate owner decision。
+- 保持 release/package boundary：GitHub-only checkpoint；no npm package metadata by default；GitHub Actions artifacts future prototype storage after approval；GitHub release assets future release-policy gate；npm companion packages future package-owner gate；no postinstall/download/install-time build policy remains binding。
+
+验收：
+
+- syntax check 和 focused build matrix policy suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不运行 `go build`，不实现 helper build commands，不新增 CI workflow，不生成 artifacts/manifests，不新增 go.mod/go.sum，不改 package metadata，不新增 package scripts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不扩展 `/team readiness`，不扩大 Go authority，不启动 Slice 3。
+
+### v0.4.26 — Local/CI Artifact Output Policy and Prototype（Slice 3）
+
+目标：docs/tests 或 test-local temp/ignored-output fixture only 地定义 future generated helper artifacts 在 local/CI prototype runs 中可写入的位置，证明不发生 source/package inclusion；不 build real helpers，不生成 real artifacts/manifests，不新增 CI workflow，不启动 Slice 4。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.26-go-helper-artifact-pipeline.md` 的 Slice 3 local/CI artifact output policy/prototype。
+- 新增 focused output policy guard：`tests/suites/go-kernel-v0426-artifact-output-policy.cjs`。
+- local output policy：OS temp root preferred for tests；optional ignored local directory `.agentteam-artifacts/` may be named but must be ignored and excluded from package files；generated outputs must never be committed。
+- CI output policy：CI workspace outputs and GitHub Actions artifact upload may be future prototype storage after explicit approval；no GitHub release assets in Slice 3；no npm package inclusion；no install/runtime download path；no CI workflow added。
+- conceptual artifact file list per build-matrix row：helper executable、manifest JSON、checksum file、provenance metadata、license metadata/copy、optional attestation placeholder。
+- cleanup/no-source-inclusion behavior：test output roots under OS temp or ignored local dirs created/cleaned at runtime；repository/package scans reject native binaries、tarballs、generated manifests/artifacts、generated package artifacts；candidate output names are package-relative and safe。
+- 保持 Slice 1 release/package boundary 与 Slice 2 build command policy。
+
+验收：
+
+- syntax check 和 focused output policy suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不运行 `go build`，不实现 helper build commands，不新增 CI workflow，不生成 real artifacts/manifests，不新增 go.mod/go.sum，不改 package metadata，不新增 package scripts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不扩展 `/team readiness`，不扩大 Go authority，不启动 Slice 4。
+
+### v0.4.26 — Manifest / Checksum / Provenance / License / Executable Generator Prototype（Slice 4）
+
+目标：从 v0.4.25 manifest validation 进入 test-local generation prototype，从 artifact output files 生成 manifest/checksum/provenance/license/executable metadata；所有 generated files 仅在 OS temp dirs runtime 生成并清理；不 build real helpers，不 commit artifacts，不改 package/runtime/release behavior，不启动 Slice 5。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.26-go-helper-artifact-pipeline.md` 的 Slice 4 generator prototype evidence。
+- 新增 focused generator suite：`tests/suites/go-kernel-v0426-manifest-provenance-generator.cjs`。
+- suite 在 OS temp dirs 创建 fake helper artifact output tree，并生成 schemaVersion、packageName/packageVersion、module、helperVersion、protocolVersion、capabilities、OS/arch/libc、safe package-relative artifact path、size、SHA-256、executable policy、sourceRevision/workflowRun/toolchain/generatedAt placeholders、license checksum、attestation/signing placeholders。
+- validates generated metadata against v0.4.25 shape：required fields present；checksum/size match；executable policy matches platform；license/provenance present；no path traversal/absolute paths；module/protocol/capability match `tmuxSnapshotParse`/`1`。
+- negative cases fail closed/no-leak：missing provenance、missing license、checksum mismatch、size mismatch、unsafe path、wrong module/protocol/capability、real signing/attestation claim without proof。
+- 明确 generated metadata is not committed and not release metadata；attestation/signing placeholders are not real signing；no package/native/default/fallback behavior approved；preserve Slice 1-3 boundaries。
+
+验收：
+
+- syntax check 和 focused generator suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不运行 `go build`，不实现 helper build commands，不新增 CI workflow，不生成 repo artifacts/manifests，不新增 go.mod/go.sum，不改 package metadata，不新增 package scripts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不扩展 `/team readiness`，不扩大 Go authority，不启动 Slice 5。
+
+### v0.4.26 — Artifact Smoke and Clean-Install Handoff（Slice 5）
+
+目标：展示 v0.4.26 pipeline prototype 的 generated-temp artifact outputs 如何被 smoke-tested，并 test-locally hand off 到 future clean-install/package proof；明确 real prototype evidence 与 simulated package install behavior 的边界；不 build real helpers，不 commit artifacts，不改 package/runtime/release behavior，不启动 Slice 6。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.26-go-helper-artifact-pipeline.md` 的 Slice 5 artifact smoke / clean-install handoff evidence。
+- 新增 focused smoke/handoff suite：`tests/suites/go-kernel-v0426-artifact-smoke-handoff.cjs`。
+- suite 在 OS temp dirs 创建 generated-temp artifact output：fake helper executable/script、manifest/checksum/provenance/license metadata、package-relative safe paths。
+- smoke proof：controlled test-local helper read/invoke；deterministic health response；deterministic minimal `tmuxSnapshotParse` response or parser capability smoke；explicit local/test path only；no default resolver activation；no hidden TS fallback on explicit smoke failure。
+- handoff proof：copy/map generated-temp artifact metadata into temp installed layout like v0.4.25 clean-install simulation；assert package install remains simulated；companion package metadata/optional dependency/npm tarball/user install/default resolver remain future work；generated artifact is prototype input to future clean-install proof, not normal-user availability proof。
+- negative cases fail closed/no-leak：corrupt health JSON、missing `tmuxSnapshotParse` capability、wrong protocol/helper version、checksum mismatch、missing installed layout mapping、attempted default resolver use、attempted hidden TS parser fallback。
+- 明确 no source checkout dependency、no Go toolchain/network/lifecycle download/install-time build/manual helper env in simulated handoff；preserve Slice 1-4 boundaries。
+
+验收：
+
+- syntax check 和 focused smoke/handoff suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不运行 `go build`，不实现 helper build commands，不新增 CI workflow，不生成 repo artifacts/manifests，不新增 go.mod/go.sum，不改 package metadata，不新增 package scripts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不扩展 `/team readiness`，不扩大 Go authority，不启动 Slice 6。
+
+### v0.4.26 — Storage, Release, and Rollback Policy（Slice 6）
+
+目标：docs/tests policy only 地决定 generated artifact outputs 在 package publication 之前可如何存储，定义 GitHub Actions artifact prototype storage、release assets future gate、npm companion package future gate、retention/access expectations，以及 rollback/deprecation/default-disable/version-skew policy；不 build real helpers，不新增 CI workflow，不 commit artifacts，不改 package/runtime/release behavior，不启动 Slice 7。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.26-go-helper-artifact-pipeline.md` 的 Slice 6 storage/release/rollback policy。
+- 新增 focused docs guard：`tests/suites/go-kernel-v0426-storage-release-policy-docs.cjs`。
+- storage decision matrix rows：OS temp/local outputs for tests、ignored local prototype directory、CI workflow workspace outputs、GitHub Actions artifacts for prototype review、GitHub release assets、npm companion packages、main package inclusion、postinstall/download/install-time build。
+- policy：OS temp/local test outputs allowed only as test-local and cleaned；ignored local prototype directory future only after explicit approval and excluded from package files；CI workspace outputs future only after approval；GitHub Actions artifacts future prototype storage after approval and review-only / limited retention / not release asset / not install source / not normal-user availability proof；GitHub release assets STOP until explicit release-policy approval；npm companion packages STOP until package-owner approval；main package inclusion STOP；postinstall/download/install-time build prohibited。
+- rollback/deprecation/default-disable scenarios：bad generated artifact、bad manifest/checksum/provenance/license、bad helper smoke、stale helper、unsupported platform、broken diagnostics、bad storage upload、accidental release asset、package deprecation/unpublish、bad future default resolver。
+- version-skew policy：package/helper/protocol/module/capability/platform/checksum must match；skew fails closed；no hidden TS fallback as rollback after cutover；rollback is corrected release/tag/package/deprecation/default-disable policy。
+- preserve Slice 1-5/T013 boundaries：TS/pi control plane mandatory；Go helper behind TS adapter/ports；Go parser-only `tmuxSnapshotParse`；`compactReadModelFingerprint` non-cutover / TypeScript fallback；no native Go pi extension assumption。
+
+验收：
+
+- syntax check 和 focused storage/release policy suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不运行 `go build`，不实现 helper build commands，不新增 CI workflow，不生成 repo artifacts/manifests，不新增 go.mod/go.sum，不改 package metadata，不新增 package scripts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不使用 hidden TS fallback as rollback，不扩展 `/team readiness`，不扩大 Go authority，不启动 Slice 7。
+
+### v0.4.26 — Final Checkpoint and Guardrail Consolidation（Slice 7）
+
+目标：新增 GitHub-only v0.4.26 Go helper artifact generation pipeline prototype final checkpoint docs/tests，汇总 Slice 1-6 evidence、validation matrix、GO/STOP decision、remaining blockers，并冻结 runtime/package/default/native/fallback/readiness invariants；不 build real helpers，不新增 CI workflow，不生成 artifacts，不改 package/runtime/release behavior，不 commit/tag/push，不启动 later work。
+
+交付：
+
+- 新增 final checkpoint doc：`docs/perf/v0.4.26-go-helper-artifact-pipeline-checkpoint.md`。
+- 新增 focused checkpoint guard：`tests/suites/go-kernel-v0426-artifact-pipeline-checkpoint-docs.cjs`。
+- 更新 owner contract doc：`docs/perf/v0.4.26-go-helper-artifact-pipeline.md` 链接 final checkpoint，并更新 final recommendation 为 GitHub-only v0.4.26 checkpoint review。
+- checkpoint link prior checkpoint：`docs/perf/v0.4.25-native-helper-availability-proof-checkpoint.md`。
+- checkpoint link v0.4.26 artifacts/guards：owner doc、Slice 1 contract guard、Slice 2 build matrix guard、Slice 3 output policy guard、Slice 4 generator guard、Slice 5 smoke/handoff guard、Slice 6 storage/release guard、Slice 7 checkpoint guard。
+- 总结 Slice 1-6 outcomes：pipeline owner/release boundary、build matrix/build command policy、local/CI output policy/prototype、manifest/checksum/provenance/license/executable generator prototype、artifact smoke/clean-install handoff、storage/release/rollback policy。
+- 明确 GO only for GitHub-only v0.4.26 checkpoint after leader/user approval；GO for evidence only；STOP for helper build commands、`go build`、CI workflow、active GitHub Actions artifact storage、release assets、npm companion packages、main package inclusion、npm version/publish、package metadata/scripts、optionalDependencies、lifecycle downloads、lockfiles、go.mod/go.sum、native binaries/tarballs/generated artifacts、default Go、go-cutover/go-packaged-preview semantic changes、TypeScript fallback deletion、hidden TS fallback rollback、compactReadModelFingerprint cutover、broad Go authority、native Go pi extension、`/team readiness` expansion、commit/tag/push。
+- 明确 v0.4.26 still does not prove normal-user native availability、does not generate release artifacts、does not approve package metadata、does not pass packaged/default/fallback deletion gate；列出 remaining blockers 和 validation matrix。
+
+验收：
+
+- syntax check 和 focused checkpoint suite 通过；`node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check` 通过；可行时 default bench 与 `PI_AGENTTEAM_KERNEL=go-packaged-preview` bench 通过；不运行 `go build`，不实现 helper build commands，不新增 CI workflow，不生成 repo artifacts/manifests，不新增 go.mod/go.sum，不改 package metadata，不新增 package scripts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不使用 hidden TS fallback as rollback，不扩展 `/team readiness`，不扩大 Go authority，不 commit/tag/push，不启动 later work。
+
 ### Slice 1 — Config Bootstrap/Schema
 
 目标：先降低首次使用门槛，并建立 versioned config。
