@@ -46,6 +46,7 @@ docs/perf/*
 !docs/perf/v0.4.26-go-helper-artifact-pipeline-checkpoint.md
 !docs/perf/v0.4.27-generated-artifact-clean-install-consumption.md
 !docs/perf/v0.4.27-generated-artifact-clean-install-consumption-checkpoint.md
+!docs/perf/v0.6.28-final-prep-and-v0.6.29-entry.md
 
 # Dependencies
 node_modules/

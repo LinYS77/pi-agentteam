@@ -1891,6 +1891,16 @@ v0.4.18 交付：
 
 - syntax check 和 focused checkpoint guard 通过；Slice 1–7 guards 仍通过；`git diff --check` 通过；可行时 `node tests/run.cjs` 通过；不运行 npm version/publish/pack，不运行 `go build`，不 commit/tag/push。
 
+### v0.6.28 — Final Prep and v0.6.29 Entry
+
+目标：在正式 v0.6.29 builder/resolver 改造前，短小记录版本命名纠偏与入口决策；不实现 v0.6.29 真实 builder/resolver/smoke。
+
+交付：`docs/perf/v0.6.28-final-prep-and-v0.6.29-entry.md`、`tests/suites/go-kernel-v0628-final-prep-entry-guard.cjs`、`.gitignore` allowlist。确认 `v0.4.27` 是 legacy/misnamed tag，canonical roadmap checkpoint 是 `v0.6.27`，同指向 `bc25c3c`；从 v0.6.28/v0628 起使用新 namespace；`package.json` remains `0.6.8` 且 roadmap checkpoint tag 与 npm package version 分离。
+
+v0.6.29 入口：GO for real local/reviewer-controlled Go helper artifact builder and explicit preview manifest resolver，以 `tmuxSnapshotParse` 为首个目标；下一版本可在 reviewer/CI utility 中运行 `GO111MODULE=off go build` 输出到 OS temp 或 ignored `.agentteam-artifacts/`，并做 real helper JSON-RPC `health`/`tmuxSnapshotParse`、explicit manifest resolver、`go-packaged-preview` explicit-only integration、real clean-install preview smoke。
+
+v0.6.28 STOP：不实现 builder/resolver/smoke，不运行 `go build`，不新增 CI/upload/release/package metadata/optionalDependencies/scripts/lifecycle/postinstall/download/install-time build/go.mod/go.sum/lockfiles/native binaries/tarballs/generated artifacts/manifests，不改 default Go/default resolver/TS fallback/go-cutover/go-packaged-preview semantics，不扩展 `/team readiness` 或 normal-user UI/tool/runtime diagnostics，不 npm version/publish，不 commit/tag/push。
+
 ### Slice 1 — Config Bootstrap/Schema
 
 目标：先降低首次使用门槛，并建立 versioned config。
