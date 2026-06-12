@@ -1736,6 +1736,161 @@ v0.4.18 交付：
 
 - syntax check 和 focused checkpoint suite 通过；`node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check` 通过；可行时 default bench 与 `PI_AGENTTEAM_KERNEL=go-packaged-preview` bench 通过；不运行 `go build`，不实现 helper build commands，不新增 CI workflow，不生成 repo artifacts/manifests，不新增 go.mod/go.sum，不改 package metadata，不新增 package scripts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不使用 hidden TS fallback as rollback，不扩展 `/team readiness`，不扩大 Go authority，不 commit/tag/push，不启动 later work。
 
+### v0.4.27 — Generated Artifact Clean-Install Consumption Owner Contract（Slice 1）
+
+目标：启动 v0.4.27 Generated Artifact Clean-Install Consumption Checkpoint，新增 docs/tests-only owner contract，定义 future clean-install proof 如何 consume v0.4.26-style generated helper artifacts；该 Slice 是 GitHub-only evidence，不是 package/native/default/fallback/readiness approval，不启动 Slice 2。
+
+交付：
+
+- 新增 owner contract doc：`docs/perf/v0.4.27-generated-artifact-clean-install-consumption.md`。
+- 新增 focused docs guard：`tests/suites/go-kernel-v0427-clean-install-consumption-contract-docs.cjs`。
+- 链接 v0.4.26 final checkpoint、v0.4.26 owner doc、v0.4.26 checkpoint/smoke-handoff guards、v0.4.25 clean-install smoke 和 final native availability checkpoint。
+- 定义 clean-install consumption boundary：generated artifact input is pre-existing evidence；installed layout starts from clean temp/package-manager-equivalent root, not source checkout；manifest/helper paths package-relative/allowlisted/traversal-safe；checksum/size/provenance/license/executable/module/protocol/package/helper/capability/platform metadata required；no Go toolchain/source checkout/manual helper env/lifecycle download/install-time build/hidden network/default resolver activation。
+- 冻结 T013 runtime boundary：TS/pi control plane mandatory；pi extension/provider/tool surfaces remain TS/JS/Node-based；Go helper behind TS adapter/ports via subprocess/RPC/stdin-stdout；no native Go pi extension/provider ABI assumption；Go authority parser-only `tmuxSnapshotParse`；`compactReadModelFingerprint` TypeScript fallback/non-cutover。
+- 定义 owner responsibilities：artifact producer、consumption owner、package owner、release owner、runtime owner、readiness owner 各自边界；不批准 helper build/release assets/npm companion packages/default resolver/package metadata/readiness expansion。
+- 定义 STOP gates：no production clean-install consumption implementation、production resolver/package manager install behavior changes、artifact download、CI workflow、active GitHub Actions artifact storage、GitHub release assets、npm companion packages、main package inclusion、npm version/publish、package metadata/optionalDependencies/lifecycle/package scripts/lockfiles/go modules/native binaries/tarballs/generated manifests/artifacts/default Go/go-cutover/go-packaged-preview semantic changes/TypeScript fallback deletion/hidden TS fallback/broad Go authority/native Go pi extension/readiness expansion/Slice 2。
+
+验收：
+
+- syntax check 和 focused contract suite 通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不实现 production clean-install consumption，不改 production resolver/package manager install behavior，不改 package/native/default/fallback/readiness behavior，不运行 `go build`，不新增 CI workflow/artifact storage/release assets/npm package metadata，不 check in native binaries/tarballs/generated manifests/artifacts，不启用 default Go，不改 `go-cutover` 或 `go-packaged-preview` semantics，不删除 TypeScript fallback，不扩展 `/team readiness`，不扩大 Go authority，不启动 Slice 2。
+
+### v0.4.27 — Artifact Bundle Contract from v0.4.26 Outputs（Slice 2）
+
+目标：在 docs/tests-only + OS temp fixture 范围内，定义 future pipeline output bundle 如何作为 clean-install consumption proof 的输入；该 Slice 是 future input contract，不是 release artifact、normal-user availability proof、package/default/fallback approval，不启动 Slice 3。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.27-generated-artifact-clean-install-consumption.md` 的 Slice 2 artifact bundle contract 章节。
+- 新增 focused suite：`tests/suites/go-kernel-v0427-artifact-bundle-contract.cjs`。
+- 定义 bundle shape：helper executable、`manifest.json`、`SHA256SUMS` checksum file、`provenance.json` placeholder、license metadata/copy/checksum、attestation/signing placeholder。
+- 定义 naming/version dimensions：module `tmuxSnapshotParse`、helperVersion、protocolVersion `1`、packageVersion `0.6.8`、os、arch、linux libc where applicable。
+- 定义 safe package-relative paths only：no absolute path、no `..` traversal、no backslash escape、no repo/cwd/temp absolute leakage in accepted metadata。
+- 证明 compatibility with v0.4.26 generator shape and v0.4.25 manifest validation concepts：schema/package/module/helper/protocol/capability/platform/libc/checksum/size/executable/provenance/license/attestation fields and fail-closed unsafe path handling。
+- suite 可在 OS temp root 下创建 fake bundle、validate/cleanup，并扫描 repo/package 确认 no checked-in generated bundle/artifact/manifest/tarball/native binary。
+- 保持 STOP gates：no `go build`、helper build command、CI workflow、upload/storage、GitHub release assets、package metadata、optionalDependencies、package scripts、lifecycle/postinstall/download/install-time build、npm pack/version/publish、go.mod/go.sum/lockfiles/native binaries/tarballs/generated artifacts/manifests、production resolver/default/go-cutover/go-packaged-preview/TypeScript fallback/`/team readiness`/Go authority changes、Slice 3。
+
+验收：
+
+- syntax check 和 focused artifact bundle suite 通过；Slice 1 guard 仍通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不生成/提交 real pipeline artifacts，不启动 Slice 3 install layout matrix，不改 package/runtime/default/native/fallback/readiness behavior，不 commit/tag/push。
+
+### v0.4.27 — Future Package / Install Layout Decision Matrix（Slice 3）
+
+目标：在 docs/tests-only 范围内，比较 future companion package 与 main-package inclusion 的 clean-install consumption 安装布局；该 Slice 是 future contract/matrix，不批准 package metadata、optionalDependencies、package files 变更，不启动 Slice 4。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.27-generated-artifact-clean-install-consumption.md` 的 Slice 3 future package/install layout decision matrix 章节。
+- 新增 focused guard：`tests/suites/go-kernel-v0427-install-layout-matrix-docs.cjs`。
+- 更新 v0.4.27 Slice 1/2 guards 允许已批准的 Slice 3 section，同时继续拒绝 Slice 4 section。
+- 定义 candidate layouts：future platform companion package preferred path、main package bundled fallback path（future gate only / STOP until approval）、unsupported os/arch/libc rows fail-closed。
+- 定义 package-relative installed path concepts：`native/tmuxSnapshotParse/<helperVersion>/<platform>/agentteam-tmuxSnapshotParse`、`manifest.json`、`SHA256SUMS`、`provenance.json`、`LICENSE`/`license.json`；仅 future contract，不是 package files、package metadata、install simulation 或 checked-in generated manifests。
+- 定义 resolver input expectations：manifest/helper/checksum/provenance/license paths package-relative/traversal-safe；platform tuple os/arch/libc；module/capability `tmuxSnapshotParse`；protocol/helper/package version matching；checksum/provenance/license/platform/module/capability/protocol/helper/package skew fail closed；不激活 production default discovery。
+- 定义 cleanup/upgrade/stale-helper expectations：new helper replaces old layout only after future package-owner approval；stale helper/metadata fails closed；version/protocol/platform skew fails closed；cleanup/upgrade 不在 Slice 3 模拟。
+- 明确 package ownership boundary：companion package is future package-owner decision only；main package inclusion STOP until future approval；no package metadata/optionalDependencies/package files/scripts/lifecycle/npm pack-version-publish。
+
+验收：
+
+- syntax check 和 focused install layout matrix guard 通过；Slice 1/2 guards 仍通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不改 `package.json` metadata/files/optionalDependencies/scripts/version，不新增 package manager install simulation/npm tarball/lifecycle/postinstall/download/install-time build/native binaries/tarballs/generated manifests/generated package artifacts/go.mod/go.sum/lockfiles，不改 production resolver/default/go-cutover/go-packaged-preview/TypeScript fallback/`/team readiness`/Go authority，不启动 Slice 4，不 commit/tag/push。
+
+### v0.4.27 — Clean-Install Consumption Simulation（Slice 4）
+
+目标：用 OS temp roots 模拟 artifact bundle → future installed layout → validate/smoke 的 clean-install consumption proof；范围是 docs/tests/temp-fixture only，不做真实 package-manager install、npm tarball、runtime discovery，不启动 Slice 5。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.27-generated-artifact-clean-install-consumption.md` 的 Slice 4 clean-install consumption simulation 章节。
+- 新增 focused suite：`tests/suites/go-kernel-v0427-clean-install-consumption.cjs`。
+- 更新 v0.4.27 Slice 1–3 guards 允许已批准的 Slice 4 section，同时继续拒绝 Slice 5 section。
+- suite 在 OS temp root 创建 fake artifact bundle，再复制/映射到 temp installed layout，所有路径保持 package-relative；cleanup temp roots。
+- validate manifest/checksum/executable/license/provenance/attestation placeholders、module `tmuxSnapshotParse`、capability、protocolVersion、helperVersion、packageVersion、os/arch/libc tuple。
+- positive supported-row smoke 使用 direct explicit test path only，返回 deterministic health response 和 minimal `tmuxSnapshotParse` capability smoke。
+- negative fail-closed cases 覆盖 missing helper、wrong platform/libc、non-executable POSIX helper、checksum mismatch、stale helper、wrong package/helper/protocol/capability、missing license/provenance/attestation、corrupt smoke output、attempted default resolver use、attempted hidden TS parser fallback。
+- no-leak assertions：failure output 不包含 helper absolute path、temp root、repo/cwd、stdout/stderr、raw manifest/checksum/provenance/license body、stack traces、package internals、mailbox/report text。
+- assert no source checkout dependency、no Go toolchain、no network/lifecycle download/install-time build/manual helper env；repo/package scan confirms no checked-in generated bundles/artifacts/manifests/tarballs/native binaries。
+
+验收：
+
+- syntax check 和 focused clean-install consumption suite 通过；Slice 1–3 guards 仍通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不运行 `go build`，不实现 build commands/CI/artifact upload/release assets，不做 real package-manager install/npm tarball/npm pack-version-publish/package metadata-files-optionalDependencies-scripts-lifecycle/postinstall/download/install-time build，不改 production resolver/runtime discovery/default Go/go-cutover/go-packaged-preview/TS fallback/`/team readiness`/Go authority，不启动 Slice 5，不 commit/tag/push。
+
+### v0.4.27 — Resolver Discovery Contract Without Behavior Change（Slice 5）
+
+目标：定义 future approved resolver 如何从 installed layout 发现 helper，但 v0.4.27 不改变 production resolver/default behavior；范围是 docs/tests-only + simulated discovery helper in tests，不启动 Slice 6。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.27-generated-artifact-clean-install-consumption.md` 的 Slice 5 resolver discovery contract 章节。
+- 新增 focused suite：`tests/suites/go-kernel-v0427-resolver-discovery-contract.cjs`。
+- 更新 v0.4.27 Slice 1–4 guards 允许已批准的 Slice 5 section，同时继续拒绝 Slice 6 section。
+- 定义 future resolver inputs：installed root、package-relative manifest/helper/checksum/provenance/license paths、os/arch/libc platform tuple、module/capability/protocol/helper/package version。
+- 定义 path rules：package-relative only、no absolute/path traversal/backslash escape、no repo/cwd/temp root leakage in accepted metadata。
+- 定义 platform matching：os/arch/libc exact matching；unsupported rows fail closed and do not prove normal-user availability。
+- 定义 precedence/boundaries：explicit helper path remains highest precedence；simulated discovery future-approved only；default/unset/disabled/typescript/go/auto/current `go-cutover` must not read packaged layout；`go-packaged-preview` semantics unchanged。
+- 定义 failure mapping：missing manifest/helper、invalid path、unsupported platform、checksum/provenance/license mismatch、version/protocol/capability skew、non-executable helper、corrupt smoke output map to compact diagnostics/no-leak vocabulary。
+- 断言 runtime authority invariants：`compactReadModelFingerprint` non-cutover/TypeScript fallback；`tmuxSnapshotParse` only cutover-owned candidate；Go authority parser-only behind TS adapter/ports。
+
+验收：
+
+- syntax check 和 focused resolver discovery contract suite 通过；Slice 1–4 guards 仍通过；可行时 `node tests/run.cjs`、`npm run typecheck`、`git diff --check` 通过；不实现 production resolver/runtime discovery/default discovery，不激活 packaged discovery for default/unset/disabled/typescript/go/auto/current go-cutover，不改 `go-packaged-preview` semantics/helper path precedence/default Go/TS fallback/hidden fallback rollback/`/team readiness`/package metadata/build-CI-artifact-package behavior，不启动 Slice 6，不 commit/tag/push。
+
+### v0.4.27 — Failure Rollback No-Leak Hardening（Slice 6）
+
+目标：把 v0.4.25/v0.4.26 compact fail-closed/no-leak diagnostics 与 rollback policy 应用到 v0.4.27 install-consumption 层；范围是 docs/tests-only，不启动 Slice 7。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.27-generated-artifact-clean-install-consumption.md` 的 Slice 6 failure rollback no-leak hardening 章节。
+- 新增 focused suite：`tests/suites/go-kernel-v0427-consumption-failure-rollback-no-leak.cjs`。
+- 更新 v0.4.27 Slice 1–5 guards 允许已批准的 Slice 6 section，同时继续拒绝 Slice 7 section。
+- 定义 install-consumption failure vocabulary：`artifact_missing`、`metadata_invalid`、`integrity_mismatch`、`artifact_not_executable`、`unsupported_platform`、`version_skew`、`protocol_skew`、`capability_skew`、`license_missing`、`provenance_missing`、`install_layout_invalid`、`package_unavailable`、`smoke_corrupt_output`。
+- 定义 compact diagnostic contract：status `unavailable`、result marker `fail-closed`、failureKind、remediation、releaseDecision、blockerStatus、rollbackPolicy；不暴露 raw details。
+- 定义 no-leak expectations：不泄漏 helper absolute path、temp/installed root、repo/cwd、stdout/stderr、raw manifest/checksum/provenance/license body、raw package internals、stack trace、mailbox/report text。
+- 定义 unsupported-platform policy：unsupported os/arch/libc rows fail closed，并继续 block normal-user availability/default/native/fallback deletion，除非 support policy narrowed and explicitly approved。
+- 定义 rollback boundary：rollback 是 corrected release/tag/package/deprecation/default-disable policy，不是 cutover 后 hidden runtime TypeScript fallback；explicit future consumption smoke/cutover failure 不得 silent TS parser fallback。
+
+验收：
+
+- syntax check 和 focused failure rollback no-leak suite 通过；Slice 1–5 guards 仍通过；可行时 `node tests/run.cjs`、`git diff --check` 通过；不新增 normal-user UI、model-callable tools、ambient `/team` diagnostics 或 `/team readiness` expansion，不改变 production diagnostics/resolver/default behavior，不删除 TypeScript fallback，不使用 hidden TS fallback as rollback，不新增 package/build/CI/artifact/native metadata/files，不运行 `go build`，不新增 go.mod/go.sum/lockfiles，不启动 Slice 7，不 commit/tag/push。
+
+### v0.4.27 — Package Native Guardrails and Readiness Containment（Slice 7）
+
+目标：集中守住 v0.4.27 没有向 package/native/runtime/UI 滑坡；范围是 docs/tests-only guardrail consolidation，不启动 Slice 8 final checkpoint。
+
+交付：
+
+- 更新 owner contract doc：`docs/perf/v0.4.27-generated-artifact-clean-install-consumption.md` 的 Slice 7 package/native/readiness/runtime guardrail consolidation 章节。
+- 新增 focused suite：`tests/suites/go-kernel-v0427-package-native-guardrails.cjs`。
+- 更新 v0.4.27 Slice 1–6 guards 允许已批准的 Slice 7 section，同时继续拒绝 Slice 8/final checkpoint section。
+- 守住 package/npm：`package.json` version remains `0.6.8`；no `npm version`/`npm publish`/npm pack-publish-package metadata approval；no optionalDependencies/native package metadata/package files inclusion/package scripts/lifecycle hooks/postinstall/download/install-time build。
+- 守住 modules/lockfiles/artifacts：no package-lock/npm-shrinkwrap/go.mod/go.sum；no checked-in native binaries/tarballs/generated artifacts/generated manifests/checksum/provenance/attestation/package artifacts；`.agentteam-artifacts/` 等 local prototype output must remain ignored/excluded and not committed。
+- 守住 build/CI/release：no helper build commands、no running `go build`、no CI workflow、no GitHub Actions artifact upload、no GitHub release assets。
+- 守住 runtime/modes：default/unset remains safe；no default Go；no production resolver/default discovery；no `go-cutover` or `go-packaged-preview` semantic changes；no TypeScript fallback deletion；`compactReadModelFingerprint` remains TypeScript fallback/non-cutover。
+- 守住 UI/tool/readiness：`/team readiness` remains transitional reviewer tooling；no new `/team` options、model-callable tools、ambient diagnostics、UI expansion、runtime control plane。
+- 守住 Go authority：parser-only `tmuxSnapshotParse` candidate behind TS adapter/ports；Go 不拥有 tmux execution/capture、state writes、worker lifecycle、task/report governance、PlanRun、full-text boundaries、package/release authority、UI rendering、command control plane。
+
+验收：
+
+- syntax check 和 focused package/native guardrails suite 通过；Slice 1–6 guards 仍通过；可行时 `node tests/run.cjs`、`git diff --check` 通过；不新增 final checkpoint doc/guard，不总结 v0.4.27 final GO/STOP as Slice 8，不改 production code，不改 package/native/runtime/UI/readiness behavior，不 commit/tag/push。
+
+### v0.4.27 — Generated Artifact Clean-Install Consumption Gate Final Checkpoint（Slice 8）
+
+目标：新增 GitHub-only v0.4.27 final checkpoint docs/tests，汇总 Slice 1–7 evidence、GO/STOP decision、validation matrix、remaining blockers，并冻结 runtime/package/default/native/fallback/readiness invariants；不得 commit/tag/push，不做 release/package/build/default 行为。
+
+交付：
+
+- 新增 final checkpoint doc：`docs/perf/v0.4.27-generated-artifact-clean-install-consumption-checkpoint.md`。
+- 新增 focused checkpoint guard：`tests/suites/go-kernel-v0427-consumption-checkpoint-docs.cjs`。
+- 更新 owner/evidence doc：`docs/perf/v0.4.27-generated-artifact-clean-install-consumption.md` 链接 final checkpoint，并将 final recommendation 更新为 GitHub-only v0.4.27 checkpoint review。
+- 更新 v0.4.27 Slice 1–7 guards 允许 final checkpoint section/link，同时继续拒绝 v0.4.28 implementation sections。
+- 如需要更新 `.gitignore` allowlist final checkpoint doc。
+- GO 覆盖：GitHub-only v0.4.27 evidence after leader/user approval；artifact bundle contract from v0.4.26 outputs；future package/install layout matrix；temp clean-install consumption simulation；resolver discovery contract only without production behavior change；failure/rollback/unsupported-platform/no-leak hardening；package/native/readiness/runtime guardrail consolidation。
+- STOP 覆盖：npm version/publish/pack approval、package version/metadata/files/optionalDependencies/scripts/lifecycle/postinstall/download/install-time build、lockfiles/go.mod/go.sum/native binaries/tarballs/generated artifacts-manifests-checksum-provenance-attestation-package artifacts、helper build/`go build`/CI/upload-storage/release assets/npm companion/main package inclusion、default Go/default resolver/go-cutover/go-packaged-preview semantic changes/TypeScript fallback deletion/hidden TS fallback rollback/compactReadModelFingerprint cutover、broad Go authority/native Go pi extension/`/team readiness` expansion/normal-user UI-tool-runtime diagnostics、commit/tag/push before approval。
+- Validation matrix 覆盖 Slice 1–8 suites、v0.4.25 availability proof、v0.4.26 artifact pipeline、v0.4.22 package/native guardrails、v0.4.23 diagnostics/no-leak/parser failure、v0.4.24 readiness containment、`node tests/run.cjs`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check`、default bench、`PI_AGENTTEAM_KERNEL=go-packaged-preview` bench、package/native sanity scans、no checked-in generated output scans。
+- Remaining blockers 覆盖 actual helper build implementation、approved CI artifact storage、real generated artifacts across final matrix、real clean install across supported platforms/package managers、package release ownership、companion package metadata approval、normal-user diagnostics UX if needed、production resolver/default parser failure proof、rollback/default-disable execution plan、explicit user approval for package/default/fallback deletion。
+
+验收：
+
+- syntax check 和 focused checkpoint guard 通过；Slice 1–7 guards 仍通过；`git diff --check` 通过；可行时 `node tests/run.cjs` 通过；不运行 npm version/publish/pack，不运行 `go build`，不 commit/tag/push。
+
 ### Slice 1 — Config Bootstrap/Schema
 
 目标：先降低首次使用门槛，并建立 versioned config。
