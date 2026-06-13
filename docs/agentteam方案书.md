@@ -1901,6 +1901,14 @@ v0.6.29 入口：GO for real local/reviewer-controlled Go helper artifact builde
 
 v0.6.28 STOP：不实现 builder/resolver/smoke，不运行 `go build`，不新增 CI/upload/release/package metadata/optionalDependencies/scripts/lifecycle/postinstall/download/install-time build/go.mod/go.sum/lockfiles/native binaries/tarballs/generated artifacts/manifests，不改 default Go/default resolver/TS fallback/go-cutover/go-packaged-preview semantics，不扩展 `/team readiness` 或 normal-user UI/tool/runtime diagnostics，不 npm version/publish，不 commit/tag/push。
 
+### v0.6.29 — Real Go Helper Artifact Entry Checkpoint
+
+目标：新增 final checkpoint docs/guard，汇总已完成的真实 evidence：local/reviewer-controlled helper artifact builder、host-platform `GO111MODULE=off go build`、real metadata validation and JSON-RPC `health`/`tmuxSnapshotParse` smoke、pure explicit packaged manifest resolver、explicit-only `go-packaged-preview` manifest/root integration、real artifact → temp installed layout → resolver → adapter preview parse。
+
+交付：`docs/perf/v0.6.29-real-go-helper-artifact-entry-checkpoint.md`、`tests/suites/go-kernel-v0629-real-implementation-checkpoint-docs.cjs`、`.gitignore` allowlist。该 checkpoint 不新增 runtime 行为；`package.json` remains `0.6.8`，不新增 npm lifecycle/install/package metadata/optionalDependencies/scripts、CI workflow/upload/release assets、go.mod/go.sum/lockfiles、checked-in native binaries/generated manifests/tarballs/artifacts；default/disabled/typescript/go/auto/current `go-cutover` unchanged，`compactReadModelFingerprint` remains TypeScript fallback/non-cutover，Go authority remains parser-only `tmuxSnapshotParse` preview path，`/team readiness` not expanded。
+
+剩余 blockers：host-platform only, not cross-platform matrix；temp installed layout preview, not real package-manager install；no normal-user native availability proof；later versions still need CI artifact storage/cross-platform matrix/package metadata/release ownership/default resolver proof/fallback deletion approval。
+
 ### Slice 1 — Config Bootstrap/Schema
 
 目标：先降低首次使用门槛，并建立 versioned config。

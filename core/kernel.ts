@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { resolveAgentTeamPackagedHelperManifest } from './kernelPackagedResolver.js'
 import { compactPanelReadModelFingerprint, compactReadModelProjection } from './readModelFingerprint.js'
 
 export const AGENTTEAM_KERNEL_PROTOCOL_VERSION = 1
@@ -163,6 +164,8 @@ export type AgentTeamKernelAdapterOptions = {
   helperPath?: string | null
   packagedHelperPath?: string | null
   packagedHelperStatus?: AgentTeamKernelPackagedHelperStatus | string | null
+  packagedHelperManifestPath?: string | null
+  packagedHelperInstallRoot?: string | null
   timeoutMs?: number
 }
 
@@ -175,10 +178,10 @@ function compactKernelText(value: unknown, fallback = ''): string {
 }
 
 function compactHelperPath(value: unknown): string {
-  const text = compactKernelText(value, 'helper')
-  const normalized = text.replace(/\\/g, '/')
-  const parts = normalized.split('/').filter(Boolean)
-  return parts.length > 0 ? parts[parts.length - 1] : 'helper'
+  const raw = String(value ?? '').trim().replace(/\\/g, '/')
+  const parts = raw.split('/').filter(Boolean)
+  const basename = parts.length > 0 ? parts[parts.length - 1] : raw
+  return compactKernelText(basename, 'helper')
 }
 
 function fallbackMessage(kind: AgentTeamKernelFallbackKind, detail?: unknown): string {
@@ -229,6 +232,18 @@ export function defaultAgentTeamKernelPackagedHelperPath(env: Record<string, str
   return trimmed || undefined
 }
 
+export function defaultAgentTeamKernelPackagedHelperManifestPath(env: Record<string, string | undefined> = process.env): string | undefined {
+  const path = env.PI_AGENTTEAM_KERNEL_PACKAGED_HELPER_MANIFEST
+  const trimmed = path?.trim()
+  return trimmed || undefined
+}
+
+export function defaultAgentTeamKernelPackagedHelperRoot(env: Record<string, string | undefined> = process.env): string | undefined {
+  const path = env.PI_AGENTTEAM_KERNEL_PACKAGED_HELPER_ROOT
+  const trimmed = path?.trim()
+  return trimmed || undefined
+}
+
 function normalizeAgentTeamKernelPackagedHelperStatus(value?: unknown): AgentTeamKernelPackagedHelperStatus {
   const raw = String(value ?? '').trim().toLowerCase()
   if (raw === 'unsupported-platform') return 'unsupported-platform'
@@ -239,6 +254,11 @@ function normalizeAgentTeamKernelPackagedHelperStatus(value?: unknown): AgentTea
 function packagedPreviewResolverFailure(status: AgentTeamKernelPackagedHelperStatus): { kind: AgentTeamKernelCutoverFailureKind; detail: string } | undefined {
   if (status === 'unsupported-platform') return { kind: 'missing-helper', detail: 'unsupported platform' }
   if (status === 'integrity-failed') return { kind: 'helper-incompatible-response', detail: 'integrity check failed' }
+  return undefined
+}
+
+function packagedManifestResolverFailure(input: { manifestPath?: string; installRoot?: string }): { kind: AgentTeamKernelCutoverFailureKind; detail: string } | undefined {
+  if (input.manifestPath || input.installRoot) return { kind: 'missing-helper', detail: 'packaged manifest root/path incomplete' }
   return undefined
 }
 
@@ -317,15 +337,29 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
   const packagedHelperPath = packagedPreviewRequested && !explicitHelperPath && !packagedResolverFailure
     ? (options.packagedHelperPath === null ? undefined : (options.packagedHelperPath?.trim() || defaultAgentTeamKernelPackagedHelperPath(env)))
     : undefined
-  const helperPath = explicitHelperPath || packagedHelperPath
-  const helperAvailable = Boolean(helperPath && !packagedResolverFailure && existsSync(helperPath))
+  const packagedManifestPath = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure
+    ? (options.packagedHelperManifestPath === null ? undefined : (options.packagedHelperManifestPath?.trim() || defaultAgentTeamKernelPackagedHelperManifestPath(env)))
+    : undefined
+  const packagedManifestInstallRoot = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure
+    ? (options.packagedHelperInstallRoot === null ? undefined : (options.packagedHelperInstallRoot?.trim() || defaultAgentTeamKernelPackagedHelperRoot(env)))
+    : undefined
+  const packagedManifestRequested = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure && Boolean(packagedManifestPath || packagedManifestInstallRoot)
+  const packagedManifestResult = packagedManifestRequested && packagedManifestPath && packagedManifestInstallRoot
+    ? resolveAgentTeamPackagedHelperManifest({ installedRoot: packagedManifestInstallRoot, manifestPath: packagedManifestPath })
+    : undefined
+  const packagedManifestFailure = packagedManifestResult?.status === 'unavailable'
+    ? { kind: packagedManifestResult.cutoverFailureKind, detail: `packaged manifest ${packagedManifestResult.failureKind}` }
+    : (packagedManifestRequested && !packagedManifestResult) ? packagedManifestResolverFailure({ manifestPath: packagedManifestPath, installRoot: packagedManifestInstallRoot }) : undefined
+  const packagedManifestHelperPath = packagedManifestResult?.status === 'available' ? packagedManifestResult.helperPath : undefined
+  const helperPath = explicitHelperPath || packagedHelperPath || packagedManifestHelperPath
+  const helperAvailable = Boolean(helperPath && !packagedResolverFailure && !packagedManifestFailure && existsSync(helperPath))
   const requestedKnownKernel = isKnownAgentTeamKernelMode(requestedMode)
   const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested
   const initialUseGo = requestedKnownKernel && (requestedMode === 'go' || requestedMode === 'auto' || cutoverRequested) && helperAvailable
   const timeoutMs = Math.max(100, Math.min(10_000, Math.floor(options.timeoutMs ?? 2_000)))
   const startupFallback = cutoverRequested ? undefined : initialFallback({ requestedMode, helperPath, helperAvailable })
   const startupCutoverFailure = cutoverRequested
-    ? packagedResolverFailure ?? (!helperAvailable ? {
+    ? packagedResolverFailure ?? packagedManifestFailure ?? (!helperAvailable ? {
       kind: 'missing-helper' as const,
       detail: helperPath ? `helper not found: ${compactHelperPath(helperPath)}` : (packagedPreviewRequested ? 'packaged helper not configured' : 'PI_AGENTTEAM_KERNEL_HELPER is not set'),
     } : undefined)
