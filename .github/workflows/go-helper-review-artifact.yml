@@ -115,4 +115,10 @@ jobs:
       - name: Reverify review-only artifact
         run: |
           artifact_root="$RUNNER_TEMP/agentteam-go-helper-review-artifact-download-${{ matrix.target }}"
-          node scripts/verify-go-helper-artifact.cjs --artifact-root "$artifact_root" --json
+          expected_source_revision=$(git rev-parse --verify HEAD)
+          node scripts/verify-go-helper-artifact.cjs --artifact-root "$artifact_root" \
+            --expected-target "${{ matrix.target }}" \
+            --expected-source-revision "$expected_source_revision" \
+            --expected-github-sha "${{ github.sha }}" \
+            --expected-github-run-id "${{ github.run_id }}" \
+            --json

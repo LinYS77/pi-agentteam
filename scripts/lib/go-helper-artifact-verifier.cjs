@@ -13,10 +13,52 @@ const PROTOCOL_VERSION = 1
 const REQUIRED_CAPABILITIES = ['health', 'profile', MODULE, 'compactReadModelFingerprint']
 const ARTIFACT_INDEX_FILENAME = 'artifact-index.json'
 const REVIEW_RETENTION_DAYS = 7
+const DEFAULT_SIZE_LIMITS = Object.freeze({
+  helperBytes: 64 * 1024 * 1024,
+  metadataBytes: 1024 * 1024,
+  totalBytes: 128 * 1024 * 1024,
+})
+const REQUIRED_FILE_KINDS = new Set(['helper', 'manifest', 'checksums', 'provenance', 'license', 'license-metadata', 'attestation'])
+const ARTIFACT_INDEX_KEYS = new Set([
+  'schemaVersion',
+  'packageName',
+  'packageVersion',
+  'module',
+  'capability',
+  'helperVersion',
+  'protocolVersion',
+  'target',
+  'platform',
+  'sourceRevision',
+  'generatedAt',
+  'github',
+  'files',
+  'reviewOnly',
+  'releaseAsset',
+  'installSource',
+  'normalUserAvailability',
+  'retentionHint',
+  'expiresHint',
+])
+const ARTIFACT_INDEX_PLATFORM_KEYS = new Set(['os', 'arch', 'libc'])
+const ARTIFACT_INDEX_GITHUB_KEYS = new Set(['repository', 'workflow', 'runId', 'runAttempt', 'sha', 'ref'])
+const ARTIFACT_INDEX_RETENTION_KEYS = new Set(['kind', 'days'])
+const ARTIFACT_INDEX_FILE_ROW_KEYS = new Set(['kind', 'path', 'sha256', 'size'])
+const ARTIFACT_INDEX_FILE_BASENAMES = new Map([
+  ['manifest', 'manifest.json'],
+  ['checksums', 'SHA256SUMS'],
+  ['provenance', 'provenance.json'],
+  ['license', 'LICENSE'],
+  ['license-metadata', 'license.json'],
+  ['attestation', 'attestation.intoto.jsonl'],
+])
 const FAILURE_KINDS = new Set([
   'artifact-root-invalid',
   'artifact-index-missing',
   'artifact-index-invalid',
+  'artifact-size-invalid',
+  'artifact-surface-invalid',
+  'context-mismatch',
   'manifest-missing',
   'manifest-invalid',
   'path-unsafe',
@@ -131,6 +173,88 @@ function assertNoMetadataLeaks(values, forbiddenRoots) {
   }
 }
 
+function resolvedSizeLimits(options = {}) {
+  const input = isRecord(options.sizeLimits) ? options.sizeLimits : {}
+  return {
+    helperBytes: Number.isFinite(input.helperBytes) && input.helperBytes >= 0 ? input.helperBytes : DEFAULT_SIZE_LIMITS.helperBytes,
+    metadataBytes: Number.isFinite(input.metadataBytes) && input.metadataBytes >= 0 ? input.metadataBytes : DEFAULT_SIZE_LIMITS.metadataBytes,
+    totalBytes: Number.isFinite(input.totalBytes) && input.totalBytes >= 0 ? input.totalBytes : DEFAULT_SIZE_LIMITS.totalBytes,
+  }
+}
+
+function assertAllowedKeys(record, allowed, failureKind, remediation, hint) {
+  for (const key of Object.keys(record)) {
+    if (!allowed.has(key)) fail(failureKind, remediation, hint)
+  }
+}
+
+function assertMaxFileSize(filePath, maxBytes, hint) {
+  let stat
+  try {
+    stat = fs.lstatSync(filePath)
+  } catch (_) {
+    fail('integrity-mismatch', 'download complete review artifact bundle', hint)
+  }
+  if (stat.isSymbolicLink()) fail('artifact-surface-invalid', 'extract review artifact without symlinks', 'symlink')
+  if (!stat.isFile()) fail('artifact-surface-invalid', 'extract review artifact with regular files only', 'entry-type')
+  if (stat.size > maxBytes) fail('artifact-size-invalid', 'use bounded review artifact bundle inputs', hint)
+  return stat
+}
+
+function assertSafeEntryName(name) {
+  if (typeof name !== 'string' || !name || name === '.' || name === '..' || path.isAbsolute(name) || name.includes('/') || name.includes('\\')) {
+    fail('artifact-surface-invalid', 'extract review artifact bundle with safe package entries only', 'entry-name')
+  }
+}
+
+function scanArtifactRoot(root, limits) {
+  const files = new Map()
+  const dirs = new Set([''])
+  let totalBytes = 0
+
+  function visit(dir, relDir) {
+    let names
+    try {
+      names = fs.readdirSync(dir)
+    } catch (_) {
+      fail('artifact-root-invalid', 'provide readable downloaded review artifact root directory', 'artifact-root')
+    }
+    for (const name of names) {
+      assertSafeEntryName(name)
+      const fullPath = path.join(dir, name)
+      const relPath = relDir ? `${relDir}/${name}` : name
+      let stat
+      try {
+        stat = fs.lstatSync(fullPath)
+      } catch (_) {
+        fail('artifact-surface-invalid', 'extract readable review artifact bundle entries', 'entry')
+      }
+      if (stat.isSymbolicLink()) fail('artifact-surface-invalid', 'extract review artifact without symlinks', 'symlink')
+      if (stat.isDirectory()) {
+        dirs.add(relPath)
+        visit(fullPath, relPath)
+        continue
+      }
+      if (!stat.isFile()) fail('artifact-surface-invalid', 'extract review artifact with regular files only', 'entry-type')
+      totalBytes += stat.size
+      if (totalBytes > limits.totalBytes) fail('artifact-size-invalid', 'use bounded review artifact bundle inputs', 'total-bytes')
+      files.set(relPath, { fullPath, size: stat.size })
+    }
+  }
+
+  visit(root, '')
+  return { files, dirs, totalBytes }
+}
+
+function relBasename(relPath) {
+  const index = relPath.lastIndexOf('/')
+  return index < 0 ? relPath : relPath.slice(index + 1)
+}
+
+function artifactSubtreeRel(index) {
+  return `native/${MODULE}/${index.helperVersion}/${index.target}`
+}
+
 function safeRelPath(root, relPath, label) {
   if (typeof relPath !== 'string' || relPath.length === 0 || path.isAbsolute(relPath) || relPath.includes('\\')) {
     fail('path-unsafe', 'extract review artifact bundle with package-relative paths only', label)
@@ -155,27 +279,27 @@ function readJsonFile(filePath, failureKind, hint) {
   }
 }
 
-function walkFiles(root, out = []) {
-  if (!fs.existsSync(root)) return out
-  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-    const full = path.join(root, entry.name)
-    if (entry.isDirectory()) walkFiles(full, out)
-    else if (entry.isFile()) out.push(full)
-  }
-  return out
-}
-
-function findUniqueRel(root, filename, failureKind) {
-  const files = walkFiles(root).filter(file => path.basename(file) === filename)
+function findUniqueRel(surface, filename, failureKind) {
+  const files = [...surface.files.keys()].filter(file => relBasename(file) === filename)
   if (files.length !== 1) fail(failureKind, `provide exactly one ${filename} in review artifact root`, filename)
-  return toPosix(path.relative(root, files[0]))
+  return files[0]
 }
 
-function resolveArtifactIndex(root, explicitRelPath) {
-  const relPath = explicitRelPath || findUniqueRel(root, ARTIFACT_INDEX_FILENAME, 'artifact-index-missing')
+function resolveArtifactIndex(root, surface, explicitRelPath) {
+  const relPath = explicitRelPath || findUniqueRel(surface, ARTIFACT_INDEX_FILENAME, 'artifact-index-missing')
   const resolved = safeRelPath(root, relPath, 'artifact-index')
-  if (!fs.existsSync(resolved.fullPath)) fail('artifact-index-missing', 'download or generate review artifact index', 'artifact-index')
+  if (!surface.files.has(resolved.relPath)) fail('artifact-index-missing', 'download or generate review artifact index', 'artifact-index')
   return resolved
+}
+
+function validateIndexSchema(index) {
+  assertAllowedKeys(index, ARTIFACT_INDEX_KEYS, 'artifact-index-invalid', 'regenerate artifact-index schema without extra keys', 'schema-keys')
+  if (!isRecord(index.platform)) fail('unsupported-platform', 'regenerate target/platform metadata', 'platform')
+  assertAllowedKeys(index.platform, ARTIFACT_INDEX_PLATFORM_KEYS, 'artifact-index-invalid', 'regenerate artifact-index platform metadata', 'platform-keys')
+  if (!isRecord(index.github)) fail('artifact-index-invalid', 'regenerate artifact-index github metadata', 'github')
+  assertAllowedKeys(index.github, ARTIFACT_INDEX_GITHUB_KEYS, 'artifact-index-invalid', 'regenerate artifact-index github metadata', 'github-keys')
+  if (!isRecord(index.retentionHint)) fail('artifact-index-invalid', 'regenerate review artifact retention metadata', 'retention')
+  assertAllowedKeys(index.retentionHint, ARTIFACT_INDEX_RETENTION_KEYS, 'artifact-index-invalid', 'regenerate review artifact retention metadata', 'retention-keys')
 }
 
 function validateIndexIdentity(index) {
@@ -193,33 +317,72 @@ function validateIndexIdentity(index) {
   if (typeof index.sourceRevision !== 'string' || !index.sourceRevision) fail('artifact-index-invalid', 'regenerate source revision metadata', 'source')
 }
 
-function validateIndexFiles(root, index) {
+function expectedString(options, key) {
+  const value = options[key]
+  return value === undefined || value === null ? undefined : String(value)
+}
+
+function githubString(index, key) {
+  if (!isRecord(index.github)) return undefined
+  const value = index.github[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+function validateExpectedContext(index, options) {
+  const checks = [
+    ['target', expectedString(options, 'expectedTarget'), index.target],
+    ['sourceRevision', expectedString(options, 'expectedSourceRevision'), index.sourceRevision],
+    ['github.sha', expectedString(options, 'expectedGithubSha'), githubString(index, 'sha')],
+    ['github.runId', expectedString(options, 'expectedGithubRunId'), githubString(index, 'runId')],
+  ]
+  for (const [field, expected, actual] of checks) {
+    if (expected === undefined) continue
+    if (actual !== expected) fail('context-mismatch', 'verify review artifact expected CI context before trusting artifact', `context-mismatch:${field}`)
+  }
+}
+
+function validateIndexFiles(root, surface, index, limits) {
   if (!Array.isArray(index.files)) fail('artifact-index-invalid', 'regenerate artifact-index file list', 'files')
-  const required = new Set(['helper', 'manifest', 'checksums', 'provenance', 'license', 'license-metadata', 'attestation'])
   const byKind = new Map()
+  const subtreeRel = artifactSubtreeRel(index)
   for (const row of index.files) {
     if (!isRecord(row) || typeof row.kind !== 'string' || typeof row.path !== 'string' || typeof row.sha256 !== 'string' || typeof row.size !== 'number') {
       fail('artifact-index-invalid', 'regenerate artifact-index file rows', 'file-row')
     }
-    if (!required.has(row.kind) || byKind.has(row.kind)) fail('artifact-index-invalid', 'regenerate artifact-index required file kinds', 'file-kind')
+    assertAllowedKeys(row, ARTIFACT_INDEX_FILE_ROW_KEYS, 'artifact-index-invalid', 'regenerate artifact-index file rows without extra keys', 'file-row-keys')
+    if (!REQUIRED_FILE_KINDS.has(row.kind) || byKind.has(row.kind)) fail('artifact-index-invalid', 'regenerate artifact-index required file kinds', 'file-kind')
     if (!/^[a-f0-9]{64}$/i.test(row.sha256) || !Number.isFinite(row.size) || row.size < 0) fail('artifact-index-invalid', 'regenerate artifact-index hash/size metadata', row.kind)
-    let resolved
-    try {
-      resolved = safeRelPath(root, row.path, row.kind)
-    } catch (error) {
-      if (error instanceof GoHelperArtifactVerifierError && error.failureKind === 'path-unsafe') throw error
-      throw error
-    }
-    if (!fs.existsSync(resolved.fullPath)) fail(row.kind === 'helper' ? 'helper-missing' : 'integrity-mismatch', 'download complete review artifact bundle', row.kind)
-    const stat = fs.statSync(resolved.fullPath)
+    const resolved = safeRelPath(root, row.path, row.kind)
+    if (!resolved.relPath.startsWith(`${subtreeRel}/`)) fail('artifact-surface-invalid', 'regenerate review artifact under expected package subtree', row.kind)
+    const expectedBasename = ARTIFACT_INDEX_FILE_BASENAMES.get(row.kind)
+    if (expectedBasename && relBasename(resolved.relPath) !== expectedBasename) fail('artifact-surface-invalid', 'regenerate review artifact file surface', row.kind)
+    if (!surface.files.has(resolved.relPath)) fail(row.kind === 'helper' ? 'helper-missing' : 'integrity-mismatch', 'download complete review artifact bundle', row.kind)
+    const stat = assertMaxFileSize(resolved.fullPath, row.kind === 'helper' ? limits.helperBytes : limits.metadataBytes, row.kind === 'helper' ? 'helper-bytes' : `${row.kind}-bytes`)
     if (stat.size !== row.size || sha256File(resolved.fullPath) !== row.sha256.toLowerCase()) fail('integrity-mismatch', 'redownload review artifact bundle and rerun verifier', row.kind)
     byKind.set(row.kind, { row, resolved })
   }
-  for (const kind of required) if (!byKind.has(kind)) fail('artifact-index-invalid', 'regenerate artifact-index required file kinds', kind)
+  for (const kind of REQUIRED_FILE_KINDS) if (!byKind.has(kind)) fail('artifact-index-invalid', 'regenerate artifact-index required file kinds', kind)
+  if (byKind.size !== REQUIRED_FILE_KINDS.size || index.files.length !== REQUIRED_FILE_KINDS.size) fail('artifact-index-invalid', 'regenerate artifact-index required file kinds', 'file-kind')
   return byKind
 }
 
-function parseChecksums(checksumPath) {
+function validateArtifactSurface(surface, indexResolved, index, indexFiles) {
+  const subtreeRel = artifactSubtreeRel(index)
+  const expected = new Set([indexResolved.relPath])
+  for (const { resolved } of indexFiles.values()) expected.add(resolved.relPath)
+  const requiredDirs = ['', 'native', `native/${MODULE}`, `native/${MODULE}/${index.helperVersion}`, subtreeRel]
+  for (const rel of requiredDirs) if (!surface.dirs.has(rel)) fail('artifact-surface-invalid', 'extract complete review artifact package subtree', 'surface-dir')
+  for (const relPath of surface.files.keys()) {
+    if (relPath === indexResolved.relPath || relPath.startsWith(`${subtreeRel}/`)) {
+      if (!expected.has(relPath)) fail('artifact-surface-invalid', 'extract review artifact bundle without extra package files', 'extra-file')
+    }
+  }
+  for (const relPath of expected) {
+    if (!surface.files.has(relPath)) fail('artifact-surface-invalid', 'extract complete review artifact package files', 'missing-file')
+  }
+}
+
+function parseChecksums(checksumPath, expectedPaths) {
   const rows = new Map()
   let source
   try {
@@ -229,9 +392,15 @@ function parseChecksums(checksumPath) {
   }
   for (const line of source.split('\n')) {
     if (!line.trim()) continue
-    const match = line.match(/^([a-f0-9]{64})  (.+)$/i)
+    const match = line.match(/^([a-f0-9]{64})  ([^\\]+)$/i)
     if (!match) fail('integrity-mismatch', 'regenerate checksum manifest', 'checksum-format')
-    rows.set(match[2], match[1].toLowerCase())
+    const relPath = match[2]
+    if (!expectedPaths.has(relPath)) fail('integrity-mismatch', 'regenerate checksum manifest with expected file rows only', 'checksum-extra')
+    if (rows.has(relPath)) fail('integrity-mismatch', 'regenerate checksum manifest without duplicate rows', 'checksum-duplicate')
+    rows.set(relPath, match[1].toLowerCase())
+  }
+  for (const relPath of expectedPaths) {
+    if (!rows.has(relPath)) fail('integrity-mismatch', 'regenerate checksum manifest with all required rows', 'checksum-missing')
   }
   return rows
 }
@@ -289,8 +458,9 @@ function validateManifest(root, manifestRelPath, index) {
     fail('artifact-not-executable', 'regenerate executable helper artifact', 'executable')
   }
 
-  const checksums = parseChecksums(paths.checksums.fullPath)
-  for (const name of ['helper', 'manifest', 'provenance', 'license', 'licenseMetadata', 'attestation']) {
+  const checksumNames = ['helper', 'manifest', 'provenance', 'license', 'licenseMetadata', 'attestation']
+  const checksums = parseChecksums(paths.checksums.fullPath, new Set(checksumNames.map(name => paths[name].relPath)))
+  for (const name of checksumNames) {
     const expected = checksums.get(paths[name].relPath)
     if (!expected || expected !== sha256File(paths[name].fullPath)) fail('integrity-mismatch', 'redownload checksum-matching review artifact bundle', `checksum-${name}`)
   }
@@ -423,11 +593,20 @@ function runDirectSmoke(helperPath, manifest) {
 
 function verifyGoHelperArtifact(options = {}) {
   const artifactRoot = path.resolve(options.artifactRoot || options.root || '')
-  if (!artifactRoot || !fs.existsSync(artifactRoot) || !fs.statSync(artifactRoot).isDirectory()) fail('artifact-root-invalid', 'provide downloaded review artifact root directory', 'artifact-root')
-  const indexResolved = resolveArtifactIndex(artifactRoot, options.artifactIndexPath)
+  if (!artifactRoot || !fs.existsSync(artifactRoot)) fail('artifact-root-invalid', 'provide downloaded review artifact root directory', 'artifact-root')
+  const rootStat = fs.lstatSync(artifactRoot)
+  if (rootStat.isSymbolicLink()) fail('artifact-surface-invalid', 'extract review artifact without symlinks', 'symlink')
+  if (!rootStat.isDirectory()) fail('artifact-root-invalid', 'provide downloaded review artifact root directory', 'artifact-root')
+  const limits = resolvedSizeLimits(options)
+  const surface = scanArtifactRoot(artifactRoot, limits)
+  const indexResolved = resolveArtifactIndex(artifactRoot, surface, options.artifactIndexPath)
+  assertMaxFileSize(indexResolved.fullPath, limits.metadataBytes, 'artifact-index-bytes')
   const index = readJsonFile(indexResolved.fullPath, 'artifact-index-invalid', 'artifact-index-json')
   validateIndexIdentity(index)
-  const indexFiles = validateIndexFiles(artifactRoot, index)
+  validateExpectedContext(index, options)
+  const indexFiles = validateIndexFiles(artifactRoot, surface, index, limits)
+  validateIndexSchema(index)
+  validateArtifactSurface(surface, indexResolved, index, indexFiles)
   const manifestRel = options.manifestPath || indexFiles.get('manifest').row.path
   const { manifest, paths } = validateManifest(artifactRoot, manifestRel, index)
   const directSmoke = runDirectSmoke(paths.helper.fullPath, manifest)

@@ -8,7 +8,7 @@ const {
 
 function usage() {
   return [
-    'Usage: node scripts/verify-go-helper-artifact.cjs --artifact-root <path> [--artifact-index <relpath>] [--manifest <relpath>] [--json]',
+    'Usage: node scripts/verify-go-helper-artifact.cjs --artifact-root <path> [--artifact-index <relpath>] [--manifest <relpath>] [--expected-target <target>] [--expected-source-revision <sha>] [--expected-github-sha <sha>] [--expected-github-run-id <id>] [--json]',
     '',
     'Verifies a downloaded review-only Go helper artifact bundle.',
     'This is reviewer/CI transport validation, not runtime download or install-source behavior.',
@@ -41,6 +41,34 @@ function parseArgs(argv) {
       const value = argv[i + 1]
       if (!value) throw new Error('--manifest requires a package-relative path')
       args.manifestPath = value
+      i += 1
+      continue
+    }
+    if (arg === '--expected-target') {
+      const value = argv[i + 1]
+      if (!value) throw new Error('--expected-target requires a target')
+      args.expectedTarget = value
+      i += 1
+      continue
+    }
+    if (arg === '--expected-source-revision') {
+      const value = argv[i + 1]
+      if (!value) throw new Error('--expected-source-revision requires a sha')
+      args.expectedSourceRevision = value
+      i += 1
+      continue
+    }
+    if (arg === '--expected-github-sha') {
+      const value = argv[i + 1]
+      if (!value) throw new Error('--expected-github-sha requires a sha')
+      args.expectedGithubSha = value
+      i += 1
+      continue
+    }
+    if (arg === '--expected-github-run-id') {
+      const value = argv[i + 1]
+      if (!value) throw new Error('--expected-github-run-id requires an id')
+      args.expectedGithubRunId = value
       i += 1
       continue
     }

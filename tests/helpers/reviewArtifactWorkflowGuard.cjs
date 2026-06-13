@@ -8,7 +8,16 @@ const REQUIRED_MATRIX_TARGET = 'linux-x64-glibc'
 const REVIEW_ARTIFACT_NAME_PREFIX = '${{ matrix.artifact-name }}'
 const REVIEW_OUTPUT_ROOT = '$RUNNER_TEMP/agentteam-go-helper-review-artifact-${{ matrix.target }}'
 const BUILDER_COMMAND = 'node scripts/build-go-helper-artifact.cjs --output-root "$output_root" --ci-review --json'
-const VERIFIER_COMMAND = 'node scripts/verify-go-helper-artifact.cjs --artifact-root "$artifact_root" --json'
+const VERIFIER_COMMAND_BASE = 'node scripts/verify-go-helper-artifact.cjs --artifact-root "$artifact_root"'
+const VERIFIER_COMMAND = VERIFIER_COMMAND_BASE
+const STRICT_VERIFIER_EXPECTED_CONTEXT_LINES = [
+  'expected_source_revision=$(git rev-parse --verify HEAD)',
+  '--expected-target "${{ matrix.target }}"',
+  '--expected-source-revision "$expected_source_revision"',
+  '--expected-github-sha "${{ github.sha }}"',
+  '--expected-github-run-id "${{ github.run_id }}"',
+  '--json',
+]
 
 function workflowDir(root) {
   return path.join(root, '.github', 'workflows')
@@ -46,6 +55,7 @@ function assertWorkflowContract(root) {
   assertIncludes(source, REVIEW_OUTPUT_ROOT, APPROVED_REVIEW_WORKFLOW_PATH)
   assertIncludes(source, BUILDER_COMMAND, APPROVED_REVIEW_WORKFLOW_PATH)
   assertIncludes(source, VERIFIER_COMMAND, APPROVED_REVIEW_WORKFLOW_PATH)
+  assertIncludes(source, '--json', APPROVED_REVIEW_WORKFLOW_PATH)
   assertIncludes(source, `name: ${REVIEW_ARTIFACT_NAME_PREFIX}`, APPROVED_REVIEW_WORKFLOW_PATH)
   assertIncludes(source, 'retention-days: 7', APPROVED_REVIEW_WORKFLOW_PATH)
   assertIncludes(source, 'if-no-files-found: error', APPROVED_REVIEW_WORKFLOW_PATH)
@@ -111,7 +121,9 @@ module.exports = {
   REVIEW_ARTIFACT_NAME_PREFIX,
   REVIEW_OUTPUT_ROOT,
   BUILDER_COMMAND,
+  STRICT_VERIFIER_EXPECTED_CONTEXT_LINES,
   VERIFIER_COMMAND,
+  VERIFIER_COMMAND_BASE,
   assertNoUnapprovedWorkflowReleaseOrPackageBehavior,
   assertWorkflowContract,
   readWorkflow,

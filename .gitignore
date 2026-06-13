@@ -50,6 +50,8 @@ docs/perf/*
 !docs/perf/v0.6.29-real-go-helper-artifact-entry-checkpoint.md
 !docs/perf/v0.6.30-ci-review-artifact-prototype.md
 !docs/perf/v0.6.30-ci-review-artifact-prototype-checkpoint.md
+!docs/perf/v0.6.31-ci-review-artifact-verifier-hardening.md
+!docs/perf/v0.6.31-ci-review-artifact-verifier-hardening-checkpoint.md
 
 # Dependencies
 node_modules/
