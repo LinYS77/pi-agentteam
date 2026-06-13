@@ -9,6 +9,8 @@ const PACKAGE_NAME = 'pi-agentteam'
 const BUILDER_VERSION = '0.6.29-slice1-local-builder'
 const REPO_ARTIFACT_DIR = '.agentteam-artifacts'
 const HELPER_BASE = 'agentteam-tmuxSnapshotParse'
+const ARTIFACT_INDEX_FILENAME = 'artifact-index.json'
+const CI_REVIEW_RETENTION_DAYS = 7
 const FAILURE_KINDS = new Set([
   'go-unavailable',
   'go-build-failed',
@@ -275,6 +277,91 @@ function assertNoMetadataLeaks(values, forbiddenRoots) {
   }
 }
 
+function safeMetadataString(value, fallback) {
+  const text = String(value || '').trim()
+  const safe = text || fallback
+  return safe.replace(/[^A-Za-z0-9._/@:-]/g, '-').slice(0, 200) || fallback
+}
+
+function githubMetadata(env) {
+  return {
+    repository: safeMetadataString(env.GITHUB_REPOSITORY, 'unknown-repository'),
+    workflow: safeMetadataString(env.GITHUB_WORKFLOW, 'unknown-workflow'),
+    runId: safeMetadataString(env.GITHUB_RUN_ID, 'unknown-run-id'),
+    runAttempt: safeMetadataString(env.GITHUB_RUN_ATTEMPT, 'unknown-run-attempt'),
+    sha: safeMetadataString(env.GITHUB_SHA, 'unknown-sha'),
+    ref: safeMetadataString(env.GITHUB_REF, 'unknown-ref'),
+  }
+}
+
+function artifactIndexFile(outputRoot, relPath, kind) {
+  const filePath = path.join(outputRoot, relPath)
+  const stat = fs.statSync(filePath)
+  return {
+    kind,
+    path: relPath,
+    sha256: sha256File(filePath),
+    size: stat.size,
+  }
+}
+
+function writeArtifactIndex(input) {
+  const {
+    extRoot,
+    outputRoot,
+    target,
+    health,
+    packageVersion,
+    sourceRevision,
+    env,
+    generatedAt,
+    summary,
+  } = input
+  const artifactDir = path.dirname(path.join(outputRoot, summary.artifact))
+  const indexPath = path.join(artifactDir, ARTIFACT_INDEX_FILENAME)
+  const files = [
+    artifactIndexFile(outputRoot, summary.artifact, 'helper'),
+    artifactIndexFile(outputRoot, summary.files.manifest, 'manifest'),
+    artifactIndexFile(outputRoot, summary.files.checksums, 'checksums'),
+    artifactIndexFile(outputRoot, summary.files.provenance, 'provenance'),
+    artifactIndexFile(outputRoot, summary.files.license, 'license'),
+    artifactIndexFile(outputRoot, summary.files.licenseMetadata, 'license-metadata'),
+    artifactIndexFile(outputRoot, summary.files.attestation, 'attestation'),
+  ]
+  const indexRel = packageRelative(outputRoot, indexPath)
+  const index = {
+    schemaVersion: 1,
+    packageName: PACKAGE_NAME,
+    packageVersion,
+    module: MODULE,
+    capability: MODULE,
+    helperVersion: health.helperVersion,
+    protocolVersion: health.protocolVersion,
+    target: target.target,
+    platform: {
+      os: target.os,
+      arch: target.arch,
+      libc: target.libc || 'not-applicable',
+    },
+    sourceRevision,
+    generatedAt,
+    github: githubMetadata(env),
+    files,
+    reviewOnly: true,
+    releaseAsset: false,
+    installSource: false,
+    normalUserAvailability: false,
+    retentionHint: {
+      kind: 'github-actions-artifact',
+      days: CI_REVIEW_RETENTION_DAYS,
+    },
+    expiresHint: `retention-days:${CI_REVIEW_RETENTION_DAYS}`,
+  }
+  writeJson(indexPath, index)
+  assertNoMetadataLeaks([index], [extRoot, outputRoot, process.cwd()])
+  return { artifactIndexPath: indexPath, artifactIndex: index, artifactIndexRel: indexRel }
+}
+
 function writeMetadata(input) {
   const {
     extRoot,
@@ -506,31 +593,51 @@ function buildGoHelperArtifact(options = {}) {
   assertHealthMatchesSource(health, sourceMetadata)
   const parserSmoke = runTmuxSnapshotParseSmoke(helperPath, env, timeoutMs)
 
-  return {
+  const metadata = writeMetadata({
     extRoot,
     outputRoot,
     outputRootKind,
     target,
-    ...writeMetadata({
+    helperPath,
+    health,
+    sourceMetadata,
+    packageVersion,
+    sourceRevision,
+    toolchain,
+    generatedAt,
+    runIdentity,
+    parserSmoke,
+  })
+  const result = {
+    extRoot,
+    outputRoot,
+    outputRootKind,
+    target,
+    ...metadata,
+  }
+  if (options.artifactIndex || options.ciReview) {
+    const index = writeArtifactIndex({
       extRoot,
       outputRoot,
-      outputRootKind,
       target,
-      helperPath,
       health,
-      sourceMetadata,
       packageVersion,
       sourceRevision,
-      toolchain,
+      env,
       generatedAt,
-      runIdentity,
-      parserSmoke,
-    }),
+      summary: metadata.summary,
+    })
+    result.artifactIndexPath = index.artifactIndexPath
+    result.artifactIndex = index.artifactIndex
+    result.summary.files.artifactIndex = index.artifactIndexRel
   }
+  return result
 }
 
 module.exports = {
+  ARTIFACT_INDEX_FILENAME,
   BUILDER_VERSION,
+  CI_REVIEW_RETENTION_DAYS,
   FAILURE_KINDS,
   MODULE,
   REPO_ARTIFACT_DIR,

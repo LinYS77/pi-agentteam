@@ -48,6 +48,8 @@ docs/perf/*
 !docs/perf/v0.4.27-generated-artifact-clean-install-consumption-checkpoint.md
 !docs/perf/v0.6.28-final-prep-and-v0.6.29-entry.md
 !docs/perf/v0.6.29-real-go-helper-artifact-entry-checkpoint.md
+!docs/perf/v0.6.30-ci-review-artifact-prototype.md
+!docs/perf/v0.6.30-ci-review-artifact-prototype-checkpoint.md
 
 # Dependencies
 node_modules/

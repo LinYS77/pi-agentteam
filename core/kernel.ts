@@ -258,7 +258,8 @@ function packagedPreviewResolverFailure(status: AgentTeamKernelPackagedHelperSta
 }
 
 function packagedManifestResolverFailure(input: { manifestPath?: string; installRoot?: string }): { kind: AgentTeamKernelCutoverFailureKind; detail: string } | undefined {
-  if (input.manifestPath || input.installRoot) return { kind: 'missing-helper', detail: 'packaged manifest root/path incomplete' }
+  if (input.manifestPath && !input.installRoot) return { kind: 'missing-helper', detail: 'packaged manifest root missing' }
+  if (input.installRoot && !input.manifestPath) return { kind: 'missing-helper', detail: 'packaged manifest path missing' }
   return undefined
 }
 

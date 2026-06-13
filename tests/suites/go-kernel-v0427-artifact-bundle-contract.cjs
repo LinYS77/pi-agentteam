@@ -3,6 +3,7 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { assertNoUnapprovedWorkflowReleaseOrPackageBehavior } = require('../helpers/reviewArtifactWorkflowGuard.cjs')
 
 const DOC = 'docs/perf/v0.4.27-generated-artifact-clean-install-consumption.md'
 const PACKAGE_NAME = 'pi-agentteam'
@@ -380,12 +381,7 @@ function assertPackageNativeSanity(root) {
 }
 
 function assertNoWorkflowReleaseOrBuild(root) {
-  const workflows = path.join(root, '.github', 'workflows')
-  if (!fs.existsSync(workflows)) return
-  for (const name of fs.readdirSync(workflows).filter(value => /\.(?:ya?ml)$/i.test(value))) {
-    const source = fs.readFileSync(path.join(workflows, name), 'utf8')
-    assert.equal(/actions\/upload-artifact|gh\s+release|npm\s+publish|go\s+build/i.test(source), false, `${name} must not add artifact/release/build workflow behavior in Slice 2`)
-  }
+  assertNoUnapprovedWorkflowReleaseOrPackageBehavior(root)
 }
 
 module.exports = {

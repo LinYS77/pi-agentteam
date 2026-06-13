@@ -1,0 +1,118 @@
+name: Go Helper Review Artifact
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'kernel/go/agentteam-kernel/**'
+      - 'scripts/build-go-helper-artifact.cjs'
+      - 'scripts/lib/go-helper-artifact-builder.cjs'
+      - 'scripts/verify-go-helper-artifact.cjs'
+      - 'scripts/lib/go-helper-artifact-verifier.cjs'
+      - '.github/workflows/go-helper-review-artifact.yml'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: go-helper-review-artifact-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-review-artifact:
+    name: Build review artifact (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: linux-x64-glibc
+            os: linux
+            arch: x64
+            libc: glibc
+            node-version: '24'
+            go-version: 'stable'
+            required: true
+            artifact-name: agentteam-go-helper-review-artifact-linux-x64-glibc
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          check-latest: true
+
+      - name: Build reviewer-controlled artifact
+        run: |
+          output_root="$RUNNER_TEMP/agentteam-go-helper-review-artifact-${{ matrix.target }}"
+          rm -rf "$output_root"
+          node scripts/build-go-helper-artifact.cjs --output-root "$output_root" --ci-review --json
+          artifact_dir="$output_root/native/tmuxSnapshotParse/0.3.0-read-model-shadow/${{ matrix.target }}"
+          test -d "$artifact_dir"
+          test -f "$artifact_dir/artifact-index.json"
+          test -f "$artifact_dir/manifest.json"
+          test -f "$artifact_dir/SHA256SUMS"
+          test -f "$artifact_dir/provenance.json"
+          test -f "$artifact_dir/LICENSE"
+          test -f "$artifact_dir/license.json"
+          test -f "$artifact_dir/attestation.intoto.jsonl"
+
+      - name: Upload review-only artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}-${{ github.sha }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/agentteam-go-helper-review-artifact-${{ matrix.target }}/**
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
+          overwrite: true
+
+  verify-review-artifact:
+    name: Verify review artifact (${{ matrix.target }})
+    needs: build-review-artifact
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: linux-x64-glibc
+            os: linux
+            arch: x64
+            libc: glibc
+            node-version: '24'
+            artifact-name: agentteam-go-helper-review-artifact-linux-x64-glibc
+            required: true
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Download review-only artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}-${{ github.sha }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/agentteam-go-helper-review-artifact-download-${{ matrix.target }}
+
+      - name: Reverify review-only artifact
+        run: |
+          artifact_root="$RUNNER_TEMP/agentteam-go-helper-review-artifact-download-${{ matrix.target }}"
+          node scripts/verify-go-helper-artifact.cjs --artifact-root "$artifact_root" --json
