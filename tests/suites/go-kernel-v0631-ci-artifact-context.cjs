@@ -90,7 +90,6 @@ function buildReviewArtifact(root, tempRoot) {
     env: fakeGoEnv(tempRoot),
     ciReview: true,
     generatedAt: FIXED_GENERATED_AT,
-    runIdentity: 'v0631-context-suite-run',
     sourceRevision: FIXED_SOURCE_REVISION,
   })
   return { outputRoot, result }
@@ -102,6 +101,8 @@ function expectedOptions(index) {
     expectedSourceRevision: index.sourceRevision,
     expectedGithubSha: index.github.sha,
     expectedGithubRunId: index.github.runId,
+    expectedGithubRunAttempt: index.github.runAttempt,
+    expectedGithubRef: index.github.ref,
   }
 }
 
@@ -172,6 +173,8 @@ function runPositiveCases(root, env, outputRoot, index) {
     '--expected-source-revision', index.sourceRevision,
     '--expected-github-sha', index.github.sha,
     '--expected-github-run-id', index.github.runId,
+    '--expected-github-run-attempt', index.github.runAttempt,
+    '--expected-github-ref', index.github.ref,
     '--json',
   ], GITHUB_ENV)
   assert.equal(cli.status, 0, cli.stderr)
@@ -187,6 +190,8 @@ function runNegativeCases(root, outputRoot, index) {
     ['sourceRevision', { expectedSourceRevision: LEAK_SENTINELS[1] }, [index.sourceRevision, LEAK_SENTINELS[1]]],
     ['github.sha', { expectedGithubSha: LEAK_SENTINELS[2] }, [index.github.sha, LEAK_SENTINELS[2]]],
     ['github.runId', { expectedGithubRunId: LEAK_SENTINELS[3] }, [index.github.runId, LEAK_SENTINELS[3]]],
+    ['github.runAttempt', { expectedGithubRunAttempt: LEAK_SENTINELS[3] }, [index.github.runAttempt, LEAK_SENTINELS[3]]],
+    ['github.ref', { expectedGithubRef: LEAK_SENTINELS[3] }, [index.github.ref, LEAK_SENTINELS[3]]],
   ]
 
   for (const [name, options, forbiddenValues] of cases) {
@@ -203,7 +208,8 @@ function runNegativeCases(root, outputRoot, index) {
 
   const cli = runCli(root, [
     '--artifact-root', outputRoot,
-    '--expected-github-run-id', LEAK_SENTINELS[3],
+    '--expected-github-run-id', index.github.runId,
+    '--expected-github-run-attempt', LEAK_SENTINELS[3],
     '--json',
   ], GITHUB_ENV)
   assert.equal(cli.status, 1, 'CLI mismatch should fail closed')
@@ -245,6 +251,8 @@ function assertWorkflowContextWiringSafe(root) {
     '--expected-source-revision "$expected_source_revision"',
     '--expected-github-sha "${{ github.sha }}"',
     '--expected-github-run-id "${{ github.run_id }}"',
+    '--expected-github-run-attempt "${{ github.run_attempt }}"',
+    '--expected-github-ref "${{ github.ref }}"',
   ]) assert.ok(workflow.includes(expected), `workflow strict expected-context wiring should include ${expected}`)
   assert.equal(/--expected-source-revision\s+"\$\{\{\s*github\.sha\s*\}\}"/.test(workflow), false, 'sourceRevision must not be conflated with github.sha')
 }

@@ -16,6 +16,8 @@ const STRICT_VERIFIER_EXPECTED_CONTEXT_LINES = [
   '--expected-source-revision "$expected_source_revision"',
   '--expected-github-sha "${{ github.sha }}"',
   '--expected-github-run-id "${{ github.run_id }}"',
+  '--expected-github-run-attempt "${{ github.run_attempt }}"',
+  '--expected-github-ref "${{ github.ref }}"',
   '--json',
 ]
 

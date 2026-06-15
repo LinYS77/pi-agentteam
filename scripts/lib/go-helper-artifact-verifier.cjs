@@ -52,6 +52,25 @@ const ARTIFACT_INDEX_FILE_BASENAMES = new Map([
   ['license-metadata', 'license.json'],
   ['attestation', 'attestation.intoto.jsonl'],
 ])
+const SOURCE_ROOT_REL = 'kernel/go/agentteam-kernel'
+const GO_BUILD_ENV = Object.freeze({ GO111MODULE: 'off' })
+const PROVENANCE_OUTPUT_ROOT_KINDS = new Set(['os-temp', 'repo-ignored-artifacts'])
+const PROVENANCE_KEYS = new Set([
+  'schemaVersion',
+  'builderVersion',
+  'packageName',
+  'packageVersion',
+  'module',
+  'source',
+  'build',
+  'smoke',
+  'outputRootKind',
+])
+const PROVENANCE_SOURCE_KEYS = new Set(['path', 'revision'])
+const PROVENANCE_BUILD_KEYS = new Set(['command', 'env', 'cwd', 'toolchain', 'runIdentity', 'generatedAt'])
+const PROVENANCE_BUILD_ENV_KEYS = new Set(['GO111MODULE'])
+const PROVENANCE_SMOKE_KEYS = new Set(['health', MODULE])
+const PROVENANCE_TMUX_SMOKE_KEYS = new Set(['ok', 'paneCount', 'capturedAt'])
 const FAILURE_KINDS = new Set([
   'artifact-root-invalid',
   'artifact-index-missing',
@@ -71,6 +90,7 @@ const FAILURE_KINDS = new Set([
   'integrity-mismatch',
   'artifact-not-executable',
   'provenance-missing',
+  'provenance-mismatch',
   'license-missing',
   'attestation-invalid',
   'jsonrpc-smoke-failed',
@@ -334,6 +354,8 @@ function validateExpectedContext(index, options) {
     ['sourceRevision', expectedString(options, 'expectedSourceRevision'), index.sourceRevision],
     ['github.sha', expectedString(options, 'expectedGithubSha'), githubString(index, 'sha')],
     ['github.runId', expectedString(options, 'expectedGithubRunId'), githubString(index, 'runId')],
+    ['github.runAttempt', expectedString(options, 'expectedGithubRunAttempt'), githubString(index, 'runAttempt')],
+    ['github.ref', expectedString(options, 'expectedGithubRef'), githubString(index, 'ref')],
   ]
   for (const [field, expected, actual] of checks) {
     if (expected === undefined) continue
@@ -405,7 +427,36 @@ function parseChecksums(checksumPath, expectedPaths) {
   return rows
 }
 
-function validateManifest(root, manifestRelPath, index) {
+function safeComparableString(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= 200 && !/[\r\n\t]/.test(value) && !path.isAbsolute(value) && !/[A-Za-z]:[\\/]/.test(value) && !/(?:^|[^A-Za-z0-9])(?:\.{1,2}[\\/]|\/(?:home|tmp|var|Users|private|mnt|workspace)[\\/])/.test(value) && !/\b(?:PATH|HOME|GITHUB_TOKEN|NODE_OPTIONS|GOROOT|GOPATH|GOENV)=/i.test(value)
+}
+
+function assertExactCommand(command, helperRelPath) {
+  const expected = ['go', 'build', '-trimpath', '-o', helperRelPath, '.']
+  if (!Array.isArray(command) || command.length !== expected.length || command.some((part, index) => part !== expected[index])) {
+    fail('provenance-mismatch', 'regenerate exact review helper build command metadata', 'build-command')
+  }
+}
+
+function assertExactBuildEnv(env) {
+  if (!isRecord(env)) fail('provenance-mismatch', 'regenerate bounded build environment metadata', 'build-env')
+  assertAllowedKeys(env, PROVENANCE_BUILD_ENV_KEYS, 'provenance-mismatch', 'regenerate bounded build environment metadata', 'build-env-keys')
+  if (env.GO111MODULE !== GO_BUILD_ENV.GO111MODULE) fail('provenance-mismatch', 'regenerate bounded build environment metadata', 'build-env')
+}
+
+function assertBuildBlock(block, helperRelPath, hint) {
+  if (!isRecord(block)) fail('provenance-mismatch', 'regenerate bounded build context metadata', hint)
+  assertExactCommand(block.command, helperRelPath)
+  assertExactBuildEnv(block.env)
+  if (block.cwd !== SOURCE_ROOT_REL) fail('provenance-mismatch', 'regenerate source-root build context metadata', 'build-cwd')
+  if (!safeComparableString(block.toolchain) || !block.toolchain.startsWith('go version ')) {
+    fail('provenance-mismatch', 'regenerate compact Go toolchain metadata', 'build-toolchain')
+  }
+  if (!safeComparableString(block.runIdentity)) fail('provenance-mismatch', 'regenerate compact run identity metadata', 'build-run')
+  if (!safeComparableString(block.generatedAt)) fail('provenance-mismatch', 'regenerate generatedAt build metadata', 'build-generatedAt')
+}
+
+function validateManifest(root, manifestRelPath, index, options) {
   const manifestResolved = safeRelPath(root, manifestRelPath, 'manifest')
   if (!fs.existsSync(manifestResolved.fullPath)) fail('manifest-missing', 'download review artifact manifest', 'manifest')
   const manifest = readJsonFile(manifestResolved.fullPath, 'manifest-invalid', 'manifest-json')
@@ -465,19 +516,49 @@ function validateManifest(root, manifestRelPath, index) {
     if (!expected || expected !== sha256File(paths[name].fullPath)) fail('integrity-mismatch', 'redownload checksum-matching review artifact bundle', `checksum-${name}`)
   }
 
-  validateProvenance(manifest, paths)
+  validateProvenance(index, manifest, paths, options)
   validateLicense(manifest, paths)
   validateAttestation(manifest, paths)
   return { manifest, paths }
 }
 
-function validateProvenance(manifest, paths) {
+function validateProvenance(index, manifest, paths, options) {
   const provenance = readJsonFile(paths.provenance.fullPath, 'provenance-missing', 'provenance-json')
-  if (provenance.schemaVersion !== 1 || provenance.packageName !== PACKAGE_NAME || provenance.packageVersion !== PACKAGE_VERSION || provenance.module !== MODULE) fail('provenance-missing', 'regenerate provenance identity metadata', 'provenance-identity')
-  if (!isRecord(provenance.source) || provenance.source.path !== 'kernel/go/agentteam-kernel' || !provenance.source.revision) fail('provenance-missing', 'regenerate source provenance metadata', 'source')
-  if (!isRecord(provenance.build) || !Array.isArray(provenance.build.command) || provenance.build.command.join(' ') !== `go build -trimpath -o ${paths.helper.relPath} .` || !isRecord(provenance.build.env) || provenance.build.env.GO111MODULE !== 'off' || !provenance.build.toolchain || !provenance.build.generatedAt || !provenance.build.runIdentity) fail('provenance-missing', 'regenerate build provenance metadata', 'build')
-  if (!isRecord(provenance.smoke) || provenance.smoke.health !== true || !isRecord(provenance.smoke[MODULE])) fail('provenance-missing', 'regenerate smoke provenance metadata', 'smoke')
-  if (!isRecord(manifest.source) || manifest.source.path !== provenance.source.path || manifest.source.revision !== provenance.source.revision) fail('provenance-missing', 'regenerate matching manifest/provenance source metadata', 'source-match')
+  assertAllowedKeys(provenance, PROVENANCE_KEYS, 'provenance-mismatch', 'regenerate provenance metadata without extra keys', 'provenance-keys')
+  if (provenance.schemaVersion !== 1 || provenance.packageName !== PACKAGE_NAME || provenance.packageVersion !== PACKAGE_VERSION || provenance.module !== MODULE) fail('provenance-mismatch', 'regenerate provenance identity metadata', 'provenance-identity')
+  if (!isRecord(provenance.source) || !isRecord(manifest.source)) fail('provenance-mismatch', 'regenerate source provenance metadata', 'source')
+  assertAllowedKeys(provenance.source, PROVENANCE_SOURCE_KEYS, 'provenance-mismatch', 'regenerate source provenance metadata without extra keys', 'source-keys')
+  if (provenance.source.path !== SOURCE_ROOT_REL || manifest.source.path !== SOURCE_ROOT_REL) fail('provenance-mismatch', 'regenerate source-root provenance metadata', 'source-path')
+  if (index.sourceRevision !== manifest.source.revision || index.sourceRevision !== provenance.source.revision) fail('provenance-mismatch', 'regenerate matching source revision metadata', 'source-revision')
+
+  if (!isRecord(provenance.build) || !isRecord(manifest.build)) fail('provenance-mismatch', 'regenerate build provenance metadata', 'build')
+  assertAllowedKeys(provenance.build, PROVENANCE_BUILD_KEYS, 'provenance-mismatch', 'regenerate build provenance metadata without extra keys', 'build-keys')
+  assertBuildBlock(manifest.build, paths.helper.relPath, 'manifest-build')
+  assertBuildBlock(provenance.build, paths.helper.relPath, 'provenance-build')
+  if (index.generatedAt !== manifest.build.generatedAt || index.generatedAt !== provenance.build.generatedAt) fail('provenance-mismatch', 'regenerate matching generatedAt build metadata', 'generatedAt')
+  if (JSON.stringify(manifest.build.command) !== JSON.stringify(provenance.build.command)) fail('provenance-mismatch', 'regenerate matching build command metadata', 'build-command-match')
+  if (JSON.stringify(manifest.build.env) !== JSON.stringify(provenance.build.env)) fail('provenance-mismatch', 'regenerate matching build environment metadata', 'build-env-match')
+  if (manifest.build.cwd !== provenance.build.cwd) fail('provenance-mismatch', 'regenerate matching build cwd metadata', 'build-cwd-match')
+  if (manifest.build.toolchain !== provenance.build.toolchain) fail('provenance-mismatch', 'regenerate matching Go toolchain metadata', 'build-toolchain-match')
+  if (manifest.build.runIdentity !== provenance.build.runIdentity) fail('provenance-mismatch', 'regenerate matching run identity metadata', 'build-run-match')
+
+  const expectedRunId = expectedString(options, 'expectedGithubRunId')
+  if (expectedRunId !== undefined && manifest.build.runIdentity !== `github-run-${expectedRunId}`) {
+    fail('provenance-mismatch', 'regenerate GitHub run-bound build identity metadata', 'build-run-github')
+  }
+  if (!PROVENANCE_OUTPUT_ROOT_KINDS.has(provenance.outputRootKind)) fail('provenance-mismatch', 'regenerate bounded output root provenance metadata', 'output-root')
+  if (expectedRunId !== undefined && provenance.outputRootKind !== 'os-temp') fail('provenance-mismatch', 'regenerate CI review artifact under OS temp output root', 'output-root-ci')
+
+  if (!isRecord(provenance.smoke)) fail('provenance-mismatch', 'regenerate smoke provenance metadata', 'smoke')
+  assertAllowedKeys(provenance.smoke, PROVENANCE_SMOKE_KEYS, 'provenance-mismatch', 'regenerate smoke provenance metadata without extra keys', 'smoke-keys')
+  if (provenance.smoke.health !== true || !isRecord(provenance.smoke[MODULE])) fail('provenance-mismatch', 'regenerate bounded smoke provenance metadata', 'smoke')
+  assertAllowedKeys(provenance.smoke[MODULE], PROVENANCE_TMUX_SMOKE_KEYS, 'provenance-mismatch', 'regenerate bounded tmux smoke metadata without extra keys', 'smoke-tmux-keys')
+  if (provenance.smoke[MODULE].ok !== true || typeof provenance.smoke[MODULE].paneCount !== 'number' || typeof provenance.smoke[MODULE].capturedAt !== 'number') {
+    fail('provenance-mismatch', 'regenerate bounded tmux smoke provenance metadata', 'smoke-tmux')
+  }
+  if (!isRecord(manifest.smoke) || manifest.smoke.health !== true || !isRecord(manifest.smoke[MODULE]) || manifest.smoke[MODULE].ok !== true) {
+    fail('provenance-mismatch', 'regenerate matching manifest smoke metadata', 'manifest-smoke')
+  }
 }
 
 function validateLicense(manifest, paths) {
@@ -608,7 +689,7 @@ function verifyGoHelperArtifact(options = {}) {
   validateIndexSchema(index)
   validateArtifactSurface(surface, indexResolved, index, indexFiles)
   const manifestRel = options.manifestPath || indexFiles.get('manifest').row.path
-  const { manifest, paths } = validateManifest(artifactRoot, manifestRel, index)
+  const { manifest, paths } = validateManifest(artifactRoot, manifestRel, index, options)
   const directSmoke = runDirectSmoke(paths.helper.fullPath, manifest)
   const explicitPreview = runExplicitPreviewSmoke({
     artifactRoot,

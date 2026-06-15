@@ -8,7 +8,7 @@ const {
 
 function usage() {
   return [
-    'Usage: node scripts/verify-go-helper-artifact.cjs --artifact-root <path> [--artifact-index <relpath>] [--manifest <relpath>] [--expected-target <target>] [--expected-source-revision <sha>] [--expected-github-sha <sha>] [--expected-github-run-id <id>] [--json]',
+    'Usage: node scripts/verify-go-helper-artifact.cjs --artifact-root <path> [--artifact-index <relpath>] [--manifest <relpath>] [--expected-target <target>] [--expected-source-revision <sha>] [--expected-github-sha <sha>] [--expected-github-run-id <id>] [--expected-github-run-attempt <attempt>] [--expected-github-ref <ref>] [--json]',
     '',
     'Verifies a downloaded review-only Go helper artifact bundle.',
     'This is reviewer/CI transport validation, not runtime download or install-source behavior.',
@@ -69,6 +69,20 @@ function parseArgs(argv) {
       const value = argv[i + 1]
       if (!value) throw new Error('--expected-github-run-id requires an id')
       args.expectedGithubRunId = value
+      i += 1
+      continue
+    }
+    if (arg === '--expected-github-run-attempt') {
+      const value = argv[i + 1]
+      if (!value) throw new Error('--expected-github-run-attempt requires an attempt')
+      args.expectedGithubRunAttempt = value
+      i += 1
+      continue
+    }
+    if (arg === '--expected-github-ref') {
+      const value = argv[i + 1]
+      if (!value) throw new Error('--expected-github-ref requires a ref')
+      args.expectedGithubRef = value
       i += 1
       continue
     }

@@ -52,6 +52,8 @@ docs/perf/*
 !docs/perf/v0.6.30-ci-review-artifact-prototype-checkpoint.md
 !docs/perf/v0.6.31-ci-review-artifact-verifier-hardening.md
 !docs/perf/v0.6.31-ci-review-artifact-verifier-hardening-checkpoint.md
+!docs/perf/v0.6.32-ci-review-provenance-build-context.md
+!docs/perf/v0.6.32-ci-review-provenance-build-context-checkpoint.md
 
 # Dependencies
 node_modules/
