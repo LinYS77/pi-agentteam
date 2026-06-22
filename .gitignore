@@ -62,6 +62,8 @@ docs/perf/*
 !docs/perf/v0.6.35-pi-extension-compliance-package-surface-checkpoint.md
 !docs/perf/v0.6.36-default-go-dry-run-readiness-rollback-policy.md
 !docs/perf/v0.6.36-default-go-dry-run-readiness-rollback-policy-checkpoint.md
+!docs/perf/v0.6.37-v0.5-release-readiness-burndown.md
+!docs/perf/v0.6.37-v0.5-release-readiness-burndown-checkpoint.md
 
 # Dependencies
 node_modules/
