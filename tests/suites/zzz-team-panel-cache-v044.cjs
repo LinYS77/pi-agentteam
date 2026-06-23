@@ -62,6 +62,20 @@ function createPanelHarness(modules, helpers, teamName) {
   }
 }
 
+async function withPanelProfiling(helpers, fn) {
+  const profiling = helpers.requireDist('runtime/profiling.js')
+  const previousProfile = process.env.PI_AGENTTEAM_PROFILE
+  process.env.PI_AGENTTEAM_PROFILE = '1'
+  try {
+    profiling.resetProfiling()
+    return await fn(profiling)
+  } finally {
+    profiling.resetProfiling()
+    if (previousProfile === undefined) delete process.env.PI_AGENTTEAM_PROFILE
+    else process.env.PI_AGENTTEAM_PROFILE = previousProfile
+  }
+}
+
 function buildSelection(modules, data, state) {
   modules.viewModel.clampPanelStateToData(state, data)
   return modules.viewModel.buildPanelSelectionView(data, state)
@@ -234,6 +248,44 @@ module.exports = {
     if (renderAfterRefresh !== renderBeforeRefresh) {
       failures.push(`unchanged refresh gating expected 0 requestRender calls for identical data refresh, got ${renderAfterRefresh - renderBeforeRefresh}`)
     }
+
+    await withPanelProfiling(helpers, async profiling => {
+      const directRefreshHarness = createPanelHarness(modules, helpers, team.name)
+      const directRefreshPanel = await directRefreshHarness.open()
+      directRefreshPanel.render(140)
+      profiling.resetProfiling()
+      for (let index = 0; index < 5; index += 1) {
+        directRefreshPanel.handleInput('r')
+        await directRefreshPanel.flushRender()
+      }
+      const unchangedSummary = profiling.readProfilingSummary()
+      const unchangedRenders = directRefreshHarness.requestedRenders.length
+      if (unchangedRenders !== 0) {
+        failures.push(`direct unchanged refresh hotkey expected 0 requestRender calls across cache-hit/no-diff refreshes, got ${unchangedRenders}`)
+      }
+      if ((unchangedSummary.panel.cacheHitCount ?? 0) < 5) {
+        failures.push(`direct unchanged refresh hotkey should record cache hits for each refresh, got ${unchangedSummary.panel.cacheHitCount ?? 0}`)
+      }
+      if ((unchangedSummary.panel.diffChangedCount ?? 0) !== 0) {
+        failures.push(`direct unchanged refresh hotkey expected 0 diffChanged events, got ${unchangedSummary.panel.diffChangedCount ?? 0}`)
+      }
+
+      modules.state.updateTeamState(team.name, latest => {
+        latest.tasks[task.id].title = 'Panel cache changed-state refresh task'
+      })
+      profiling.resetProfiling()
+      const beforeChangedRefresh = directRefreshHarness.requestedRenders.length
+      directRefreshPanel.handleInput('r')
+      await directRefreshPanel.flushRender()
+      const changedSummary = profiling.readProfilingSummary()
+      const changedRenders = directRefreshHarness.requestedRenders.length - beforeChangedRefresh
+      if (changedRenders < 1) {
+        failures.push('direct changed-state refresh hotkey should request render after semantic data change')
+      }
+      if ((changedSummary.panel.diffChangedCount ?? 0) < 1) {
+        failures.push(`direct changed-state refresh hotkey should record diffChanged, got ${changedSummary.panel.diffChangedCount ?? 0}`)
+      }
+    })
 
     const burstHarness = createPanelHarness(modules, helpers, team.name)
     const burstPanel = await burstHarness.open()

@@ -262,6 +262,11 @@ export function handleTeamPanelInput(
     return
   }
 
+  if (input === 'r') {
+    deps.refresh()
+    return
+  }
+
   if (input === 'q') {
     deps.done({ type: 'close' })
     return

@@ -361,6 +361,7 @@ async function runHarness(options = {}) {
   const tempHome = providedHome || fs.mkdtempSync(prefix)
   const resolvedHome = path.resolve(tempHome)
   const originalHome = process.env.PI_AGENTTEAM_HOME
+  const originalAutoBridge = process.env.PI_AGENTTEAM_TEST_AUTO_BRIDGE
   const buildRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-agentteam-v0638-rc-harness-build-'))
   const distRoot = path.join(buildRoot, 'dist')
   const stubRoot = path.join(distRoot, 'stubs')
@@ -529,8 +530,11 @@ async function runHarness(options = {}) {
     fs.rmSync(buildRoot, { recursive: true, force: true })
     if (originalHome === undefined) delete process.env.PI_AGENTTEAM_HOME
     else process.env.PI_AGENTTEAM_HOME = originalHome
+    if (originalAutoBridge === undefined) delete process.env.PI_AGENTTEAM_TEST_AUTO_BRIDGE
+    else process.env.PI_AGENTTEAM_TEST_AUTO_BRIDGE = originalAutoBridge
     summary.isolation.liveHomeEnvRestored = process.env.PI_AGENTTEAM_HOME === originalHome
-    summary.ok = summary.ok && summary.cleanupResult !== 'failed' && summary.cleanupResult !== 'skipped-unsafe-prefix' && summary.isolation.liveHomeEnvRestored
+    summary.isolation.autoBridgeEnvRestored = process.env.PI_AGENTTEAM_TEST_AUTO_BRIDGE === originalAutoBridge
+    summary.ok = summary.ok && summary.cleanupResult !== 'failed' && summary.cleanupResult !== 'skipped-unsafe-prefix' && summary.isolation.liveHomeEnvRestored && summary.isolation.autoBridgeEnvRestored
     if (!summary.ok && summary.status === 'passed') summary.status = 'failed'
   }
   assertNoSentinelInSummary(summary)

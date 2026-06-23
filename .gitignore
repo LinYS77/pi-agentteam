@@ -65,6 +65,7 @@ docs/perf/*
 !docs/perf/v0.6.37-v0.5-release-readiness-burndown.md
 !docs/perf/v0.6.37-v0.5-release-readiness-burndown-checkpoint.md
 !docs/perf/v0.6.38-temp-home-bound-rc-harness.md
+!docs/perf/v0.6.38-p95-evidence.md
 
 # Dependencies
 node_modules/

@@ -164,19 +164,13 @@ async function flushPanel(panel) {
 
 async function runAttachedSyncIteration(panel) {
   panel.render(160)
-  panel.handleInput('a')
-  await flushPanel(panel)
-  panel.handleInput(KEYS.down)
-  await flushPanel(panel)
-  panel.handleInput(KEYS.enter)
+  panel.handleInput('r')
   await flushPanel(panel)
 }
 
 async function runGlobalRefreshIteration(panel) {
   panel.render(160)
-  panel.handleInput('a')
-  await flushPanel(panel)
-  panel.handleInput(KEYS.enter)
+  panel.handleInput('r')
   await flushPanel(panel)
 }
 

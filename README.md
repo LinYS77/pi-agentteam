@@ -144,6 +144,7 @@ Not attached to a team:
 | `↑` `↓` | Move list selection, or scroll details when detail focus is active |
 | `→` / `e` | Move scroll focus from list to detail |
 | `←` / `Esc` | Return detail scroll focus to list; then collapse details or close |
+| `r` | Refresh/reconcile in place; unchanged cache-hit/no-diff refreshes do not request render |
 | `Enter` | Open selected-item context actions / choose action |
 | `a` | Open team/global maintenance actions |
 | `q` | Close |
@@ -157,7 +158,7 @@ Available action-menu operations include:
 - selected-item context actions such as inspecting details, recovering a selected team, deleting a selected team, or removing a selected teammate;
 - team/global maintenance actions such as in-place refresh/reconcile, in-place compact leader mailbox projection sync without marking messages read or delivered, deleting the current team, and cleanup of all agentteam state/stale panes while keeping the current pane alive and clearing its agentteam label.
 
-Refresh and sync are in-place panel actions: they reload current panel data and request render only when the data/state fingerprint changes, without closing/reopening `ctx.ui.custom`. `q`/close still exits the panel. Opt-in profiling (`PI_AGENTTEAM_PROFILE=1`) records panel `dataLoad`, `readModelBuild`, `render`, `requestRender`, `cacheHit`, and `diffChanged` fields plus tmux command count/duration/success/failure.
+Refresh and sync are in-place panel actions: `r` refreshes directly, and the action menu keeps refresh/sync available alongside maintenance operations. They reload current panel data and request render only when the data/state fingerprint changes, without closing/reopening `ctx.ui.custom`. `q`/close still exits the panel. Opt-in profiling (`PI_AGENTTEAM_PROFILE=1`) records panel `dataLoad`, `readModelBuild`, `render`, `requestRender`, `cacheHit`, and `diffChanged` fields plus tmux command count/duration/success/failure.
 
 ---
 

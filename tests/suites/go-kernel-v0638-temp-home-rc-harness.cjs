@@ -143,7 +143,9 @@ function assertScriptStatic(root) {
   assertIncludes(script, '--out', SCRIPT)
   assertIncludes(lib, "const DEFAULT_PREFIX = '/tmp/pi-agentteam-v0638-rc-harness.'", LIB)
   assertIncludes(lib, "process.env.PI_AGENTTEAM_HOME = resolvedHome", LIB)
+  assertIncludes(lib, "const originalAutoBridge = process.env.PI_AGENTTEAM_TEST_AUTO_BRIDGE", LIB)
   assertIncludes(lib, "process.env.PI_AGENTTEAM_TEST_AUTO_BRIDGE = '0'", LIB)
+  assertIncludes(lib, "summary.isolation.autoBridgeEnvRestored", LIB)
   assertIncludes(lib, "summary.unsupported.push({ id: 'real-pi-tui-team-panel'", LIB)
   assertIncludes(lib, "summary.unsupported.push({ id: 'real-llm-provider-worker-execution'", LIB)
   assertIncludes(lib, 'assertNoSentinelInSummary(summary)', LIB)
@@ -180,9 +182,21 @@ function assertArtifactInvariants(root) {
   assert.deepEqual(forbiddenRecords.sort(), [], 'repo must not contain generated manifests/checksums/provenance/attestation/raw hosted/release records outside docs/tests/review helper areas')
 }
 
+async function runHarnessWithIsolatedHome(root) {
+  const inheritedHome = process.env.PI_AGENTTEAM_HOME
+  delete process.env.PI_AGENTTEAM_HOME
+  try {
+    return await runHarness({ extRoot: root })
+  } finally {
+    if (inheritedHome === undefined) delete process.env.PI_AGENTTEAM_HOME
+    else process.env.PI_AGENTTEAM_HOME = inheritedHome
+  }
+}
+
 async function assertHarnessRun(root) {
   const originalHome = process.env.PI_AGENTTEAM_HOME
-  const summary = await runHarness({ extRoot: root })
+  const originalAutoBridge = process.env.PI_AGENTTEAM_TEST_AUTO_BRIDGE
+  const summary = await runHarnessWithIsolatedHome(root)
   assert.equal(summary.ok, true, `harness should pass: ${JSON.stringify(summary.errors)}`)
   assert.equal(summary.status, 'passed')
   assert.equal(summary.cleanupResult, 'removed')
@@ -190,7 +204,9 @@ async function assertHarnessRun(root) {
   assert.equal(summary.isolation.underRepo, false)
   assert.equal(summary.isolation.initialEntryCount, 0)
   assert.equal(summary.isolation.liveHomeEnvRestored, true)
+  assert.equal(summary.isolation.autoBridgeEnvRestored, true)
   assert.equal(process.env.PI_AGENTTEAM_HOME, originalHome)
+  assert.equal(process.env.PI_AGENTTEAM_TEST_AUTO_BRIDGE, originalAutoBridge)
   assert.equal(isSafeTempHome(summary.tempHome, DEFAULT_PREFIX), true)
   assert.equal(fs.existsSync(summary.tempHome), false, 'temp home should be removed')
   assert.deepEqual(summary.commands.map(command => command.args), ['config show', 'config init', 'config validate', 'config migrate --dry-run'])

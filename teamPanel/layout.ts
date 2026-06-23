@@ -93,7 +93,7 @@ function renderHeaderLines(
 }
 
 function renderMasterFooter(scope: 'team' | 'global', focused: boolean): string | undefined {
-  return focused ? `↑↓ move · Enter item · a ${scope}` : undefined
+  return focused ? `↑↓ move · r refresh · Enter item · a ${scope}` : undefined
 }
 
 function renderDetailFooter(state: TeamPanelState): string | undefined {
