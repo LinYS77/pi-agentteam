@@ -64,6 +64,7 @@ docs/perf/*
 !docs/perf/v0.6.36-default-go-dry-run-readiness-rollback-policy-checkpoint.md
 !docs/perf/v0.6.37-v0.5-release-readiness-burndown.md
 !docs/perf/v0.6.37-v0.5-release-readiness-burndown-checkpoint.md
+!docs/perf/v0.6.38-temp-home-bound-rc-harness.md
 
 # Dependencies
 node_modules/
