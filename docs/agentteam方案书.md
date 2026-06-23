@@ -1,8 +1,9 @@
 # AgentTeam v0.7.0 核心重构方案书
 
-> 更新时间：2026-06-15
-> 版本口径：本文按产品路线 `v0.4.0 → v0.7.0` 编写；仓库当前 `package.json` 版本可能高于该路线口径，本文关注下一次 v0.7 目标形态，而不是历史标签账本。
+> 更新时间：2026-06-23
+> 版本口径：本文按产品路线 `v0.4.0 → v0.7.0` 编写；仓库当前 `package.json` 版本为 `0.6.8`，与产品路线口径、历史 GitHub checkpoint 标签、未来 npm package version 分开管理。
 > 一句话目标：`v0.7.0 = core refactor + performance baseline + bug burn-down release`。
+> 当前执行原则：历史 `v0.5` 命名的 checkpoint 文件只作为审计证据保留；新的计划、验收和 release-ready 判断一律以 v0.7.0 为最终目标。
 
 ---
 
@@ -86,6 +87,29 @@ TaskMessageRef   = no-body task-bound message index
 - 不允许 peer report 自动触发 planner/implementer。
 - 不允许 hidden terminal-key delivery fallback。
 - 不允许破坏 legacy `teams/-`。
+
+### 0.4 当前推进状态（截至 v0.6.38 本地 checkpoint）
+
+当前状态必须按“事实已完成 / 证据待补 / 明确禁止”三类阅读：
+
+- 已完成：v0.6.37 readiness burn-down map、v0.6.38 temp-home-bound RC harness、v0.6.38 p95/panel refresh runtime fix 已进入本地 checkpoint；`d272bb7` 提交前本地验证链已通过 `npm test`、`npm run typecheck`、`npm run -s check:boundaries` 和 `git diff --check`，本文档更新后仍需重新验证。
+- 已完成但不能过度声明：direct `r` refresh 已把 unchanged-state panel refresh 的 repeated `requestRender` 噪声压到 0；这证明首个 panel hot-path fix 有实质进展，但不等于全部 p95 gates 通过，也不等于 manual RC 通过。
+- 证据待补：`docs/perf/v0.6.38-p95-evidence.md` 和对应 fixture 仍需要做 post-fix evidence reconciliation，把 T115 修复前失败证据与 T116 修复后通过证据并列清楚。
+- 仍未完成：真实 operator `/team` TUI manual RC、task/message/report action p95、large mailbox p95、fsStore lock wait p95、data-change debounce、spawn bookkeeping p95、最终 v0.7 readiness checkpoint。
+- 明确禁止：当前状态不授权 tag、GitHub release、`npm version`、`npm publish`、package release、default Go、default resolver、native helper/package delivery、fallback deletion、signing 或 second-platform support。
+
+因此当前 `ready:false`。v0.6.38 是从治理文档推进到真实 harness、真实 p95 evidence 和一个 panel runtime fix 的阶段性进展，不是 v0.7 release-ready。
+
+### 0.5 当前执行路线（唯一当前主计划）
+
+新的推进顺序如下，后文历史 patch plan 只作为背景，不再覆盖此处：
+
+1. **Evidence reconciliation**：先刷新 v0.6.38 p95 evidence，让方案书、p95 doc、fixture 和 guard 都反映“修复前 fail → 修复后 pass / 仍 ready:false”的真实状态。
+2. **v0.6.38 收口**：在 evidence 对齐后重跑验证链；若通过，再决定是否 push 当前 GitHub-only checkpoint；不 tag、不 npm publish。
+3. **真实 manual RC**：使用 clean temp `PI_AGENTTEAM_HOME` 和显式 extension/session-dir 启动方式完成真实 operator `/team` TUI smoke；自动 harness 不能替代 manual RC。
+4. **补齐 p95 gaps**：为 task/message/report action、large mailbox、fsStore lock wait、data-change debounce、spawn bookkeeping 建 focused bench/harness 与 no-leak evidence。
+5. **v0.7 core refactor burn-down**：围绕 state/read-model、tmux adapter、panel loop、Task/Report/PlanRun 做实际 runtime 改进和 P0 bug burn-down，不再单纯堆治理文档。
+6. **v0.7 readiness checkpoint**：只有 broad validation、manual RC、p95 gates、P0 bug burn-down、package/runtime invariants 全部有证据后，才进入 release readiness checkpoint；release/tag/npm/default-Go/native 仍需单独授权。
 
 ---
 
@@ -848,6 +872,21 @@ v0.7.0 不做：
 ---
 
 ## 6. 版本切片与 patch plan
+
+### 6.0 当前路线总览（v0.6.38 → v0.7.0）
+
+本节优先级高于后续历史 checkpoint 账本。后续 `v0.4.x`、`v0.6.x` 段落保留为审计背景，用来说明已经做过哪些 guard、fixtures、docs 和边界决策；它们不再定义当前下一步。
+
+当前路线按可验证进展排序：
+
+1. **v0.6.38 evidence reconciliation**：对齐 post-fix p95 evidence，保留 raw artifact path/hash/no-leak 检查，明确首个 panel hot-path gate 已修复，同时列出仍 missing 的 p95 gates；结果仍 `ready:false`。
+2. **v0.6.38 GitHub-only 收口**：对齐文档/fixture/guard 后跑 `npm test`、`npm run typecheck`、`npm run -s check:boundaries`、`git diff --check`；通过后可 push GitHub checkpoint，但不 tag、不 publish。
+3. **Manual RC execution**：在 clean temp home 中验证真实 `/team` TUI、visible tmux panes、leader-gated task/report、mailbox full-text boundary、PlanRun compact visibility 和 cleanup；blocked 必须记录为 blocked，不可伪造 pass。
+4. **p95 coverage completion**：补 task/message/report action、large mailbox、fsStore lock wait、data-change debounce、spawn bookkeeping 的 focused harness；每个 gate 必须输出 pass/fail/blocked/not-covered 和 no-leak 结果。
+5. **v0.7 runtime burn-down**：以方案书六条 P0 主线为准做真实 runtime 改进，优先修影响 manual RC、p95、P0 bug 的路径；Go 只作为明确授权模块的 bounded helper/kernel。
+6. **v0.7 readiness checkpoint**：最终 checkpoint 只在证据齐全后生成，并继续区分 `ready:false` / `ready:true`；它本身不自动授权 tag、npm、release asset、default Go、native package 或 fallback deletion。
+
+历史 checkpoint 文件名中出现的 `v0.5` 只代表当时的历史命名，不代表当前最终目标。当前最终目标始终是 v0.7.0 的 `core refactor + performance baseline + bug burn-down release`。
 
 ### Slice 0 — Baseline, characterization, and Go-kernel decision
 
@@ -2172,23 +2211,34 @@ npm run -s check:boundaries
 git diff --check
 ```
 
-v0.4.x GitHub-only checkpoint 只允许 commit/tag/push；不得执行 `npm version`、不得执行 `npm publish`，也不得为了路线标签改动 `package.json` version。
+GitHub-only checkpoint 默认只允许本地验证和明确授权后的 commit/push；不得执行 `npm version`、不得执行 `npm publish`，也不得为了路线标签改动 `package.json` version。tag、release asset、package release、default Go/native/fallback deletion 都必须单独授权。
 
 ### 7.2 v0.7.0 RC 必跑
+
+v0.7.0 RC 只能在 evidence reconciliation、manual RC、p95 gaps、P0 bug burn-down 都完成后启动。RC 候选必须先跑基础链：
+
+```bash
+npm test
+npm run typecheck
+npm run -s check:boundaries
+git diff --check
+```
+
+得到明确 RC 授权后，再跑 package/e2e 相关检查：
 
 ```bash
 npm run check
 npm run release:check
-npm pack --dry-run --ignore-scripts --json
 npm run test:e2e
 ```
 
-如果 `npm run test:e2e` 依赖真实 tmux/pi 环境不可用，必须记录环境原因，并补跑 real tmux/pi manual smoke。
+`release:check` 只能作为 RC dry-run 检查；它不授权 `npm version`、`npm publish`、tag、release asset 或 package release。如果 `npm run test:e2e` 依赖真实 tmux/pi 环境不可用，必须记录环境原因，并补跑 real tmux/pi manual smoke。
 
 ### 7.3 Manual smoke
 
 ```text
-clean PI_AGENTTEAM_HOME
+clean temp PI_AGENTTEAM_HOME under /tmp/pi-agentteam-v0.7-rc.*
+launch pi with --no-extensions --extension ./index.ts --session-dir "$PI_AGENTTEAM_HOME/pi-sessions"
 first-run config bootstrap
 /team config show
 /team config validate
@@ -2224,7 +2274,7 @@ worker no-report state appears as waiting-for-report attention
 | Task/Report | no-report 可见可提醒；不伪造 report；leader close 仍 required |
 | PlanRun | user-approved；approve no task；explicit one-step advance；leader close 后多步推进；terminal done；report_done waiting_review；report_blocked/question paused；signal_failure validation/test failed；check_limits limit_reached；pause/resume/cancel；dryRun no mutation；`/team` compact visibility；全程可审计 |
 | Config | v1 schema；legacy compatibility；first-run bootstrap；effective model 可见 |
-| Performance | baseline + p95 + 相对改善数据齐全 |
+| Performance | baseline + p95 + 相对改善数据齐全；post-fix evidence reconciliation 完成；task/message/report、large mailbox、fsStore lock wait、data-change debounce、spawn bookkeeping 均有 pass/fail/blocked/not-covered 证据 |
 | Go Kernel | TypeScript/pi control plane 保留；Go 初期 optional/replaceable/fallback helper 仅作迁移脚手架；v0.4.18 起必须定义模块 cutover gate、fallback deletion plan、fail-closed diagnostics 与 release rollback；无整体 Go rewrite、无默认控制平面替换、无 native binary/package version change |
 
 ---
@@ -2244,11 +2294,14 @@ worker no-report state appears as waiting-for-report attention
 
 ## 9. 决策摘要
 
-1. v0.7.0 的准确定位是 `core refactor + performance baseline + bug burn-down release`。
-2. Team Identity、State Store/Read Model、Tmux Adapter、`/team` Panel、Task/Report/PlanRun、Config Bootstrap/Schema 是 v0.7 六条核心重构主线。
-3. v0.7 不整体 Rust/Go 重写；先保留 TypeScript/pi extension facade，完成内部 seam、profiling 和可测优化。
-4. Go 方向被限定为 JS/TS control plane + module-owned high-performance kernel：初期 fallback 只是迁移脚手架；通过 cutover gate 的模块应删除 TS runtime fallback，改为 Go-owned runtime + fail-closed diagnostics + release rollback；Go 仍不能接管治理、full-text boundary、tmux worker lifecycle 或 release/package control plane。
-5. `/team` 是 cockpit，不是 mailbox full-text reader；不能改变 `agentteam_receive` 的 read boundary。
-6. PlanRun 只允许在用户批准具体 planner report 后运行，并且一次只推进一个 leader-gated task。
-7. worker no-report 是协议可靠性 bug，必须通过 completion contract、attention、nudge 和 diagnostics 修复，不能用伪造 report 掩盖。
-8. legacy `teams/-` 必须安全保留；v0.7 不做破坏性 migration。
+1. v0.7.0 的准确定位始终是 `core refactor + performance baseline + bug burn-down release`；历史 `v0.5` checkpoint 命名只保留为审计背景。
+2. 当前 `package.json` 版本仍是 `0.6.8`，TypeScript/pi extension facade 仍是产品入口和控制面；路线推进不等于 npm package version 推进。
+3. 当前主计划固定为：v0.6.38 evidence reconciliation → v0.6.38 GitHub-only 收口 →真实 manual RC → p95 gaps 补齐 → v0.7 runtime burn-down → v0.7 readiness checkpoint。
+4. Team Identity、State Store/Read Model、Tmux Adapter、`/team` Panel、Task/Report/PlanRun、Config Bootstrap/Schema 是 v0.7 六条核心重构主线，不能推迟到 v0.8+。
+5. v0.7 不整体 Rust/Go 重写；Go 方向只限 JS/TS control plane 后面的 module-owned high-performance kernel，且必须有 cutover gate、fail-closed diagnostics、release rollback 和 fallback deletion 计划。
+6. Go 不能接管治理、full-text boundary、tmux worker lifecycle、Task/Report/PlanRun、UI rendering、command/tool/readiness control plane 或 package/release authority。
+7. `/team` 是 cockpit，不是 mailbox full-text reader；不能改变 `agentteam_receive` 的 read boundary，不能让 panel 读取或标记 full mailbox/report body。
+8. PlanRun 只允许在用户批准具体 planner report 后运行，并且一次只推进一个 leader-gated task；不得引入 hidden scheduler/autopilot。
+9. worker no-report 是协议可靠性 bug，必须通过 completion contract、attention、nudge 和 diagnostics 修复，不能用伪造 report 掩盖。
+10. legacy `teams/-` 必须安全保留；v0.7 不做破坏性 migration。
+11. tag、GitHub release、`npm version`、`npm publish`、package release、default Go、native helper/package delivery、fallback deletion、signing 和 second-platform support 都保持显式授权门。

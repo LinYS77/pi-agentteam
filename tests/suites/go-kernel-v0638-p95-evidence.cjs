@@ -3,7 +3,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 const {
   COVERED_GATES,
+  CURRENT_RELEASE_TARGET,
   ENV_METADATA,
+  HISTORICAL_V05_CONTEXT,
   NO_LEAK_MARKERS,
   NOT_COVERED_GATES,
   P95_EVIDENCE_SCHEMA_VERSION,
@@ -11,7 +13,10 @@ const {
   P95_EVIDENCE_THEME,
   RAW_ARTIFACTS,
   SUPPORTING_STATE_READ_MODEL,
-  V05_RELEASE_TARGET,
+  T115_PANEL_BASELINE_SOURCE,
+  T116_PANEL_FIX_SHA256,
+  T116_PANEL_FIX_SOURCE,
+  UNCHANGED_STATE_RECONCILIATION,
   p95Evidence,
 } = require('../fixtures/kernel/v0638/p95Evidence.cjs')
 
@@ -21,20 +26,31 @@ const SUITE = 'tests/suites/go-kernel-v0638-p95-evidence.cjs'
 const PACKAGE_VERSION = '0.6.8'
 const REQUIRED_DOC = [
   '# v0.6.38 p95 Evidence',
-  'Result: v0.6.38 collected p95 evidence from the existing deterministic state/read-model and team-panel/tmux benches.',
+  'Result: v0.6.38 p95 evidence is reconciled from the T115 pre-fix baseline to the T116 post-fix direct `r` refresh result.',
   'Final result remains `ready:false`.',
-  'Existing benches cover five Slice 3 gates as passing numeric/policy evidence.',
-  'Existing benches cover `unchanged-state-no-repeated-request-render` as failing current semantic evidence because requestRender activity is still present during cache-hit/no-diff measured refreshes.',
+  'Historical v0.5 naming in older artifacts is audit background only; the current final target remains v0.7.0.',
+  'T115 pre-fix evidence explicitly recorded `unchanged-state-no-repeated-request-render` as `fail` because requestRender activity was still present during unchanged cache-hit/no-diff measured refreshes.',
+  'T116 post-fix evidence keeps the deterministic panel/tmux p95 gates within threshold and records direct `r` refresh with attached/global `requestRenderCount=0`, `cacheHitCount=5`, and `diffChangedCount=0`, so the deterministic direct-refresh unchanged-state gate is now `pass`.',
   'Five Slice 3 gates remain `not-covered-by-existing-bench` and need future focused harnesses or manual evidence.',
   'PI_AGENTTEAM_PROFILE=1 AGENTTEAM_BENCH_FIXTURE=baseline node tests/bench/team-read-model-baseline.cjs > /tmp/pi-agentteam-v0638-p95/team-read-model-baseline.json',
   'PI_AGENTTEAM_PROFILE=1 AGENTTEAM_BENCH_FIXTURE=baseline node tests/bench/team-panel-tmux-refresh-v0415.cjs > /tmp/pi-agentteam-v0638-p95/team-panel-tmux-refresh-baseline.json',
+  'PI_AGENTTEAM_PROFILE=1 AGENTTEAM_BENCH_FIXTURE=baseline node tests/bench/team-panel-tmux-refresh-v0415.cjs > /tmp/pi-agentteam-v0638-panel-fix-bench-leader-review.json',
   '`/tmp/pi-agentteam-v0638-p95/team-read-model-baseline.json`',
   '`/tmp/pi-agentteam-v0638-p95/team-panel-tmux-refresh-baseline.json`',
+  '`/tmp/pi-agentteam-v0638-panel-fix-bench-leader-review.json`',
   '`ae8a7fe090f8467a14e18767cb297b8a4a8b571078fe12a27713595fd3f9ac5f`',
   '`1eb60acdbe7af022de9ea810ce19e402b801dd82828bf0a096c974e1775ab69a`',
   '`882294237465b9f93d47bce85dc3d61832251d2a041625eda865d40c33b7eb12`',
+  '`5f8755729d43cc35063770f3067e7d98f4f0340cdc3b26e8bed3c6934335e2e0`',
   '## No-Leak Check',
   'All searches were absent',
+  '## T115 Pre-Fix Failure Evidence',
+  '| attached | `12` | `5` | `0` |',
+  '| global | `6` | `5` | `0` |',
+  '## T116 Post-Fix Direct-Refresh Evidence',
+  '| attached | `0` | `5` | `0` |',
+  '| global | `0` | `5` | `0` |',
+  'This post-fix pass is limited to the deterministic unchanged-state direct-refresh gate.',
   '## Covered Gate Table',
   '`attached-team-warm-refresh-data-load-p95`',
   '`attached-team-warm-refresh-render-p95`',
@@ -42,20 +58,24 @@ const REQUIRED_DOC = [
   '`global-team-warm-refresh-data-load-p95`',
   '`global-team-warm-refresh-snapshot-policy`',
   '`unchanged-state-no-repeated-request-render`',
-  '| `unchanged-state-no-repeated-request-render` | `fail` |',
+  '| `unchanged-state-no-repeated-request-render` | `pass` |',
   '## Not-Covered Gates',
   '`task-message-report-action-normal-p95`',
   '`task-message-report-action-large-mailbox-p95`',
   '`fsstore-lock-wait-p95`',
   '`data-change-render-debounce-rate`',
   '`spawn-bookkeeping-p95`',
-  'Do not claim v0.5 release readiness from this artifact.',
+  'Do not claim v0.7 release readiness from this artifact.',
 ]
 const FORBIDDEN_DOC_OVERCLAIMS = [
   'v0.5 release-ready approval is granted',
   'v0.5 release ready approval is granted',
   'v0.5 is release-ready',
   'v0.5 is release ready',
+  'v0.7 release-ready approval is granted',
+  'v0.7 release ready approval is granted',
+  'v0.7 is release-ready',
+  'v0.7 is release ready',
   'release can ship',
   'ready for release',
   'all p95 gates pass',
@@ -81,12 +101,12 @@ const FORBIDDEN_DOC_OVERCLAIMS = [
   'fallback deletion is approved',
 ]
 const EXPECTED_COVERED = new Map([
-  ['attached-team-warm-refresh-data-load-p95', { status: 'pass', observed: 7, threshold: 100 }],
+  ['attached-team-warm-refresh-data-load-p95', { status: 'pass', observed: 8, threshold: 100 }],
   ['attached-team-warm-refresh-render-p95', { status: 'pass', observed: 2, threshold: 16 }],
   ['attached-team-warm-refresh-tmux-command-count', { status: 'pass', observed: 0, threshold: 1 }],
-  ['global-team-warm-refresh-data-load-p95', { status: 'pass', observed: 17, threshold: 200 }],
+  ['global-team-warm-refresh-data-load-p95', { status: 'pass', observed: 19, threshold: 200 }],
   ['global-team-warm-refresh-snapshot-policy', { status: 'pass' }],
-  ['unchanged-state-no-repeated-request-render', { status: 'fail' }],
+  ['unchanged-state-no-repeated-request-render', { status: 'pass' }],
 ])
 const EXPECTED_NOT_COVERED = [
   'task-message-report-action-normal-p95',
@@ -155,8 +175,9 @@ function assertDoc(root) {
   const doc = read(root, DOC)
   for (const expected of REQUIRED_DOC) assertIncludes(doc, expected, DOC)
   assertNoOverclaims(doc, DOC)
-  assert.match(doc, /raw benchmark JSON is preserved under `\/tmp\/pi-agentteam-v0638-p95\/` and is not checked in/i)
+  assert.match(doc, /raw benchmark JSON is preserved under `\/tmp\/` evidence paths and is not checked in/i)
   assert.match(doc, /STOP for release\/tag\/git push\/npm version\/npm publish\/native\/default-Go\/package\/signing\/second-platform\/fallback-deletion work/i)
+  assert.match(doc, /manual RC pass claims/i)
   assert.match(doc, /No raw full mailbox\/report bodies, worker transcripts, screenshots, state archives, secrets, or terminal logs are checked in/i)
 }
 
@@ -166,11 +187,13 @@ function assertFixtureShape(root) {
   assert.deepEqual(JSON.parse(JSON.stringify(p95Evidence)), p95Evidence, 'p95 evidence fixture should be plain deterministic data')
   assert.equal(p95Evidence.schemaVersion, P95_EVIDENCE_SCHEMA_VERSION)
   assert.equal(p95Evidence.theme, P95_EVIDENCE_THEME)
-  assert.equal(p95Evidence.releaseTarget, V05_RELEASE_TARGET)
+  assert.equal(p95Evidence.releaseTarget, CURRENT_RELEASE_TARGET)
+  assert.equal(p95Evidence.historicalV05Context, HISTORICAL_V05_CONTEXT)
   assert.equal(p95Evidence.status, P95_EVIDENCE_STATUS)
   assert.equal(p95Evidence.ready, false)
   assert.equal(p95Evidence.releaseReadyClaim, false)
   assert.equal(p95Evidence.provesAllP95Gates, false)
+  assert.equal(p95Evidence.manualRcPassed, false)
   assert.equal(p95Evidence.runtimeBehaviorChanged, false)
   assert.equal(p95Evidence.packageVersionChanged, false)
   assert.equal(p95Evidence.tagCreated, false)
@@ -186,18 +209,27 @@ function assertFixtureShape(root) {
   assert.deepEqual(p95Evidence.noLeak.markers, NO_LEAK_MARKERS)
   assert.equal(p95Evidence.noLeak.status, 'pass')
   assert.equal(p95Evidence.noLeak.rawFullBodiesCheckedIn, false)
+  assert.deepEqual(p95Evidence.unchangedStateReconciliation, UNCHANGED_STATE_RECONCILIATION)
   assert.deepEqual(p95Evidence.coveredGates, COVERED_GATES)
   assert.deepEqual(p95Evidence.supportingStateReadModel, SUPPORTING_STATE_READ_MODEL)
   assert.deepEqual(p95Evidence.notCoveredGates, NOT_COVERED_GATES)
 }
 
 function assertArtifactsAndEnv() {
-  assert.deepEqual(RAW_ARTIFACTS.map(artifact => artifact.id), ['env-metadata', 'team-read-model-baseline', 'team-panel-tmux-refresh-baseline'])
+  assert.deepEqual(RAW_ARTIFACTS.map(artifact => artifact.id), [
+    'env-metadata',
+    'team-read-model-baseline',
+    'team-panel-tmux-refresh-baseline',
+    'team-panel-direct-refresh-postfix-leader-review',
+  ])
   for (const artifact of RAW_ARTIFACTS) {
-    assert.match(artifact.path, /^\/tmp\/pi-agentteam-v0638-p95\//, `${artifact.id} should remain a /tmp artifact`)
+    assert.match(artifact.path, /^\/tmp\//, `${artifact.id} should remain a /tmp artifact`)
     assert.match(artifact.sha256, /^[a-f0-9]{64}$/, `${artifact.id} should record a SHA-256 hash`)
     assert.equal(artifact.parse, 'ok')
   }
+  const postFixArtifact = RAW_ARTIFACTS.find(artifact => artifact.id === 'team-panel-direct-refresh-postfix-leader-review')
+  assert.equal(postFixArtifact.path, T116_PANEL_FIX_SOURCE)
+  assert.equal(postFixArtifact.sha256, T116_PANEL_FIX_SHA256)
   assert.equal(ENV_METADATA.git, 'dc13417')
   assert.equal(ENV_METADATA.node, 'v24.9.0')
   assert.equal(ENV_METADATA.npm, '11.7.0')
@@ -209,12 +241,29 @@ function assertArtifactsAndEnv() {
   assert.equal(ENV_METADATA.cpu.logicalCpus, 96)
 }
 
+function assertUnchangedStateReconciliation() {
+  assert.equal(UNCHANGED_STATE_RECONCILIATION.gateId, 'unchanged-state-no-repeated-request-render')
+  assert.equal(UNCHANGED_STATE_RECONCILIATION.preFix.taskId, 'T115')
+  assert.equal(UNCHANGED_STATE_RECONCILIATION.preFix.status, 'fail')
+  assert.equal(UNCHANGED_STATE_RECONCILIATION.preFix.source, T115_PANEL_BASELINE_SOURCE)
+  assert.deepEqual(UNCHANGED_STATE_RECONCILIATION.preFix.observed.attached, { requestRenderCount: 12, cacheHitCount: 5, diffChangedCount: 0 })
+  assert.deepEqual(UNCHANGED_STATE_RECONCILIATION.preFix.observed.global, { requestRenderCount: 6, cacheHitCount: 5, diffChangedCount: 0 })
+  assert.equal(UNCHANGED_STATE_RECONCILIATION.postFix.taskId, 'T116')
+  assert.equal(UNCHANGED_STATE_RECONCILIATION.postFix.status, 'pass')
+  assert.equal(UNCHANGED_STATE_RECONCILIATION.postFix.inputPath, 'direct r refresh')
+  assert.equal(UNCHANGED_STATE_RECONCILIATION.postFix.source, T116_PANEL_FIX_SOURCE)
+  assert.equal(UNCHANGED_STATE_RECONCILIATION.postFix.sha256, T116_PANEL_FIX_SHA256)
+  assert.deepEqual(UNCHANGED_STATE_RECONCILIATION.postFix.observed.attached, { requestRenderCount: 0, cacheHitCount: 5, diffChangedCount: 0 })
+  assert.deepEqual(UNCHANGED_STATE_RECONCILIATION.postFix.observed.global, { requestRenderCount: 0, cacheHitCount: 5, diffChangedCount: 0 })
+  assert.match(UNCHANGED_STATE_RECONCILIATION.currentScopeLimit, /does not prove manual RC or missing p95 gates/i)
+}
+
 function assertGateInterpretation() {
   assert.deepEqual(COVERED_GATES.map(gate => gate.id), [...EXPECTED_COVERED.keys()])
   for (const gate of COVERED_GATES) {
     const expected = EXPECTED_COVERED.get(gate.id)
     assert.equal(gate.status, expected.status, `${gate.id} status`)
-    assert.match(gate.source, /^\/tmp\/pi-agentteam-v0638-p95\//, `${gate.id} source`)
+    assert.equal(gate.source, T116_PANEL_FIX_SOURCE, `${gate.id} should use post-fix direct-refresh source`)
     if (typeof expected.observed === 'number') {
       assert.equal(gate.observed, expected.observed, `${gate.id} observed`)
       assert.equal(gate.threshold.value, expected.threshold, `${gate.id} threshold`)
@@ -225,11 +274,14 @@ function assertGateInterpretation() {
   assert.deepEqual(globalPolicy.observed.commandNames, ['list-panes'])
   assert.equal(globalPolicy.observed.commandCount, globalPolicy.observed.measuredIterations)
   const unchanged = COVERED_GATES.find(gate => gate.id === 'unchanged-state-no-repeated-request-render')
-  assert.equal(unchanged.status, 'fail')
+  assert.equal(unchanged.status, 'pass')
+  assert.equal(unchanged.metric.includes('direct r refresh'), true)
+  assert.equal(unchanged.observed.attached.requestRenderCount, 0)
+  assert.equal(unchanged.observed.attached.cacheHitCount, 5)
   assert.equal(unchanged.observed.attached.diffChangedCount, 0)
+  assert.equal(unchanged.observed.global.requestRenderCount, 0)
+  assert.equal(unchanged.observed.global.cacheHitCount, 5)
   assert.equal(unchanged.observed.global.diffChangedCount, 0)
-  assert.ok(unchanged.observed.attached.requestRenderCount > 1, 'attached requestRender activity should explain fail status')
-  assert.ok(unchanged.observed.global.requestRenderCount > 1, 'global requestRender activity should explain fail status')
   assert.equal(SUPPORTING_STATE_READ_MODEL.fsStoreLockCount, 0, 'state/read-model bench must not prove fsstore lock wait')
 }
 
@@ -278,6 +330,7 @@ module.exports = {
     assertDoc(root)
     assertFixtureShape(root)
     assertArtifactsAndEnv()
+    assertUnchangedStateReconciliation()
     assertGateInterpretation()
     assertNotCovered()
     assertPackageRuntimeInvariants(root)
