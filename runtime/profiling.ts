@@ -4,6 +4,7 @@ export {
   readProfilingSummary,
   recordFsStoreEvent,
   recordPanelProfileEvent,
+  recordSpawnBookkeepingEvent,
   recordTmuxCommand,
 } from '../core/profiling.js'
 export type {
@@ -12,5 +13,6 @@ export type {
   PanelProfileMode,
   PanelReadModelProfileCounts,
   ProfilingSummary,
+  SpawnProfileEventKind,
   TmuxProfileInput,
 } from '../core/profiling.js'

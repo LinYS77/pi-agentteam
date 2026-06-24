@@ -1,4 +1,5 @@
 export type FsProfileEventKind = 'lock' | 'read' | 'parse' | 'write'
+export type SpawnProfileEventKind = 'bookkeeping'
 
 export type ProfileAttribution = {
   caller?: string
@@ -60,6 +61,22 @@ type TmuxProfileSummary = {
   }>
 }
 
+type SpawnBookkeepingProfileEvent = ProfileAttribution & {
+  kind: SpawnProfileEventKind
+  segment: string
+  durationMs: number
+  ok: boolean
+  workerName?: string
+  role?: string
+}
+
+type SpawnProfileSummary = {
+  bookkeepingCount: number
+  totalBookkeepingMs: number
+  segments: string[]
+  events: SpawnBookkeepingProfileEvent[]
+}
+
 export type PanelProfileMode = 'attached' | 'global'
 
 export type PanelReadModelProfileCounts = {
@@ -111,6 +128,7 @@ export type ProfilingSummary = {
   fsStore: FsStoreProfileSummary
   tmux: TmuxProfileSummary
   panel: PanelProfileSummary
+  spawn: SpawnProfileSummary
 }
 
 function emptyFsStoreSummary(): FsStoreProfileSummary {
@@ -140,6 +158,15 @@ function emptyTmuxSummary(): TmuxProfileSummary {
     failureCount: 0,
     totalDurationMs: 0,
     commandNames: [],
+    events: [],
+  }
+}
+
+function emptySpawnSummary(): SpawnProfileSummary {
+  return {
+    bookkeepingCount: 0,
+    totalBookkeepingMs: 0,
+    segments: [],
     events: [],
   }
 }
@@ -182,6 +209,7 @@ const summary: Omit<ProfilingSummary, 'enabled'> = {
   fsStore: emptyFsStoreSummary(),
   tmux: emptyTmuxSummary(),
   panel: emptyPanelSummary(),
+  spawn: emptySpawnSummary(),
 }
 
 export function isProfilingEnabled(): boolean {
@@ -192,6 +220,7 @@ export function resetProfiling(): void {
   summary.fsStore = emptyFsStoreSummary()
   summary.tmux = emptyTmuxSummary()
   summary.panel = emptyPanelSummary()
+  summary.spawn = emptySpawnSummary()
 }
 
 function cloneSummary(): Omit<ProfilingSummary, 'enabled'> {
@@ -213,6 +242,11 @@ function cloneSummary(): Omit<ProfilingSummary, 'enabled'> {
       },
       lastCounts: { ...summary.panel.lastCounts },
       events: summary.panel.events.map(event => ({ ...event })),
+    },
+    spawn: {
+      ...summary.spawn,
+      segments: [...summary.spawn.segments],
+      events: summary.spawn.events.map(event => ({ ...event })),
     },
   }
 }
@@ -350,6 +384,31 @@ export function recordTmuxCommand(input: TmuxProfileInput): void {
     caller: safeProfileText(input.caller, 'tmux.client'),
     category: safeProfileText(input.category, 'runtime:tmux'),
     ...(input.error ? { error: input.error } : {}),
+  })
+}
+
+export function recordSpawnBookkeepingEvent(input: ProfileAttribution & {
+  segment: string
+  durationMs: number
+  ok?: boolean
+  workerName?: string
+  role?: string
+}): void {
+  if (!isProfilingEnabled()) return
+  const durationMs = safeDurationMs(input.durationMs)
+  const segment = safeProfileText(input.segment, 'spawn.bookkeeping')
+  summary.spawn.bookkeepingCount += 1
+  summary.spawn.totalBookkeepingMs += durationMs
+  if (!summary.spawn.segments.includes(segment)) summary.spawn.segments.push(segment)
+  summary.spawn.events.push({
+    kind: 'bookkeeping',
+    segment,
+    durationMs,
+    ok: input.ok !== false,
+    caller: safeProfileText(input.caller, 'workerSpawnService.spawnWorkerMember'),
+    category: safeProfileText(input.category, 'spawn:bookkeeping'),
+    ...(input.workerName ? { workerName: safeProfileText(input.workerName, 'worker') } : {}),
+    ...(input.role ? { role: safeProfileText(input.role, 'role') } : {}),
   })
 }
 

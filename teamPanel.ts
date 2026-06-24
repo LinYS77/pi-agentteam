@@ -6,6 +6,7 @@ import {
   clampPanelStateToData,
   createInitialPanelState,
 } from './teamPanel/viewModel.js'
+import { loadAgentConfig, createDefaultAgentConfig } from './config.js'
 import { loadPanelData } from './teamPanel/dataSource.js'
 import { panelDataFingerprint, panelStateFingerprint } from './teamPanel/fingerprint.js'
 import { recordPanelProfileEvent } from './runtime/profiling.js'
@@ -25,6 +26,14 @@ export async function openTeamPanel(
     clampPanelStateToData(panelState, data)
     let renderScheduled = false
     let flushRenderPromise: Promise<void> | null = null
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined
+    const panelConfig = {
+      ...createDefaultAgentConfig().ui!.teamPanel,
+      ...(loadAgentConfig().config.ui?.teamPanel ?? {}),
+    }
+    const semanticDebounceMs = panelConfig.refreshMode === 'debounced'
+      ? Math.max(0, panelConfig.minRefreshMs)
+      : 0
 
     const requestRenderOnce = () => {
       if (renderScheduled) return
@@ -42,11 +51,18 @@ export async function openTeamPanel(
       })
     }
 
+    const clearDebounceTimer = () => {
+      if (!debounceTimer) return
+      clearTimeout(debounceTimer)
+      debounceTimer = undefined
+    }
+
     const flushRender = async () => {
       await flushRenderPromise
     }
 
     const refresh = () => {
+      clearDebounceTimer()
       const beforeStateFingerprint = panelStateFingerprint(panelState)
       const nextData = loadPanelData(teamName)
       const nextFingerprint = panelDataFingerprint(nextData)
@@ -70,13 +86,30 @@ export async function openTeamPanel(
       requestRenderOnce()
     }
 
+    const requestSemanticRefresh = () => {
+      if (semanticDebounceMs <= 0) {
+        refresh()
+        return
+      }
+      if (debounceTimer) return
+      debounceTimer = setTimeout(() => {
+        debounceTimer = undefined
+        refresh()
+      }, semanticDebounceMs)
+    }
+
     return {
-      invalidate() {},
+      invalidate() {
+        requestSemanticRefresh()
+      },
       flushRender,
       handleInput(input: string) {
         const selection = buildPanelSelectionView(data, panelState)
         handleTeamPanelInput(input, data, panelState, selection, {
-          done,
+          done: result => {
+            clearDebounceTimer()
+            done(result)
+          },
           refresh,
           requestRender: requestRenderOnce,
         })

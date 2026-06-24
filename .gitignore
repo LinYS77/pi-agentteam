@@ -69,6 +69,8 @@ docs/perf/*
 !docs/perf/v0.6.38-true-operator-manual-rc-pass-evidence.md
 !docs/perf/v0.6.39-task-message-report-p95.md
 !docs/perf/v0.6.41-fsstore-lock-wait-p95.md
+!docs/perf/v0.6.42-data-change-render-debounce.md
+!docs/perf/v0.6.42-spawn-bookkeeping-p95.md
 
 # Dependencies
 node_modules/

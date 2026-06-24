@@ -12,6 +12,7 @@ import {
 } from '../adapters/tmux/index.js'
 import { formatConfigDiagnostic, summarizeConfigDiagnostics } from '../config.js'
 import { isBridgeFresh } from '../adapters/bridge/index.js'
+import { recordSpawnBookkeepingEvent } from '../runtime/profiling.js'
 import { transitionWorkerFsm } from '../runtime/workerFsm.js'
 import { TEAM_LEAD } from '../internalTypes.js'
 import type { TeamState } from '../internalTypes.js'
@@ -81,6 +82,26 @@ type InitialSpawnDeliveryResult = {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function nowMs(): number {
+  return Number(process.hrtime.bigint()) / 1_000_000
+}
+
+function recordSpawnSegment(input: {
+  segment: string
+  startedAt: number
+  workerName?: string
+  role?: string
+  ok?: boolean
+}): void {
+  recordSpawnBookkeepingEvent({
+    segment: input.segment,
+    durationMs: nowMs() - input.startedAt,
+    ok: input.ok,
+    workerName: input.workerName,
+    role: input.role,
+  })
 }
 
 function bridgeSpawnReadyTimeoutMs(): number {
@@ -223,6 +244,7 @@ export async function spawnWorkerMember(
   assignment: TeamSpawnInput,
   leaderCwd: string,
 ): Promise<SpawnResult> {
+  const validationStartedAt = nowMs()
   const workerNameValidation = deps.validateNewWorkerName(assignment.name)
   const workerName = workerNameValidation.normalized
   if (!workerNameValidation.ok) {
@@ -248,7 +270,9 @@ export async function spawnWorkerMember(
   const leader = team.members[TEAM_LEAD]
   deps.healMemberPaneBinding(leader)
   const { initialTask: initialWake, bootPrompt: deferredBootPrompt } = deps.classifySpawnTask(assignment.task)
+  recordSpawnSegment({ segment: 'validate-config-classify', startedAt: validationStartedAt, workerName, role: normalizedRole })
 
+  const promptStartedAt = nowMs()
   const basePrompt = buildWorkerSystemPrompt({
     teamName: team.name,
     workerName,
@@ -262,7 +286,9 @@ export async function spawnWorkerMember(
     leaderArgv: process.argv,
     leaderCwd,
   })
+  recordSpawnSegment({ segment: 'build-prompt-command', startedAt: promptStartedAt, workerName, role: normalizedRole })
 
+  const reserveStartedAt = nowMs()
   commitWorkerSpawnState(team, latest => {
     upsertMember(latest, {
       name: workerName,
@@ -279,7 +305,10 @@ export async function spawnWorkerMember(
       bridgeLastError: 'waiting for bridge handshake',
     })
   })
+  recordSpawnSegment({ segment: 'reserve-worker-state', startedAt: reserveStartedAt, workerName, role: normalizedRole })
+  const sessionStartedAt = nowMs()
   writeSessionContext(sessionFile, buildSessionContextForTeam(team, workerName))
+  recordSpawnSegment({ segment: 'write-session-context', startedAt: sessionStartedAt, workerName, role: normalizedRole })
 
   let pane: Awaited<ReturnType<typeof createTeammatePane>>
   try {
@@ -312,6 +341,7 @@ export async function spawnWorkerMember(
     })
   }
 
+  const paneCommitStartedAt = nowMs()
   commitWorkerSpawnState(team, latest => {
     const member = latest.members[workerName]
     if (!member) return
@@ -319,7 +349,9 @@ export async function spawnWorkerMember(
     member.windowTarget = pane.target
     member.updatedAt = Date.now()
   })
+  recordSpawnSegment({ segment: 'commit-pane-created', startedAt: paneCommitStartedAt, workerName, role: normalizedRole })
 
+  const bindingStartedAt = nowMs()
   const binding = resolvePaneBinding(pane.paneId)
   if (!binding) {
     const cleanup = rollbackFailedWorkerSpawn({
@@ -348,6 +380,7 @@ export async function spawnWorkerMember(
     member.windowTarget = binding.target
     member.updatedAt = Date.now()
   })
+  recordSpawnSegment({ segment: 'resolve-pane-binding-commit', startedAt: bindingStartedAt, workerName, role: normalizedRole })
 
   const ready = await waitForPaneAppStart(binding.paneId, 20000)
   if (!ready) {
@@ -377,11 +410,14 @@ export async function spawnWorkerMember(
   let outboxStatus: InitialSpawnDeliveryResult['outboxStatus']
   const initialInstruction = initialWake ?? deferredBootPrompt
   if (initialInstruction) {
+    const deliveryStartedAt = nowMs()
     const initialDelivery = await requestInitialSpawnDeliveryThroughOutbox(deps, team.name, workerName, initialInstruction)
     deliveryRequestId = initialDelivery.deliveryRequestId
     outboxEffectId = initialDelivery.outboxEffectId
     outboxStatus = initialDelivery.outboxStatus
+    recordSpawnSegment({ segment: 'initial-delivery-bookkeeping', startedAt: deliveryStartedAt, workerName, role: normalizedRole })
   }
+  const finalStateStartedAt = nowMs()
   if (bridgeReady) {
     commitWorkerSpawnState(team, latest => {
       const member = latest.members[workerName]
@@ -416,6 +452,7 @@ export async function spawnWorkerMember(
       })
     })
   }
+  recordSpawnSegment({ segment: 'final-worker-status', startedAt: finalStateStartedAt, workerName, role: normalizedRole })
   const text = bridgeReady
     ? (initialInstruction
         ? `Created teammate ${workerName} (${normalizedRole}) in pane ${pane.paneId}; initial task delivery requested; worker busy`
