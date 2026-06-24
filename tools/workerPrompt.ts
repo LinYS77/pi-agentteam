@@ -1,3 +1,5 @@
+import * as os from 'node:os'
+import * as path from 'node:path'
 import type { AgentDefinition } from '../agents.js'
 import { shellEscapeArg } from '../adapters/tmux/index.js'
 
@@ -35,10 +37,53 @@ export function buildWorkerSystemPrompt(input: {
   ].filter(Boolean).join('\n')
 }
 
+function resolveLaunchPath(value: string, cwd: string): string {
+  if (value === '~') return os.homedir()
+  if (value.startsWith('~/')) return path.join(os.homedir(), value.slice(2))
+  return path.isAbsolute(value) ? value : path.resolve(cwd, value)
+}
+
+function inheritedLeaderLaunchArgs(argv = process.argv, cwd = process.cwd()): string[] {
+  const inherited: string[] = []
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    if (arg === '--no-extensions' || arg === '-ne') {
+      inherited.push('--no-extensions')
+      continue
+    }
+    if (arg === '--extension' || arg === '-e') {
+      const value = argv[index + 1]
+      if (value) {
+        inherited.push('--extension', resolveLaunchPath(value, cwd))
+        index += 1
+      }
+      continue
+    }
+    if (arg?.startsWith('--extension=')) {
+      inherited.push('--extension', resolveLaunchPath(arg.slice('--extension='.length), cwd))
+      continue
+    }
+    if (arg === '--session-dir') {
+      const value = argv[index + 1]
+      if (value) {
+        inherited.push('--session-dir', resolveLaunchPath(value, cwd))
+        index += 1
+      }
+      continue
+    }
+    if (arg?.startsWith('--session-dir=')) {
+      inherited.push('--session-dir', resolveLaunchPath(arg.slice('--session-dir='.length), cwd))
+    }
+  }
+  return inherited
+}
+
 export function buildWorkerLaunchCommand(input: {
   sessionFile: string
   basePrompt: string
   roleAgent: AgentDefinition
+  leaderArgv?: string[]
+  leaderCwd?: string
 }): string {
   const envParts: string[] = []
   const agentTeamHome = process.env.PI_AGENTTEAM_HOME?.trim()
@@ -46,7 +91,12 @@ export function buildWorkerLaunchCommand(input: {
     envParts.push(`PI_AGENTTEAM_HOME=${shellEscapeArg(agentTeamHome)}`)
   }
 
-  const launchCommandParts = ['pi', '--session', input.sessionFile]
+  const launchCommandParts = [
+    'pi',
+    ...inheritedLeaderLaunchArgs(input.leaderArgv, input.leaderCwd),
+    '--session',
+    input.sessionFile,
+  ]
   if (input.basePrompt) {
     launchCommandParts.push('--append-system-prompt', input.basePrompt)
   }

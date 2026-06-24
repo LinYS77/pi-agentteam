@@ -3,6 +3,9 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const PANEL_SIDECAR_MAILBOX_SENTINEL = 'PANEL_SIDECAR_MAILBOX_BODY_SHOULD_NOT_LEAK'
+const PANEL_SIDECAR_REPORT_SENTINEL = 'PANEL_SIDECAR_REPORT_BODY_SHOULD_NOT_LEAK'
+
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
@@ -151,6 +154,75 @@ function createFreshTeam(modules, teamName) {
   return team
 }
 
+function createPanelSidecarTeam(modules, teamName) {
+  const now = Date.now()
+  const team = modules.state.createInitialTeamState({
+    teamName,
+    leaderSessionFile: `/tmp/${teamName}-leader.jsonl`,
+    leaderCwd: '/tmp/panel-sidecar-project',
+  })
+  modules.state.upsertMember(team, {
+    name: 'researcher-one',
+    role: 'researcher',
+    cwd: '/tmp/panel-sidecar-project',
+    sessionFile: `/tmp/${teamName}-researcher-one.jsonl`,
+    status: 'idle',
+  })
+  const task = modules.state.createTask(team, { title: 'Panel sidecar task', description: 'compact panel sidecar fixture', owner: 'researcher-one' })
+  const report = modules.state.appendTaskReport(team, {
+    taskId: task.id,
+    type: 'report_done',
+    author: 'researcher-one',
+    text: PANEL_SIDECAR_REPORT_SENTINEL,
+    summary: 'compact panel sidecar report summary',
+    createdAt: now,
+    threadId: `task:${task.id}`,
+    reporterIsOwner: true,
+    statusAtReport: 'open',
+    ownerAtReport: 'researcher-one',
+  })
+  modules.state.writeTeamState(team)
+  const mailboxMessage = modules.state.pushMailboxMessage(team.name, 'team-lead', {
+    id: 'panel-sidecar-mailbox-message',
+    from: 'researcher-one',
+    to: 'team-lead',
+    text: PANEL_SIDECAR_MAILBOX_SENTINEL,
+    summary: 'compact panel sidecar mailbox summary',
+    type: 'report_done',
+    taskId: task.id,
+    metadata: { reportId: report.id },
+  })
+  const teamDir = modules.state.getTeamDir(team.name)
+  writeJson(path.join(teamDir, 'inboxes', 'researcher-one.panel.json'), {
+    version: 1,
+    teamName: team.name,
+    memberName: 'researcher-one',
+    updatedAt: now,
+    sourceMtimeMs: now,
+    items: [],
+  })
+  writeJson(path.join(teamDir, 'inboxes', 'team-lead.panel.json'), {
+    version: 1,
+    teamName: team.name,
+    memberName: 'team-lead',
+    updatedAt: now,
+    sourceMtimeMs: now,
+    items: [
+      {
+        id: mailboxMessage.id,
+        from: mailboxMessage.from,
+        to: mailboxMessage.to,
+        summary: mailboxMessage.summary,
+        type: mailboxMessage.type,
+        taskId: mailboxMessage.taskId,
+        metadata: mailboxMessage.metadata,
+        createdAt: mailboxMessage.createdAt,
+      },
+    ],
+  })
+  return { team, task, report, mailboxMessage }
+}
+
 module.exports = {
   name: 'legacy persisted state quarantine',
   async run(env) {
@@ -246,6 +318,47 @@ module.exports = {
         assert.equal(result.content[0].text.includes('in_progress'), false, 'tool diagnostic must not echo old statuses')
         assert.deepEqual(modules.state.listTeams(), [], 'create path should not reactivate quarantined legacy state')
       })
+    })
+
+    await withTempHome(modules, 'panel-sidecar-mailbox-validation', () => {
+      const { team, report, mailboxMessage } = createPanelSidecarTeam(modules, 'panel-sidecar-suite')
+      const teamDir = modules.state.getTeamDir(team.name)
+      const panelSidecarFiles = ['inboxes/team-lead.panel.json', 'inboxes/researcher-one.panel.json']
+      for (const rel of panelSidecarFiles) assert.equal(fs.existsSync(path.join(teamDir, rel)), true, `${rel} should exist before validation`)
+
+      const reasons = modules.state.validatePersistedTeamDir(team.name)
+      assert.deepEqual(reasons.filter(reason => reason.code === 'invalid_mailbox_shape'), [], 'object-shaped inbox *.panel.json sidecars must not be validated as mailbox array files')
+      assert.equal(modules.state.validateOrQuarantineTeam(team.name), null, 'object-shaped panel sidecars must not quarantine active vNext teams')
+      assert.equal(fs.existsSync(teamDir), true, 'team should stay active after sidecar validation')
+      assert.equal(modules.state.readLatestQuarantineForTeam(team.name), null, 'panel sidecars should not create quarantine records')
+
+      const teamPanelProjection = JSON.parse(fs.readFileSync(path.join(teamDir, 'team-panel.json'), 'utf8'))
+      const leaderPanelProjection = JSON.parse(fs.readFileSync(path.join(teamDir, 'inboxes', 'team-lead.panel.json'), 'utf8'))
+      assert.equal(JSON.stringify(teamPanelProjection).includes(PANEL_SIDECAR_MAILBOX_SENTINEL), false, 'team panel sidecar must not expose full MailboxMessage.text sentinel')
+      assert.equal(JSON.stringify(teamPanelProjection).includes(PANEL_SIDECAR_REPORT_SENTINEL), false, 'team panel sidecar must not expose full TaskReport.text sentinel')
+      assert.equal(JSON.stringify(leaderPanelProjection).includes(PANEL_SIDECAR_MAILBOX_SENTINEL), false, 'mailbox panel sidecar must remain compact')
+      assert.equal(JSON.stringify(leaderPanelProjection).includes(PANEL_SIDECAR_REPORT_SENTINEL), false, 'mailbox panel sidecar must not hydrate report text')
+
+      const leaderCtx = helpers.createCtx('/tmp/panel-sidecar-project', `/tmp/${team.name}-leader.jsonl`, [])
+      const receive = pi.__tools.get('agentteam_receive').execute('panel-sidecar-receive', { markRead: false, limit: 5 }, null, () => {}, leaderCtx)
+      return Promise.resolve(receive).then(result => {
+        assert.equal(JSON.stringify(result).includes(PANEL_SIDECAR_MAILBOX_SENTINEL), true, 'agentteam_receive must remain the explicit full-text MailboxMessage.text boundary')
+        assert.equal(result.details?.messages?.some(message => message.id === mailboxMessage.id && message.text === PANEL_SIDECAR_MAILBOX_SENTINEL), true, 'agentteam_receive details should return full mailbox text')
+        assert.equal(result.details?.hydratedReports?.[report.id]?.text, PANEL_SIDECAR_REPORT_SENTINEL, 'agentteam_receive should hydrate referenced TaskReport.text at the explicit read boundary')
+      })
+    })
+
+    await withTempHome(modules, 'real-mailbox-shape-validation', () => {
+      const { team } = createPanelSidecarTeam(modules, 'bad-mailbox-suite')
+      writeJson(path.join(modules.state.getTeamDir(team.name), 'inboxes', 'team-lead.json'), {
+        version: 1,
+        items: [],
+      })
+      const reasons = modules.state.validatePersistedTeamDir(team.name)
+      assert.ok(reasons.some(reason => reason.code === 'invalid_mailbox_shape' && reason.file === path.join('inboxes', 'team-lead.json')), 'real inbox mailbox .json object must still fail mailbox array validation')
+      assert.ok(modules.state.validateOrQuarantineTeam(team.name), 'real malformed mailbox .json should still quarantine the team')
+      const latest = modules.state.readLatestQuarantineForTeam(team.name)
+      assert.ok(latest.reasons.some(reason => reason.code === 'invalid_mailbox_shape' && reason.file === path.join('inboxes', 'team-lead.json')), 'quarantine should record malformed real mailbox file')
     })
 
     await withTempHome(modules, 'legacy-runtime-file-layout-marker', home => {

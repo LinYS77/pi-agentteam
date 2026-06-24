@@ -142,6 +142,18 @@ module.exports = {
     assert.ok(launch.includes("'--tools' 'read,bash,agentteam_task'"), launch)
     assert.ok(launch.includes("\"'\"'"), 'single quotes in args should be shell escaped')
 
+    const inheritedLaunch = workerPrompt.buildWorkerLaunchCommand({
+      sessionFile: '/tmp/worker-session.jsonl',
+      basePrompt: systemPrompt,
+      roleAgent,
+      leaderArgv: ['/usr/local/bin/node', '/usr/local/bin/pi', '--no-extensions', '--extension', './index.ts', '--session-dir', '/tmp/pi-agentteam-explicit-sessions'],
+      leaderCwd: '/tmp/pi-agentteam-explicit-extension-root',
+    })
+    assert.ok(inheritedLaunch.includes("'--no-extensions'"), 'worker launch should inherit explicit leader no-extension discovery mode')
+    assert.ok(inheritedLaunch.includes("'--extension' '/tmp/pi-agentteam-explicit-extension-root/index.ts'"), 'worker launch should inherit explicit local extension as an absolute path')
+    assert.ok(inheritedLaunch.includes("'--session-dir' '/tmp/pi-agentteam-explicit-sessions'"), 'worker launch should inherit explicit leader session-dir')
+    assert.ok(inheritedLaunch.includes("'--session' '/tmp/worker-session.jsonl'"), 'worker launch should still bind the worker session file')
+
     const messageServiceSource = env.helpers.readSource('tools/messageService.ts')
     assert.ok(messageServiceSource.includes('../app/messageApplication.js'), 'message service should delegate send orchestration to app boundary')
     assert.ok(messageServiceSource.includes('deps.ensureTeamForSession(ctx)'), 'message service should resolve send team context outside app boundary')

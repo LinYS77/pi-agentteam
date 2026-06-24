@@ -259,6 +259,8 @@ export async function spawnWorkerMember(
     sessionFile,
     basePrompt,
     roleAgent,
+    leaderArgv: process.argv,
+    leaderCwd,
   })
 
   commitWorkerSpawnState(team, latest => {
