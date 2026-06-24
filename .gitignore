@@ -67,6 +67,7 @@ docs/perf/*
 !docs/perf/v0.6.38-temp-home-bound-rc-harness.md
 !docs/perf/v0.6.38-p95-evidence.md
 !docs/perf/v0.6.38-true-operator-manual-rc-pass-evidence.md
+!docs/perf/v0.6.39-task-message-report-p95.md
 
 # Dependencies
 node_modules/

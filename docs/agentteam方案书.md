@@ -88,26 +88,26 @@ TaskMessageRef   = no-body task-bound message index
 - 不允许 hidden terminal-key delivery fallback。
 - 不允许破坏 legacy `teams/-`。
 
-### 0.4 当前推进状态（截至 v0.6.38 本地 checkpoint）
+### 0.4 当前推进状态（截至 v0.6.39 本地 checkpoint）
 
 当前状态必须按“事实已完成 / 证据待补 / 明确禁止”三类阅读：
 
-- 已完成：v0.6.37 readiness burn-down map、v0.6.38 temp-home-bound RC harness、v0.6.38 p95/panel refresh runtime fix、post-fix p95 evidence reconciliation、worker launch provenance fix、以及真实 operator/model manual RC 主 checklist 均已进入本地 checkpoint；相关提交前本地验证链已通过 `npm test`、`npm run typecheck`、`npm run -s check:boundaries` 和 `git diff --check`，本文档更新后仍需重新验证。
-- 已完成但不能过度声明：direct `r` refresh 已把 unchanged-state panel refresh 的 repeated `requestRender` 噪声压到 0；真实 operator/model manual RC 主链路已通过 state-check 证据；这证明 v0.6.38 已有实质 runtime 进展，但不等于全部 p95 gates 通过，也不等于 v0.7 release-ready。
-- 证据已纳入：`docs/perf/v0.6.38-p95-evidence.md` 记录 T115 修复前失败与 T116 修复后通过；`docs/perf/v0.6.38-true-operator-manual-rc-pass-evidence.md` 记录真实 operator/model manual RC pass with one optional limitation。
-- 仍未完成：PlanRun cancel 真实 operator 覆盖是 optional not-covered follow-up；task/message/report action p95、large mailbox p95、fsStore lock wait p95、data-change debounce、spawn bookkeeping p95、最终 v0.7 readiness checkpoint 仍未完成。
+- 已完成：v0.6.37 readiness burn-down map、v0.6.38 temp-home-bound RC harness、v0.6.38 p95/panel refresh runtime fix、post-fix p95 evidence reconciliation、worker launch provenance fix、真实 operator/model manual RC 主 checklist、以及 v0.6.39 task/message/report p95 coverage harness 均已进入本地 checkpoint；相关提交前本地验证链已通过 `npm test`、`npm run typecheck`、`npm run -s check:boundaries` 和 `git diff --check`，本文档更新后仍需重新验证。
+- 已完成但不能过度声明：direct `r` refresh 已把 unchanged-state panel refresh 的 repeated `requestRender` 噪声压到 0；真实 operator/model manual RC 主链路已通过 state-check 证据；task/message/report normal action p95 已通过 focused harness。这些证明 v0.6.38/v0.6.39 已有实质 runtime/evidence 进展，但不等于全部 p95 gates 通过，也不等于 v0.7 release-ready。
+- 证据已纳入：`docs/perf/v0.6.38-p95-evidence.md` 记录 T115 修复前失败与 T116 修复后通过；`docs/perf/v0.6.38-true-operator-manual-rc-pass-evidence.md` 记录真实 operator/model manual RC pass with one optional limitation；`docs/perf/v0.6.39-task-message-report-p95.md` 记录 task/message/report p95 coverage，其中 normal pass、large-mailbox fail。
+- 仍未完成：large-mailbox task/message/report p95 是真实 blocker；PlanRun cancel 真实 operator 覆盖是 optional not-covered follow-up；fsStore lock wait p95、data-change debounce、spawn bookkeeping p95、最终 v0.7 readiness checkpoint 仍未完成。
 - 明确禁止：当前状态不授权 tag、GitHub release、`npm version`、`npm publish`、package release、default Go、default resolver、native helper/package delivery、fallback deletion、signing 或 second-platform support。
 
-因此当前 `ready:false`。v0.6.38 是从治理文档推进到真实 harness、真实 p95 evidence 和一个 panel runtime fix 的阶段性进展，不是 v0.7 release-ready。
+因此当前 `ready:false`。v0.6.39 已把 task/message/report p95 从缺证据推进到 focused coverage，并暴露 large-mailbox p95 真实失败；这不是 v0.7 release-ready。
 
 ### 0.5 当前执行路线（唯一当前主计划）
 
 新的推进顺序如下，后文历史 patch plan 只作为背景，不再覆盖此处：
 
-1. **Evidence reconciliation**：先刷新 v0.6.38 p95 evidence，让方案书、p95 doc、fixture 和 guard 都反映“修复前 fail → 修复后 pass / 仍 ready:false”的真实状态。
-2. **v0.6.38 收口**：在 evidence 对齐后重跑验证链；若通过，再决定是否 push 当前 GitHub-only checkpoint；不 tag、不 npm publish。
+1. **Evidence reconciliation**：v0.6.38 p95 evidence、manual RC pass evidence、v0.6.39 task/message/report p95 coverage evidence 已进入 repo 轨道；后续继续保持 pass/fail/not-covered 事实口径。
+2. **v0.6.39 收口**：提交并推送 task/message/report p95 coverage slice；不 tag、不 npm publish。
 3. **真实 manual RC**：真实 operator/model manual RC 主 checklist 已通过；后续只保留 optional PlanRun cancel 覆盖为 focused follow-up，不阻塞当前主链路证据。
-4. **补齐 p95 gaps**：为 task/message/report action、large mailbox、fsStore lock wait、data-change debounce、spawn bookkeeping 建 focused bench/harness 与 no-leak evidence。
+4. **p95 burn-down**：优先优化 large-mailbox task/message/report p95 blocker，然后再补 fsStore lock wait、data-change debounce、spawn bookkeeping 的 focused bench/harness 与 no-leak evidence。
 5. **v0.7 core refactor burn-down**：围绕 state/read-model、tmux adapter、panel loop、Task/Report/PlanRun 做实际 runtime 改进和 P0 bug burn-down，不再单纯堆治理文档。
 6. **v0.7 readiness checkpoint**：只有 broad validation、manual RC、p95 gates、P0 bug burn-down、package/runtime invariants 全部有证据后，才进入 release readiness checkpoint；release/tag/npm/default-Go/native 仍需单独授权。
 
