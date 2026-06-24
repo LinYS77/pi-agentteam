@@ -1,0 +1,277 @@
+const READINESS_RECONCILIATION_SCHEMA_VERSION = 1
+const READINESS_RECONCILIATION_THEME = 'v0.6.43 readiness evidence reconciliation'
+const CURRENT_RELEASE_TARGET = 'v0.7.0 = core refactor + performance baseline + bug burn-down release'
+const STATUS = 'evidence-reconciled-focused-gates-covered-not-release-ready'
+
+const PACKAGE_RUNTIME_INVARIANTS = Object.freeze({
+  packageName: 'pi-agentteam',
+  packageVersion: '0.6.8',
+  packageType: 'module',
+  piExtensions: Object.freeze(['./index.ts']),
+  productFacade: 'TypeScript/pi remains the product and control-plane facade.',
+  packageVersionChanged: false,
+  packageMetadataChanged: false,
+  tagCreated: false,
+  npmPublished: false,
+  nativeWorkPerformed: false,
+  defaultGoApproved: false,
+  defaultResolverApproved: false,
+  fallbackDeletionApproved: false,
+  releaseAssetCreated: false,
+})
+
+const NO_LEAK_MARKERS = Object.freeze([
+  'V0643_READINESS_RECONCILIATION_FULL_TEXT_SENTINEL_DO_NOT_LEAK',
+  'MailboxMessage.text',
+  'TaskReport.text',
+  'worker transcript',
+  'terminal raw log',
+  'screenshot',
+  'state archive',
+  'raw state archive',
+  'BEGIN PRIVATE KEY',
+  'raw hosted record',
+  'provider response id',
+  'raw tool-call id',
+])
+
+const SOURCE_EVIDENCE = Object.freeze([
+  Object.freeze({
+    id: 'v0638-panel-p95-reconciliation',
+    status: 'pass-focused-gates',
+    doc: 'docs/perf/v0.6.38-p95-evidence.md',
+    fixture: 'tests/fixtures/kernel/v0638/p95Evidence.cjs',
+    guard: 'tests/suites/go-kernel-v0638-p95-evidence.cjs',
+    covered: Object.freeze(['attached/global warm refresh p95 rows', 'unchanged-state no repeated requestRender']),
+  }),
+  Object.freeze({
+    id: 'v0638-true-operator-manual-rc-main',
+    status: 'pass-main-checklist',
+    doc: 'docs/perf/v0.6.38-true-operator-manual-rc-pass-evidence.md',
+    task: 'T120',
+    reportId: 'TR0132',
+    note: 'Main true operator/model manual RC checklist passed with one optional PlanRun cancel limitation later closed by T129.',
+  }),
+  Object.freeze({
+    id: 'v0641-true-operator-planrun-cancel-follow-up',
+    status: 'accepted-task-board-pass-not-force-added',
+    task: 'T129',
+    reportId: 'TR0135',
+    note: 'Task board accepted true operator/model agentteam_planrun cancel follow-up as pass. Its local ignored sanitized evidence doc is intentionally not force-added in this reconciliation.',
+    checkedInDoc: null,
+  }),
+  Object.freeze({
+    id: 'v0639-v0640-task-message-report-p95',
+    status: 'pass-focused-gates-large-mailbox-optimized',
+    doc: 'docs/perf/v0.6.39-task-message-report-p95.md',
+    fixture: 'tests/fixtures/kernel/v0639/taskMessageReportP95.cjs',
+    guard: 'tests/suites/go-kernel-v0639-task-message-report-p95.cjs',
+    gates: Object.freeze(['task-message-report-action-normal-p95', 'task-message-report-action-large-mailbox-p95']),
+  }),
+  Object.freeze({
+    id: 'v0641-fsstore-lock-wait-p95',
+    status: 'pass-focused-gate',
+    doc: 'docs/perf/v0.6.41-fsstore-lock-wait-p95.md',
+    fixture: 'tests/fixtures/kernel/v0641/fsStoreLockWaitP95.cjs',
+    guard: 'tests/suites/go-kernel-v0641-fsstore-lock-wait-p95.cjs',
+    gates: Object.freeze(['fsstore-lock-wait-p95']),
+  }),
+  Object.freeze({
+    id: 'v0642-data-change-render-debounce',
+    status: 'pass-focused-gate',
+    doc: 'docs/perf/v0.6.42-data-change-render-debounce.md',
+    fixture: 'tests/fixtures/kernel/v0642/dataChangeRenderDebounce.cjs',
+    guard: 'tests/suites/go-kernel-v0642-data-change-render-debounce.cjs',
+    gates: Object.freeze(['data-change-render-debounce-rate']),
+  }),
+  Object.freeze({
+    id: 'v0642-spawn-bookkeeping-p95',
+    status: 'pass-focused-gate',
+    doc: 'docs/perf/v0.6.42-spawn-bookkeeping-p95.md',
+    fixture: 'tests/fixtures/kernel/v0642/spawnBookkeepingP95.cjs',
+    guard: 'tests/suites/go-kernel-v0642-spawn-bookkeeping-p95.cjs',
+    gates: Object.freeze(['spawn-bookkeeping-p95']),
+  }),
+])
+
+const RECONCILED_GATES = Object.freeze([
+  Object.freeze({
+    id: 'task-message-report-action-normal-p95',
+    status: 'covered-focused-pass',
+    observed: 30.434,
+    threshold: 50,
+    unit: 'ms',
+    source: 'docs/perf/v0.6.39-task-message-report-p95.md',
+  }),
+  Object.freeze({
+    id: 'task-message-report-action-large-mailbox-p95',
+    status: 'covered-focused-pass-supersedes-v0639-fail',
+    observed: 106.863,
+    threshold: 150,
+    unit: 'ms',
+    source: 'docs/perf/v0.6.39-task-message-report-p95.md',
+  }),
+  Object.freeze({
+    id: 'fsstore-lock-wait-p95',
+    status: 'covered-focused-pass',
+    observed: 10.644,
+    threshold: 25,
+    unit: 'ms',
+    source: 'docs/perf/v0.6.41-fsstore-lock-wait-p95.md',
+  }),
+  Object.freeze({
+    id: 'data-change-render-debounce-rate',
+    status: 'covered-focused-pass',
+    observed: 3.021,
+    threshold: 4,
+    unit: 'renders/sec',
+    source: 'docs/perf/v0.6.42-data-change-render-debounce.md',
+  }),
+  Object.freeze({
+    id: 'spawn-bookkeeping-p95',
+    status: 'covered-focused-pass',
+    observed: 21.995,
+    threshold: 100,
+    unit: 'ms',
+    source: 'docs/perf/v0.6.42-spawn-bookkeeping-p95.md',
+  }),
+  Object.freeze({
+    id: 'true-operator-manual-rc-main-checklist',
+    status: 'accepted-pass',
+    source: 'docs/perf/v0.6.38-true-operator-manual-rc-pass-evidence.md',
+    task: 'T120',
+  }),
+  Object.freeze({
+    id: 'true-operator-planrun-cancel-follow-up',
+    status: 'accepted-task-board-pass-not-force-added',
+    source: 'T129/TR0135 task report only',
+    task: 'T129',
+  }),
+])
+
+const SUPERSEDED_BLOCKERS = Object.freeze([
+  Object.freeze({
+    id: 'v0639-large-mailbox-task-message-report-p95-fail',
+    previousStatus: 'fail/blocker',
+    currentStatus: 'superseded-by-v0640-pass',
+    evidence: 'docs/perf/v0.6.39-task-message-report-p95.md',
+  }),
+  Object.freeze({
+    id: 'v0638-v0639-missing-fsstore-lock-wait-p95',
+    previousStatus: 'not-covered',
+    currentStatus: 'covered-by-v0641-focused-pass',
+    evidence: 'docs/perf/v0.6.41-fsstore-lock-wait-p95.md',
+  }),
+  Object.freeze({
+    id: 'v0638-v0641-missing-data-change-render-debounce-rate',
+    previousStatus: 'not-covered',
+    currentStatus: 'covered-by-v0642-focused-pass',
+    evidence: 'docs/perf/v0.6.42-data-change-render-debounce.md',
+  }),
+  Object.freeze({
+    id: 'v0638-v0641-missing-spawn-bookkeeping-p95',
+    previousStatus: 'not-covered',
+    currentStatus: 'covered-by-v0642-focused-pass',
+    evidence: 'docs/perf/v0.6.42-spawn-bookkeeping-p95.md',
+  }),
+  Object.freeze({
+    id: 't120-optional-planrun-cancel-gap',
+    previousStatus: 'optional-not-covered',
+    currentStatus: 'closed-by-t129-task-board-pass-without-force-adding-ignored-doc',
+    evidence: 'T129/TR0135 accepted task report',
+  }),
+])
+
+const STILL_NOT_AUTHORIZED = Object.freeze([
+  'v0.7 release-ready claim',
+  'tag creation or push',
+  'git push',
+  'GitHub release',
+  'npm version',
+  'npm publish',
+  'package release or package metadata expansion',
+  'default Go or default resolver enablement',
+  'native helper/package delivery',
+  'fallback deletion',
+  'signing/security attestation',
+  'second-platform support',
+  'release assets or raw hosted records',
+])
+
+const REMAINING_DECISIONS = Object.freeze([
+  Object.freeze({
+    id: 'final-v07-readiness-decision',
+    status: 'not-started',
+    note: 'Requires separate leader/user authorization; v0.6.43 is a reconciliation checkpoint only.',
+  }),
+  Object.freeze({
+    id: 'release-governance',
+    status: 'blocked-until-authorized',
+    note: 'Tag/npm/release/default-Go/native/package/fallback deletion decisions remain outside this task.',
+  }),
+  Object.freeze({
+    id: 't129-ignored-evidence-doc',
+    status: 'not-force-added',
+    note: 'T129 pass is referenced from the durable task report only; ignored local sanitized doc remains out of repo unless separately authorized with no-leak guard.',
+  }),
+])
+
+const readinessEvidenceReconciliation = Object.freeze({
+  schemaVersion: READINESS_RECONCILIATION_SCHEMA_VERSION,
+  theme: READINESS_RECONCILIATION_THEME,
+  releaseTarget: CURRENT_RELEASE_TARGET,
+  status: STATUS,
+  ready: false,
+  releaseReadyClaim: false,
+  focusedP95CoverageImproved: true,
+  focusedP95GatesCovered: true,
+  allGatesProductReadyClaim: false,
+  manualRcMainChecklistPassed: true,
+  planRunCancelFollowUpAccepted: true,
+  planRunCancelRepoEvidenceForceAdded: false,
+  runtimeBehaviorChanged: false,
+  packageVersionChanged: false,
+  tagCreated: false,
+  npmPublished: false,
+  nativeWorkPerformed: false,
+  defaultGoApproved: false,
+  defaultResolverApproved: false,
+  fallbackDeletionApproved: false,
+  signingApproved: false,
+  secondPlatformApproved: false,
+  releaseAssetsCreated: false,
+  rawArtifactsCheckedIn: false,
+  packageRuntimeInvariants: PACKAGE_RUNTIME_INVARIANTS,
+  noLeak: Object.freeze({
+    status: 'covered',
+    markers: NO_LEAK_MARKERS,
+    rawStateArchivesCheckedIn: false,
+    rawFullBodiesCheckedIn: false,
+    rawTimingJsonCheckedIn: false,
+    screenshotsCheckedIn: false,
+    terminalRawLogsCheckedIn: false,
+    workerTranscriptsCheckedIn: false,
+    rawHostedRecordsCheckedIn: false,
+  }),
+  sourceEvidence: SOURCE_EVIDENCE,
+  reconciledGates: RECONCILED_GATES,
+  supersededBlockers: SUPERSEDED_BLOCKERS,
+  stillNotAuthorized: STILL_NOT_AUTHORIZED,
+  remainingDecisions: REMAINING_DECISIONS,
+  recommendation: 'Use v0.6.43 as readiness evidence reconciliation only. Evidence improved and stale blockers are superseded, but ready remains false and this does not authorize v0.7 release-ready, tag, npm, package, default-Go, native, fallback deletion, signing, second-platform, or release asset work.',
+})
+
+module.exports = {
+  CURRENT_RELEASE_TARGET,
+  NO_LEAK_MARKERS,
+  PACKAGE_RUNTIME_INVARIANTS,
+  READINESS_RECONCILIATION_SCHEMA_VERSION,
+  READINESS_RECONCILIATION_THEME,
+  RECONCILED_GATES,
+  REMAINING_DECISIONS,
+  SOURCE_EVIDENCE,
+  STATUS,
+  STILL_NOT_AUTHORIZED,
+  SUPERSEDED_BLOCKERS,
+  readinessEvidenceReconciliation,
+}
