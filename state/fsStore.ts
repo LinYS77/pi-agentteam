@@ -22,7 +22,7 @@ export function ensureDir(dir: string): void {
 }
 
 const LOCK_TIMEOUT_MS = 8000
-const LOCK_RETRY_MS = 25
+const LOCK_RETRY_MS = 5
 const STALE_LOCK_MS = 5 * 60_000
 
 function sleep(ms: number): void {
