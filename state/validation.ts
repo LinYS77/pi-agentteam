@@ -118,6 +118,13 @@ export type QuarantinedTeamSummary = {
   reasons: StateValidationReason[]
 }
 
+type ValidationFileCacheEntry = {
+  signature: string
+  reasons: StateValidationReason[]
+}
+
+const validationFileCache = new Map<string, ValidationFileCacheEntry>()
+
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -128,6 +135,31 @@ function valueString(value: unknown): string {
 
 function activeTeamDir(teamName: string): string {
   return path.join(getAgentTeamRoot(), 'teams', sanitizeName(teamName))
+}
+
+function validationFileSignature(filePath: string): string | null {
+  try {
+    const stat = fs.statSync(filePath)
+    const kind = stat.isDirectory() ? 'dir' : stat.isFile() ? 'file' : 'other'
+    return `${kind}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`
+  } catch {
+    validationFileCache.delete(filePath)
+    return null
+  }
+}
+
+function validateCachedJsonFile(
+  filePath: string,
+  file: string,
+  validator: (raw: unknown, file: string) => StateValidationReason[],
+): StateValidationReason[] {
+  const signature = validationFileSignature(filePath)
+  if (!signature) return []
+  const cached = validationFileCache.get(filePath)
+  if (cached?.signature === signature) return cached.reasons
+  const reasons = validator(readJsonFile<unknown>(filePath), file)
+  validationFileCache.set(filePath, { signature, reasons })
+  return reasons
 }
 
 function teamDirExists(teamName: string): boolean {
@@ -682,20 +714,20 @@ export function validatePersistedTeamDir(teamName: string): StateValidationReaso
       value: actualKind,
     })
     if (entry.name === 'state.json' && actualKind === 'file') {
-      reasons.push(...validatePersistedTeamState(readJsonFile<unknown>(entryPath), 'state.json'))
+      reasons.push(...validateCachedJsonFile(entryPath, 'state.json', validatePersistedTeamState))
     }
     if (entry.name === 'mailboxes' && actualKind === 'directory') {
       for (const mailboxEntry of fs.readdirSync(entryPath, { withFileTypes: true })) {
         if (!mailboxEntry.isFile() || !mailboxEntry.name.endsWith('.json')) continue
         const mailboxPath = path.join(entryPath, mailboxEntry.name)
-        reasons.push(...validatePersistedMailbox(readJsonFile<unknown>(mailboxPath), path.join('mailboxes', mailboxEntry.name)))
+        reasons.push(...validateCachedJsonFile(mailboxPath, path.join('mailboxes', mailboxEntry.name), validatePersistedMailbox))
       }
     }
   }
 
   const statePath = path.join(teamDir, 'team.json')
   if (fs.existsSync(statePath)) {
-    reasons.push(...validatePersistedTeamState(readJsonFile<unknown>(statePath), 'team.json'))
+    reasons.push(...validateCachedJsonFile(statePath, 'team.json', validatePersistedTeamState))
   }
 
   const inboxDir = path.join(teamDir, 'inboxes')
@@ -704,13 +736,13 @@ export function validatePersistedTeamDir(teamName: string): StateValidationReaso
       if (!entry.isFile() || !entry.name.endsWith('.json')) continue
       if (entry.name.endsWith('.panel.json')) continue
       const inboxPath = path.join(inboxDir, entry.name)
-      reasons.push(...validatePersistedMailbox(readJsonFile<unknown>(inboxPath), path.join('inboxes', entry.name)))
+      reasons.push(...validateCachedJsonFile(inboxPath, path.join('inboxes', entry.name), validatePersistedMailbox))
     }
   }
 
   const outboxPath = path.join(teamDir, 'outbox.json')
   if (fs.existsSync(outboxPath)) {
-    reasons.push(...validatePersistedOutbox(readJsonFile<unknown>(outboxPath), 'outbox.json'))
+    reasons.push(...validateCachedJsonFile(outboxPath, 'outbox.json', validatePersistedOutbox))
   }
   return reasons
 }

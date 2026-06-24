@@ -1,14 +1,14 @@
 const TASK_MESSAGE_REPORT_P95_SCHEMA_VERSION = 1
-const TASK_MESSAGE_REPORT_P95_THEME = 'v0.6.39 task/message/report p95 coverage'
+const TASK_MESSAGE_REPORT_P95_THEME = 'v0.6.39/v0.6.40 task/message/report p95 coverage and large-mailbox optimization'
 const CURRENT_RELEASE_TARGET = 'v0.7.0 = core refactor + performance baseline + bug burn-down release'
-const STATUS = 'focused-task-message-report-p95-covered-not-release-ready'
+const STATUS = 'focused-task-message-report-p95-large-mailbox-optimized-not-release-ready'
 
 const RAW_ARTIFACT = Object.freeze({
   id: 'task-message-report-action-p95',
   path: '/tmp/pi-agentteam-v0639-task-message-report-p95-latest.json',
   checkedIn: false,
   parse: 'ok',
-  sha256: '5229bb3426b78cf6cc63be9704d9214843e67a9c7a63ecf700050aa874f0e0db',
+  sha256: '45f9e0e2c375433c35a0036f3b68f2aa9f008a1336a2dce001e17e76830796cd',
   preservation: 'raw sanitized timing JSON stays under /tmp and is not checked in',
 })
 
@@ -62,7 +62,7 @@ const OBSERVED_GATES = Object.freeze([
     status: 'pass',
     metric: 'taskMessageReportAction.normal.p95',
     threshold: Object.freeze({ kind: 'p95-ms-lte', value: 50, unit: 'ms' }),
-    observed: 44.281,
+    observed: 30.434,
     observedUnit: 'ms',
     measuredActions: 51,
     fixtureProfile: 'normal',
@@ -70,10 +70,10 @@ const OBSERVED_GATES = Object.freeze([
   }),
   Object.freeze({
     id: 'task-message-report-action-large-mailbox-p95',
-    status: 'fail',
+    status: 'pass',
     metric: 'taskMessageReportAction.largeMailbox.p95',
     threshold: Object.freeze({ kind: 'p95-ms-lte', value: 150, unit: 'ms' }),
-    observed: 251.846,
+    observed: 106.863,
     observedUnit: 'ms',
     measuredActions: 51,
     fixtureProfile: 'large-mailbox',
@@ -102,7 +102,7 @@ const taskMessageReportP95Evidence = Object.freeze({
   releaseReadyClaim: false,
   provesAllP95Gates: false,
   manualRcPassed: false,
-  runtimeBehaviorChanged: false,
+  runtimeBehaviorChanged: true,
   packageVersionChanged: false,
   tagCreated: false,
   npmPublished: false,
@@ -125,7 +125,7 @@ const taskMessageReportP95Evidence = Object.freeze({
   observedGates: OBSERVED_GATES,
   reportOnlySemantics: REPORT_ONLY_SEMANTICS,
   notCoveredGates: NOT_COVERED_GATES,
-  recommendation: 'Use this as the v0.6.39 focused task/message/report p95 evidence slice only. Do not claim v0.7 release readiness, manual RC pass, all p95 gates pass, default-Go/native/package approval, or release/tag/npm authority.',
+  recommendation: 'Use this as the focused task/message/report p95 coverage and large-mailbox optimization evidence slice only. Do not claim v0.7 release readiness, manual RC pass, all p95 gates pass, default-Go/native/package approval, or release/tag/npm authority.',
 })
 
 module.exports = {

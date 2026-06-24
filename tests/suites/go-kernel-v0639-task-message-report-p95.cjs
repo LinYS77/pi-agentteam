@@ -35,8 +35,8 @@ const SCRIPT = 'scripts/verify-v0639-task-message-report-p95.cjs'
 const LIB = 'scripts/lib/v0639-task-message-report-p95-harness.cjs'
 const PACKAGE_VERSION = '0.6.8'
 const REQUIRED_DOC = [
-  '# v0.6.39 Task/Message/Report p95 Evidence',
-  'Result: v0.6.39 adds focused task/message/report action p95 coverage through a clean temp `PI_AGENTTEAM_HOME` harness.',
+  '# v0.6.39/v0.6.40 Task/Message/Report p95 Evidence',
+  'Result: v0.6.39 adds focused task/message/report action p95 coverage through a clean temp `PI_AGENTTEAM_HOME` harness, and v0.6.40 optimizes the large-mailbox action path by caching unchanged active-state validation reads.',
   'Final result remains `ready:false`.',
   '`task-message-report-action-normal-p95`',
   '`task-message-report-action-large-mailbox-p95`',
@@ -44,12 +44,12 @@ const REQUIRED_DOC = [
   '`agentteam_send` assignment/question/inform',
   '`agentteam_receive markRead=false` and `agentteam_receive markRead=true`',
   '`report_done` and `report_blocked` are report-only for worker owners',
-  '`taskMessageReportAction.normal.p95` observed `44.281ms`',
-  '`taskMessageReportAction.largeMailbox.p95` observed `251.846ms`',
-  'the large-mailbox fixture fails and remains a real p95 blocker',
+  '`taskMessageReportAction.normal.p95` observed `30.434ms`',
+  '`taskMessageReportAction.largeMailbox.p95` observed `106.863ms`',
+  'v0.6.40 validation-cache optimization burns down the large-mailbox task/message/report p95 blocker',
   'No raw full mailbox/report bodies, worker transcripts, screenshots, state archives, secrets, raw hosted records, or raw timing JSON are checked in.',
   'Do not claim v0.7 release readiness from this artifact.',
-  'This slice does not re-execute manual RC; the true operator/model manual RC main checklist is tracked separately by the v0.6.38 evidence artifact.',
+  'this slice does not re-execute manual RC or prove every release p95 gate; the true operator/model manual RC main checklist is tracked separately by the v0.6.38 evidence artifact.',
   'STOP for release/tag/git push/npm version/npm publish/native/default-Go/package/signing/second-platform/fallback-deletion work.',
   '## Validation',
 ]
@@ -163,7 +163,7 @@ function assertFixtureShape(root) {
   assert.equal(taskMessageReportP95Evidence.releaseReadyClaim, false)
   assert.equal(taskMessageReportP95Evidence.provesAllP95Gates, false)
   assert.equal(taskMessageReportP95Evidence.manualRcPassed, false)
-  assert.equal(taskMessageReportP95Evidence.runtimeBehaviorChanged, false)
+  assert.equal(taskMessageReportP95Evidence.runtimeBehaviorChanged, true)
   assert.equal(taskMessageReportP95Evidence.packageVersionChanged, false)
   assert.equal(taskMessageReportP95Evidence.tagCreated, false)
   assert.equal(taskMessageReportP95Evidence.npmPublished, false)
