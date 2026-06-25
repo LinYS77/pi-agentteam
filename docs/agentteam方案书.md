@@ -92,13 +92,13 @@ TaskMessageRef   = no-body task-bound message index
 
 当前状态必须按“事实已完成 / 仍需治理 / 明确禁止”三类阅读：
 
-- 已完成并纳入 repo 轨道：v0.6.37 readiness burn-down map、v0.6.38 temp-home-bound RC harness、v0.6.38 p95/panel refresh runtime fix、post-fix p95 evidence reconciliation、worker launch provenance fix、真实 operator/model manual RC 主 checklist、v0.6.39/v0.6.40 task/message/report normal 与 large-mailbox focused p95 pass、v0.6.41 fsStore lock-wait focused p95 pass、v0.6.42 data-change render debounce focused pass、v0.6.42 spawn bookkeeping focused p95 pass，以及 v0.6.43 readiness evidence reconciliation。
-- 已完成但不能过度声明：真实 operator/model manual RC 主链路已通过 state-check 证据；T129 true operator PlanRun cancel follow-up 已在任务板验收为 pass，但其本地 ignored sanitized evidence 未 force-add 入 repo；focused p95 rows 已有 pass evidence，但这些是 bounded harness/RC 证据，不等于产品 release 结论。
-- 证据已纳入或引用：`docs/perf/v0.6.38-p95-evidence.md`、`docs/perf/v0.6.38-true-operator-manual-rc-pass-evidence.md`、`docs/perf/v0.6.39-task-message-report-p95.md`、`docs/perf/v0.6.41-fsstore-lock-wait-p95.md`、`docs/perf/v0.6.42-data-change-render-debounce.md`、`docs/perf/v0.6.42-spawn-bookkeeping-p95.md`、`docs/perf/v0.6.43-readiness-evidence-reconciliation.md`。其中 v0.6.39 的 large-mailbox fail 已被 v0.6.40 validation-cache optimization 后的 pass evidence supersede。
-- 仍需治理：最终 v0.7 readiness checkpoint 仍未启动；release/tag/npm/default-Go/native/package/fallback deletion/signing/second-platform 决策仍未授权；任何 final `ready:true` 仍需单独的 leader/user release-governance task。
+- 已完成并纳入 repo 轨道：v0.6.37 readiness burn-down map、v0.6.38 temp-home-bound RC harness、v0.6.38 p95/panel refresh runtime fix、post-fix p95 evidence reconciliation、worker launch provenance fix、真实 operator/model manual RC 主 checklist、v0.6.39/v0.6.40 task/message/report normal 与 large-mailbox focused p95 pass、v0.6.41 fsStore lock-wait focused p95 pass、v0.6.42 data-change render debounce focused pass、v0.6.42 spawn bookkeeping focused p95 pass、v0.6.43 readiness evidence reconciliation，以及 v0.6.44 Go cutover candidate selection。
+- 已完成但不能过度声明：真实 operator/model manual RC 主链路已通过 state-check 证据；T129 true operator PlanRun cancel follow-up 已在任务板验收为 pass，但其本地 ignored sanitized evidence 未 force-add 入 repo；focused p95 rows 已有 pass evidence；v0.6.44 只选择第一个 future Go-owned runtime 候选模块，不等于 runtime/default/release approval。
+- 证据已纳入或引用：`docs/perf/v0.6.38-p95-evidence.md`、`docs/perf/v0.6.38-true-operator-manual-rc-pass-evidence.md`、`docs/perf/v0.6.39-task-message-report-p95.md`、`docs/perf/v0.6.41-fsstore-lock-wait-p95.md`、`docs/perf/v0.6.42-data-change-render-debounce.md`、`docs/perf/v0.6.42-spawn-bookkeeping-p95.md`、`docs/perf/v0.6.43-readiness-evidence-reconciliation.md`、`docs/perf/v0.6.44-go-cutover-candidate-selection.md`。其中 v0.6.39 的 large-mailbox fail 已被 v0.6.40 validation-cache optimization 后的 pass evidence supersede。
+- 仍需治理：最终 v0.7 readiness checkpoint 仍未启动；future module cutover gate、release/tag/npm/default-Go/native/package/fallback deletion/signing/second-platform 决策仍未授权；任何 final `ready:true` 仍需单独的 leader/user release-governance task。
 - 明确禁止：当前状态不授权 tag、GitHub release、`npm version`、`npm publish`、package release、default Go、default resolver、native helper/package delivery、fallback deletion、signing 或 second-platform support。
 
-因此当前仍为 `ready:false`。v0.6.43 只对账并关闭/替换旧 evidence blocker 口径；它不是 v0.7 release-ready、tag、npm、default-Go、native 或 package approval。
+因此当前仍为 `ready:false`。v0.6.43 只对账并关闭/替换旧 evidence blocker 口径；它不是 v0.7 release-ready、tag、npm、default-Go、native 或 package approval。v0.6.44 在此基础上进入 Go cutover candidate selection：推荐 `tmuxSnapshotParse` / tmux snapshot parser 作为第一个 future Go-owned runtime 候选，但仍是 planning/evidence only。
 
 ### 0.5 当前执行路线（唯一当前主计划）
 
@@ -878,11 +878,12 @@ v0.7.0 不做：
 
 当前路线按可验证进展排序：
 
-1. **v0.6.43 evidence reconciliation**：对齐 v0.6.38-v0.6.42 evidence，保留 raw artifact path/hash/no-leak 检查，明确 focused p95 主 gate 均已有 pass evidence，同时保持结果 `ready:false`。
-2. **Manual RC execution**：真实 operator/model manual RC 主 checklist 已通过并纳入 sanitized repo evidence；T129 PlanRun cancel follow-up 已由任务板验收为 pass，但 ignored 本地 evidence 不 force-add。
-3. **p95 coverage completion**：task/message/report action、large mailbox、fsStore lock wait、data-change debounce、spawn bookkeeping 均已有 focused harness pass；每个 gate 的历史 fail/not-covered rows 通过 v0.6.43 reconciliation 标记为 covered/superseded，而不是删除历史审计记录。
-4. **v0.7 runtime burn-down**：以方案书六条 P0 主线为准做真实 runtime 改进，优先修影响 manual RC、p95、P0 bug 的路径；Go 只作为明确授权模块的 bounded helper/kernel。
-5. **v0.7 readiness checkpoint**：最终 checkpoint 只在证据、runtime burn-down、broad validation、manual governance、package/runtime invariants 与 release-governance 授权齐全后生成，并继续区分 `ready:false` / `ready:true`；它本身不自动授权 tag、npm、release asset、default Go、native package 或 fallback deletion。
+1. **v0.6.44 Go cutover candidate selection**：选择 `tmuxSnapshotParse` / tmux snapshot parser 作为第一个 future Go-owned runtime 候选；Go 只处理 TypeScript 已捕获的 snapshot text，不执行 tmux、不拥有 pane/session lifecycle、不写 state、不做 task/report/PlanRun governance、不读 full mailbox/report bodies、不参与 UI/control plane；结果仍为 `ready:false`。
+2. **v0.6.43 evidence reconciliation**：对齐 v0.6.38-v0.6.42 evidence，保留 raw artifact path/hash/no-leak 检查，明确 focused p95 主 gate 均已有 pass evidence，同时保持结果 `ready:false`。
+3. **Manual RC execution**：真实 operator/model manual RC 主 checklist 已通过并纳入 sanitized repo evidence；T129 PlanRun cancel follow-up 已由任务板验收为 pass，但 ignored 本地 evidence 不 force-add。
+4. **p95 coverage completion**：task/message/report action、large mailbox、fsStore lock wait、data-change debounce、spawn bookkeeping 均已有 focused harness pass；每个 gate 的历史 fail/not-covered rows 通过 v0.6.43 reconciliation 标记为 covered/superseded，而不是删除历史审计记录。
+5. **v0.7 runtime burn-down**：以方案书六条 P0 主线为准做真实 runtime 改进，优先修影响 manual RC、p95、P0 bug 的路径；Go 只作为明确授权模块的 bounded helper/kernel。
+6. **v0.7 readiness checkpoint**：最终 checkpoint 只在证据、runtime burn-down、broad validation、manual governance、package/runtime invariants 与 release-governance 授权齐全后生成，并继续区分 `ready:false` / `ready:true`；它本身不自动授权 tag、npm、release asset、default Go、native package 或 fallback deletion。
 
 历史 checkpoint 文件名中出现的 `v0.5` 只代表当时的历史命名，不代表当前最终目标。当前最终目标始终是 v0.7.0 的 `core refactor + performance baseline + bug burn-down release`。
 

@@ -8,6 +8,23 @@ module.exports = {
     patches.livePanes.add('%1')
     patches.livePanes.add('%2')
 
+    const originalCaptureTmuxSnapshot = modules.tmux.captureTmuxSnapshot
+    modules.tmux.captureTmuxSnapshot = (capturedAt = Date.now()) => {
+      const panes = [...patches.livePanes].sort().map(paneId => ({
+        paneId,
+        target: 'test:@1',
+        label: '',
+        currentCommand: paneId === '%leader' ? 'pi' : 'node',
+      }))
+      return {
+        capturedAt,
+        panes,
+        byPaneId: Object.fromEntries(panes.map(pane => [pane.paneId, pane])),
+        ok: true,
+      }
+    }
+
+    try {
     assert.ok(!Object.prototype.hasOwnProperty.call(modules.viewModel, 'loadPanelData'), 'viewModel should not expose runtime-loading side effects')
     const pureImportSource = helpers.readSource('teamPanel/viewModel.ts')
     const taskApplicationSource = helpers.readSource('app/taskApplication.ts')
@@ -167,6 +184,7 @@ module.exports = {
 
     const data = modules.panelDataSource.loadPanelData('render-suite')
     assert.ok(data, 'panel data should load')
+    assert.equal(data.team.members['planner-very-long-member-name-beta']?.paneId, '%2', 'panel data load should preserve fake live planner pane through hermetic tmux snapshot')
     const state = modules.viewModel.createInitialPanelState()
     modules.viewModel.clampPanelStateToData(state, data)
     let selection = modules.viewModel.buildPanelSelectionView(data, state)
@@ -759,6 +777,9 @@ module.exports = {
           )
         }
       }
+    }
+    } finally {
+      modules.tmux.captureTmuxSnapshot = originalCaptureTmuxSnapshot
     }
   },
 }
