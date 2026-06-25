@@ -74,6 +74,7 @@ docs/perf/*
 !docs/perf/v0.6.43-readiness-evidence-reconciliation.md
 !docs/perf/v0.6.44-go-cutover-candidate-selection.md
 !docs/perf/v0.6.45-tmux-snapshot-cutover-gate-prep.md
+!docs/perf/v0.6.46-default-go-readiness-approval-gate.md
 
 # Dependencies
 node_modules/
