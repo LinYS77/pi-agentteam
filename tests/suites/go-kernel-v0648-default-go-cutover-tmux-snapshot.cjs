@@ -73,7 +73,8 @@ const REQUIRED_ROADMAP = [
   'v0.6.48 actual default-Go cutover for `tmuxSnapshotParse`',
   'docs/perf/v0.6.48-default-go-cutover-tmux-snapshot.md',
   'default/unset 与 explicit `go` 进入 embedded helper cutover path',
-  '仍限定为 parser-only：Go 不执行 tmux、不接管 lifecycle/state/governance/UI/package release',
+  '该切片历史事实仍限定为 parser-only',
+  'v0.6.49 对 post-v0.6.49 future-only boundary 做架构 supersede',
   'rollback/default-disable 仍通过 `disabled` 或 `typescript` 模式完成',
   '**v0.6.48 actual default-Go cutover for `tmuxSnapshotParse`**',
 ]

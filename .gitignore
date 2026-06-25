@@ -9,6 +9,7 @@ docs/*
 docs/decisions/*
 !docs/decisions/0001-replaceable-go-kernel.md
 !docs/decisions/0002-module-owned-go-kernel-cutover.md
+!docs/decisions/0003-go-control-plane-expansion.md
 !docs/perf/
 docs/perf/*
 !docs/perf/v0.4.14-state-read-model-baseline.md
@@ -77,6 +78,7 @@ docs/perf/*
 !docs/perf/v0.6.46-default-go-readiness-approval-gate.md
 !docs/perf/v0.6.47-non-mutating-default-go-dry-run.md
 !docs/perf/v0.6.48-default-go-cutover-tmux-snapshot.md
+!docs/perf/v0.6.49-go-control-plane-expansion-gate.md
 
 # Dependencies
 node_modules/
