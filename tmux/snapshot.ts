@@ -1,5 +1,4 @@
-import { createAgentTeamKernelAdapter, type AgentTeamKernelCutoverFailureKind } from '../core/kernel.js'
-import { runTmuxNoThrow } from './client.js'
+import { createAgentTeamKernelAdapter, type AgentTeamKernelCutoverFailureKind, type AgentTeamKernelTmuxSnapshotCapability } from '../core/kernel.js'
 
 export type TmuxPaneSnapshotItem = {
   paneId: string
@@ -16,8 +15,8 @@ export type TmuxSnapshot = {
   error?: string
   status?: 'unknown'
   resultMarker?: 'stale'
-  module?: 'tmuxSnapshotParse'
-  capability?: 'tmuxSnapshotParse'
+  module?: AgentTeamKernelTmuxSnapshotCapability
+  capability?: AgentTeamKernelTmuxSnapshotCapability
   cutoverFailureKind?: AgentTeamKernelCutoverFailureKind
   reason?: string
 }
@@ -29,17 +28,6 @@ export type TmuxSnapshotPaneBinding = {
 }
 
 export const TMUX_PANE_SNAPSHOT_FORMAT = '#{pane_id}\t#{session_name}:#{window_id}\t#{@agentteam-name}\t#{pane_current_command}'
-
-function emptySnapshot(capturedAt: number, ok = true, error?: string): TmuxSnapshot {
-  return {
-    capturedAt,
-    panes: [],
-    byPaneId: {},
-    ok,
-    ...(ok === false ? { status: 'unknown' as const, resultMarker: 'stale' as const } : {}),
-    ...(error === undefined ? {} : { error }),
-  }
-}
 
 export function parseTmuxPaneSnapshot(stdout: string, capturedAt = Date.now()): TmuxSnapshot {
   return createAgentTeamKernelAdapter().parseTmuxPaneSnapshot(stdout, capturedAt)
@@ -69,13 +57,5 @@ export function listAgentTeamPanesFromSnapshot(snapshot: TmuxSnapshot): TmuxPane
 }
 
 export function captureTmuxSnapshot(capturedAt = Date.now()): TmuxSnapshot {
-  const result = runTmuxNoThrow([
-    'list-panes',
-    '-a',
-    '-F',
-    TMUX_PANE_SNAPSHOT_FORMAT,
-  ])
-  if (!result.ok) return emptySnapshot(capturedAt, false, result.stderr || 'tmux list-panes failed')
-  if (!result.stdout) return emptySnapshot(capturedAt)
-  return parseTmuxPaneSnapshot(result.stdout, capturedAt)
+  return createAgentTeamKernelAdapter().captureTmuxSnapshot(capturedAt)
 }

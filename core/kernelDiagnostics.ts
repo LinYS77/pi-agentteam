@@ -96,6 +96,18 @@ const DIAGNOSTIC_MAPPINGS: Record<AgentTeamKernelCutoverFailureKind, DiagnosticM
     remediation: 'Use TypeScript mode or restart after resolving the earlier helper failure.',
     freshnessHint: 'Helper stayed disabled after a previous fail-closed parser error.',
   },
+  'tmux-command-timeout': {
+    remediation: 'Retry after tmux responds, or use rollback/default-disable mode before relying on snapshot capture.',
+    freshnessHint: 'Go tmux snapshot capture timed out before returning pane data.',
+  },
+  'tmux-command-failed': {
+    remediation: 'Verify tmux availability/session state, or use rollback/default-disable mode before relying on snapshot capture.',
+    platformHint: 'The tmux list-panes snapshot command failed without exposing raw stdout or stderr.',
+  },
+  'tmux-unavailable': {
+    remediation: 'Install tmux or run inside a tmux-capable environment before relying on Go snapshot capture.',
+    platformHint: 'The tmux executable was unavailable to the embedded Go helper.',
+  },
 }
 
 export function createTmuxSnapshotParseFailureDiagnostic(

@@ -334,10 +334,10 @@ function assertExistingEvidence(root) {
 
 function assertNoRuntimeBehaviorChanged(root, env) {
   const snapshotSource = read(root, 'tmux/snapshot.ts')
-  assert.match(snapshotSource, /runTmuxNoThrow\(\[/, 'TypeScript must still capture tmux output')
-  assert.match(snapshotSource, /list-panes/, 'TypeScript capture path must still call list-panes')
-  assert.match(snapshotSource, /TMUX_PANE_SNAPSHOT_FORMAT/, 'TypeScript capture path must still own tmux format')
+  assert.equal(snapshotSource.includes('runTmuxNoThrow(['), false, 'post-v0.6.49 tmux capture no longer uses the TypeScript tmux client')
+  assert.match(snapshotSource, /TMUX_PANE_SNAPSHOT_FORMAT/, 'TypeScript should retain tmux format as protocol constant')
   assert.equal(/parseTmuxPaneSnapshotWithTypeScript/.test(snapshotSource), false, 'approved v0.6.48 cutover deletes TypeScript parser fallback')
+  assert.match(snapshotSource, /createAgentTeamKernelAdapter\(\)\.captureTmuxSnapshot/, 'post-v0.6.49 first slice moves tmux snapshot capture behind the kernel adapter')
 
   const kernelSource = read(root, 'core/kernel.ts')
   assert.match(kernelSource, /if \(!raw \|\| raw === 'default'\) return 'default'/, 'default/unset should normalize to default cutover mode')
@@ -356,8 +356,10 @@ function assertNoRuntimeBehaviorChanged(root, env) {
   }
 
   const goSource = read(root, 'kernel/go/agentteam-kernel/main.go')
-  for (const forbidden of ['exec.Command', 'os/exec', 'tmux ', 'list-panes', 'createTeammatePane', 'kill-pane', 'display-message', 'send-keys', 'PI_AGENTTEAM_HOME', 'team.json', 'os.Open', 'os.ReadFile', 'os.WriteFile', 'os.Create']) {
-    assert.equal(goSource.includes(forbidden), false, `Go helper must not own tmux/runtime/state authority: ${forbidden}`)
+  assert.match(goSource, /case "tmuxSnapshotCapture"/, 'post-v0.6.49 first slice may add narrow tmux snapshot capture')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux execution must be limited to snapshot capture')
+  for (const forbidden of ['createTeammatePane', 'kill-pane', 'display-message', 'send-keys', 'PI_AGENTTEAM_HOME', 'team.json', 'os.Open', 'os.ReadFile', 'os.WriteFile', 'os.Create']) {
+    assert.equal(goSource.includes(forbidden), false, `Go helper must not own lifecycle/state authority: ${forbidden}`)
   }
 
   if (typeof env.helpers.requireDist !== 'function') return

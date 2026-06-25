@@ -80,11 +80,13 @@ function assertGoHelperBoundaries(root) {
   const source = read(root, GO_HELPER)
   assert.match(source, /func run\(input io\.Reader, output io\.Writer\)/, 'Go helper should remain stdio reader/writer scoped')
   assert.match(source, /run\(os\.Stdin, os\.Stdout\)/, 'Go helper should remain stdio-only')
-  assert.match(source, /func parseTmuxSnapshot\(params map\[string\]any\)/, 'Go helper should only parse supplied tmuxSnapshotParse params')
-  assert.match(source, /stdout := stringParam\(params, "stdout"\)/, 'Go helper should parse already-captured stdout')
+  assert.match(source, /func parseTmuxSnapshot\(params map\[string\]any\)/, 'Go helper should parse supplied tmuxSnapshotParse params')
+  assert.match(source, /stdout := stringParam\(params, "stdout"\)/, 'Go helper should parse snapshot stdout')
+  assert.match(source, /case "tmuxSnapshotCapture"/, 'post-v0.6.49 Go helper may own narrow tmux snapshot capture')
+  assert.match(source, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux command must be limited to snapshot capture')
   assertNoMatches(GO_HELPER, source, [
-    ['tmux subprocess command', /\btmux\b|list-panes|display-message|send-keys|kill-pane|split-window|new-window/],
-    ['shell execution import/API', /"os\/exec"|\bexec\.Command\s*\(|\b(?:sh|bash|zsh|fish)\b/],
+    ['broad tmux subprocess command', /display-message|send-keys|kill-pane|split-window|new-window/],
+    ['shell execution API', /\bexec\.Command\s*\(|\b(?:sh|bash|zsh|fish)\b/],
     ['worker spawn/lifecycle authority', /worker\s*spawn|spawnWorker|WorkerSpawn|workerLifecycle|paneLost|forceReconcile|lightReconcile/],
     ['network/listener authority', /"net"|"net\/http"|\b(?:Listen|ListenAndServe|Accept|Dial|Serve)\s*\(/],
     ['repository file reads/writes', /\bos\.(?:Open|OpenFile|ReadFile|WriteFile|Create|CreateTemp|Remove|RemoveAll|Rename|Mkdir|MkdirAll)\s*\(/],
@@ -109,6 +111,8 @@ function assertRuntimeBoundaryFacts(root) {
   assert.match(dataSource, /snapshotForOrphanDiscovery/, 'data source should isolate cutover orphan-discovery selection')
   assert.match(dataSource, /snapshot\.module === 'tmuxSnapshotParse'/, 'cutover orphan discovery should require tmuxSnapshotParse module marker')
   assert.match(dataSource, /snapshot\.capability === 'tmuxSnapshotParse'/, 'cutover orphan discovery should require tmuxSnapshotParse capability marker')
+  assert.match(dataSource, /snapshot\.module === 'tmuxSnapshotCapture'/, 'cutover orphan discovery should also recognize tmuxSnapshotCapture unavailable marker')
+  assert.match(dataSource, /snapshot\.capability === 'tmuxSnapshotCapture'/, 'cutover orphan discovery should also recognize tmuxSnapshotCapture capability marker')
   assert.match(dataSource, /Boolean\(snapshot\.cutoverFailureKind\)/, 'cutover orphan discovery should require cutoverFailureKind marker')
   assert.match(dataSource, /snapshot\?\.ok === false \? undefined : snapshot/, 'generic ok:false orphan fallback should remain undefined')
 

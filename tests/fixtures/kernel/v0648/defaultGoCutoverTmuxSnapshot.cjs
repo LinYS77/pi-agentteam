@@ -14,7 +14,7 @@ const APPROVED_EMBEDDED_NATIVE_FILES = Object.freeze([
   'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/license.json',
   'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/attestation.intoto.jsonl',
 ])
-const REQUIRED_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'])
+const REQUIRED_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'])
 const FAILURE_CLASSES = Object.freeze([
   'unsupported-platform',
   'integrity-failed',
@@ -26,7 +26,7 @@ const EXPLICIT_PREVIEW_MODE = 'go-packaged-preview'
 const DEFAULT_MODES = Object.freeze(['unset', 'default', 'go'])
 const GO_AUTHORITY = 'tmuxSnapshotParse-parser-only'
 const TS_AUTHORITY = Object.freeze([
-  'tmux execution and list-panes capture',
+  'non-snapshot tmux execution and pane lifecycle commands',
   'pane/session/worker lifecycle',
   'state writes and repository ownership',
   'task/report/PlanRun governance',

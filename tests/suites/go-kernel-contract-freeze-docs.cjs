@@ -29,7 +29,7 @@ module.exports = {
     assert.equal(kernel.AGENTTEAM_KERNEL_PROTOCOL_VERSION, 1)
     assert.equal(kernel.AGENTTEAM_KERNEL_ADAPTER_VERSION, '0.3.0-read-model-shadow')
     assert.equal(kernel.AGENTTEAM_KERNEL_HELPER_VERSION, '0.3.0-read-model-shadow')
-    assert.deepEqual(kernel.AGENTTEAM_KERNEL_CAPABILITIES, ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'])
+    assert.deepEqual(kernel.AGENTTEAM_KERNEL_CAPABILITIES, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'])
     assert.equal(kernel.AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED, false)
     assert.match(kernelSource, /AGENTTEAM_KERNEL_PROTOCOL_VERSION = 1/)
     assert.match(goSource, /const protocolVersion = 1/)
@@ -56,7 +56,7 @@ module.exports = {
       assert.ok(doc.includes(expected), `freeze doc should reference ${expected}`)
     }
 
-    for (const capability of ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint']) {
+    for (const capability of ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']) {
       assert.ok(doc.includes(capability), `freeze doc should document capability ${capability}`)
     }
 
@@ -102,7 +102,7 @@ module.exports = {
       'Slice 3 Tmux Parser Parity Corpus',
       'CRLF rows normalize',
       'duplicate pane ids keep first-seen',
-      'Go remains limited to parsing already-captured stdout',
+      'After v0.6.50, Go may execute only the narrow `tmuxSnapshotCapture` list-panes snapshot command',
       'Slice 4 Read-Model Parity Corpus',
       'any key named `text` is stripped recursively',
       'Compact team config and PlanRun projections are included',
@@ -114,7 +114,7 @@ module.exports = {
       'no TS retry unless the operation is proven idempotent/retry-safe under the TypeScript lock',
       'fallback count stays stable',
       'Slice 6 Boundary Guardrails',
-      'Runtime `/team`, repository, tmux execution, worker spawn, task/report, PlanRun, leader attention, and full-text boundaries remain TypeScript-owned',
+      'pane spawn/kill/window lifecycle, light/force reconcile, state files, runtime UI, governance, and full-text boundaries remain outside Go authority',
       '`package.json#files` must not include `kernel/`',
       'no `go.mod`, `go.sum`, checked-in native `.exe`, `.dll`, `.so`, `.dylib`, or temporary helper artifact is allowed',
       'GitHub-only v0.4.17 reviewer checklist',

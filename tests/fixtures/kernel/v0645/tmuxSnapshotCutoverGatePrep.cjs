@@ -154,6 +154,9 @@ const FAILURE_CLASSES = Object.freeze([
   'helper-incompatible-response',
   'helper-unsafe-response-shape',
   'previous-helper-failure',
+  'tmux-command-timeout',
+  'tmux-command-failed',
+  'tmux-unavailable',
 ])
 
 const FAIL_CLOSED_CONTRACT = Object.freeze({

@@ -78,7 +78,7 @@ const REQUIRED_EVIDENCE = [
   '### Future Install Layout Resolver Contract',
   'native helper layout under `native/tmuxSnapshotParse/<helper-version>/<target>/...`.',
   'current review-only target row `linux-x64-glibc`.',
-  'current module `tmuxSnapshotParse`, helper version `0.3.0-read-model-shadow`, protocol version `1`, and required capabilities `health`, `profile`, `tmuxSnapshotParse`, and `compactReadModelFingerprint`.',
+  'current module `tmuxSnapshotParse`, helper version `0.3.0-read-model-shadow`, protocol version `1`, and required capabilities `health`, `profile`, `tmuxSnapshotParse`, `tmuxSnapshotCapture`, and `compactReadModelFingerprint`.',
   'future precedence remains explicit helper path, then explicit `go-packaged-preview` package-root/manifest injection, then a future package resolver only after separate approval.',
   'This is not production resolver implementation, not package-manager delivery proof, not default resolver approval, and not default Go approval.',
   '### Rollback / Default-Disable and Fallback-Deletion Preconditions',

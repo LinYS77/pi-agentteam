@@ -16,7 +16,7 @@ const DOC = 'docs/perf/v0.6.33-clean-install-native-helper-consumption.md'
 const MODULE = 'tmuxSnapshotParse'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const PROTOCOL_VERSION = 1
-const CAPABILITIES = ['health', 'profile', MODULE, 'compactReadModelFingerprint']
+const CAPABILITIES = ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
 const FIXED_GENERATED_AT = '2026-06-14T03:00:00.000Z'
 const FIXED_SOURCE_REVISION = '7777777777777777777777777777777777777777'
 const RUN_IDENTITY = 'v0633-installed-layout-consumption-suite'
@@ -135,7 +135,7 @@ const helperSource = [
   '  const health = ' + JSON.stringify(health),
   "  function respond(result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\\\n') }",
   "  if (request.method === 'health') respond(health)",
-  "  else if (request.method === 'profile') respond({ ...health, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })",
+  "  else if (request.method === 'profile') respond({ ...health, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, tmuxSnapshotCaptureConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })",
   "  else if (request.method === 'tmuxSnapshotParse') respond({ ok: true, capturedAt: Number((request.params || {}).capturedAt || 0), panes: [{ paneId: '%1', target: 'installed:@1', label: 'installed-helper', currentCommand: 'pi' }], byPaneId: { '%1': { paneId: '%1', target: 'installed:@1', label: 'installed-helper', currentCommand: 'pi' } } })",
   "  else if (request.method === 'compactReadModelFingerprint') respond({ ok: true, projection: request.params && request.params.input, fingerprint: 'helper-should-not-run', inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })",
   "  else process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, error: { code: -32601, message: 'method not found' } }) + '\\\\n')",

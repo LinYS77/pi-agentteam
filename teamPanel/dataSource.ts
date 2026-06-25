@@ -108,8 +108,14 @@ function snapshotForOrphanDiscovery(snapshot: Parameters<RuntimeRepository['list
     && snapshot.module === 'tmuxSnapshotParse'
     && snapshot.capability === 'tmuxSnapshotParse'
     && Boolean(snapshot.cutoverFailureKind)
-  if (cutoverParserUnavailable) return snapshot
-  // v0.4.19 generic parser-unavailable fallback remains equivalent to listAgentTeamPanes(snapshot.ok === false ? undefined : snapshot); only cutover parser-unavailable snapshots avoid hidden live orphan parsing.
+  const cutoverCaptureUnavailable = snapshot?.ok === false
+    && snapshot.status === 'unknown'
+    && snapshot.resultMarker === 'stale'
+    && snapshot.module === 'tmuxSnapshotCapture'
+    && snapshot.capability === 'tmuxSnapshotCapture'
+    && Boolean(snapshot.cutoverFailureKind)
+  if (cutoverParserUnavailable || cutoverCaptureUnavailable) return snapshot
+  // v0.4.19 generic parser-unavailable fallback remains equivalent to listAgentTeamPanes(snapshot.ok === false ? undefined : snapshot); cutover parser/capture-unavailable snapshots avoid hidden live orphan parsing.
   return snapshot?.ok === false ? undefined : snapshot
 }
 

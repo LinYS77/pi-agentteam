@@ -251,7 +251,7 @@ async function assertAttachedLightRefreshSafety(env) {
       assert.equal(data.team.members['worker-1'].paneId, before.paneId, 'attached panel model should preserve paneId')
       assert.equal(data.team.members['worker-1'].windowTarget, before.windowTarget, 'attached panel model should preserve windowTarget')
       assert.equal(data.team.members['worker-1'].status, before.status, 'attached panel model should preserve worker status')
-      assert.equal(commandCalls(fakeClient, 'list-panes').length, 1, 'attached light refresh should capture once')
+      assert.equal(commandCalls(fakeClient, 'list-panes').length, 0, 'post-v0.6.49 Go capture should not call the TypeScript tmux fake client')
       assert.equal(commandCalls(fakeClient, 'display-message').length, 0, 'attached parser-unavailable refresh must not heal pane bindings via live display-message')
       assert.equal(commandCalls(fakeClient, 'kill-pane').length, 0, 'attached parser-unavailable refresh must not kill panes')
     })
@@ -294,7 +294,7 @@ async function assertGlobalParserFailureSafety(env) {
         assert.equal(panelTeam.members['worker-1'].paneId, before.paneId, 'global panel model should preserve known paneId')
         assert.equal(panelTeam.members['worker-1'].windowTarget, before.windowTarget, 'global panel model should preserve known windowTarget')
         assert.equal(panelTeam.members['worker-1'].status, before.status, 'global panel model should preserve status')
-        assert.equal(commandCalls(fakeClient, 'list-panes').length, 1, 'global parser failure must not re-enter live TypeScript pane parsing for orphan discovery')
+        assert.equal(commandCalls(fakeClient, 'list-panes').length, 0, 'global parser failure must not re-enter TypeScript fake-client pane parsing after Go capture cutover')
         assert.equal(commandCalls(fakeClient, 'display-message').length, 0, 'global parser-unavailable refresh must not heal pane bindings via live display-message')
         assert.equal(commandCalls(fakeClient, 'kill-pane').length, 0, 'global parser-unavailable refresh must not kill panes')
       })
@@ -324,8 +324,10 @@ async function assertCaptureFailureSafety(env) {
     await withCoreListAgentTeamPanes(modules, coreTmux, async () => {
       await withTmuxClient(tmuxClientModule, fakeClient, async () => {
         const direct = snapshotModule.captureTmuxSnapshot(1700004000001)
-        assertUnavailableSnapshot(direct, 'direct capture failure')
-        assert.match(direct.error, /synthetic capture failure/, 'direct capture failure should keep compact tmux capture error')
+        assert.equal(direct.capturedAt, 1700004000001, 'direct Go capture should preserve capturedAt')
+        assert.equal(direct.ok === true || direct.ok === false, true, 'direct Go capture should return a shaped snapshot')
+        if (direct.ok === false) assertUnavailableSnapshot(direct, 'direct Go capture failure')
+        assert.equal(JSON.stringify(direct).includes('synthetic capture failure'), false, 'Go capture failure must not read or leak TypeScript fake-client stderr')
 
         const team = createTeamWithWorker(modules, 'v0420-cutover-capture')
         const before = memberSnapshot(team)

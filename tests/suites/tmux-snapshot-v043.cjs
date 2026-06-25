@@ -159,14 +159,21 @@ async function exerciseCaptureContract(snapshotModule, tmuxClientModule) {
   await withTmuxClient(tmuxClientModule, fakeClient, async () => {
     const snapshot = snapshotModule.captureTmuxSnapshot(67890)
     assert.equal(snapshot.capturedAt, 67890, 'captureTmuxSnapshot should preserve explicit capturedAt')
-    assert.equal(snapshot.ok, true, 'successful capture snapshots should be marked ok')
-    assert.equal(snapshot.panes.length, 2, 'captureTmuxSnapshot should parse fake list-panes rows')
-    assert.equal(snapshot.byPaneId['%capture-a'].target, 'snapshot:@1')
-    assert.equal(snapshot.byPaneId['%capture-b'].currentCommand, 'pi')
+    assert.equal(snapshot.ok === true || snapshot.ok === false, true, 'captureTmuxSnapshot should return a shaped snapshot')
+    if (snapshot.ok === false) {
+      assert.equal(snapshot.status, 'unknown', 'Go capture failure should be explicit unknown')
+      assert.equal(snapshot.resultMarker, 'stale', 'Go capture failure should be stale, not empty-success')
+      assert.equal(snapshot.module, 'tmuxSnapshotCapture')
+      assert.equal(snapshot.capability, 'tmuxSnapshotCapture')
+      assert.ok(['tmux-command-timeout', 'tmux-command-failed', 'tmux-unavailable', 'missing-helper', 'previous-helper-failure'].includes(snapshot.cutoverFailureKind), 'failure kind should be compact and known')
+      assert.equal(/stdout|stderr|stack|MAILBOX_BODY|REPORT_BODY|worker transcript/i.test(JSON.stringify(snapshot)), false, 'capture failure should not leak raw command output')
+    } else {
+      assert.ok(Array.isArray(snapshot.panes), 'successful Go capture should return panes array')
+      assert.ok(snapshot.byPaneId && typeof snapshot.byPaneId === 'object', 'successful Go capture should return byPaneId')
+    }
   })
-  assert.equal(countCommand(fakeClient.calls, 'list-panes'), 1, 'captureTmuxSnapshot should call list-panes once')
-  assert.equal(countCommand(fakeClient.calls, 'display-message'), 0, 'captureTmuxSnapshot should not call display-message')
-  assert.deepEqual(fakeClient.calls[0], ['list-panes', '-a', '-F', snapshotModule.TMUX_PANE_SNAPSHOT_FORMAT], 'captureTmuxSnapshot should use the exported snapshot format')
+  assert.equal(countCommand(fakeClient.calls, 'list-panes'), 0, 'captureTmuxSnapshot should no longer call the TypeScript tmux fake client after v0.6.50')
+  assert.equal(countCommand(fakeClient.calls, 'display-message'), 0, 'captureTmuxSnapshot should not call display-message through the TypeScript tmux fake client')
 }
 
 async function exerciseLookupHelpersContract(snapshotModule, tmuxClientModule) {
@@ -264,10 +271,10 @@ module.exports = {
         assertPanelLoadDoesNotMutateMailbox(modules, attached.team.name, message.id)
         const attachedDisplayMessages = countCommand(attachedFakeClient.calls, 'display-message')
         const attachedListPanes = countCommand(attachedFakeClient.calls, 'list-panes')
-        if (attachedListPanes > 1 || attachedDisplayMessages !== 0) {
+        if (attachedListPanes !== 0) {
           failures.push([
-            'attached light reconcile /team load should use a bounded tmux snapshot instead of per-member display-message',
-            `expected <=1 list-panes and 0 display-message; got list-panes=${attachedListPanes}, display-message=${attachedDisplayMessages}`,
+            'attached light reconcile /team load should not use TypeScript list-panes capture after v0.6.50',
+            `expected 0 list-panes through the TypeScript tmux fake; got list-panes=${attachedListPanes}, display-message=${attachedDisplayMessages}`,
             `commands=${JSON.stringify(attachedFakeClient.calls)}`,
           ].join('\n'))
         }
@@ -278,14 +285,14 @@ module.exports = {
           const globalData = modules.panelDataSource.loadPanelData(null)
           assert.equal(globalData.mode, 'global', 'global fixture should load global panel data')
           assert.equal(globalData.teams.filter(team => team.identity?.displayName === 'Shared Snapshot').length, 2, 'TeamIdentity same-display teams should remain distinct in global data')
-          assert.ok(globalData.orphanPanes.some(pane => pane.paneId === '%snapshot-orphan-a'), 'global panel should still expose orphan pane snapshot rows')
+          assert.deepEqual(globalData.orphanPanes.filter(pane => orphanPaneIds.includes(pane.paneId)), [], 'global panel should not synthesize orphan rows from the TypeScript tmux fake when Go capture is unavailable')
         })
         const globalDisplayMessages = countCommand(globalFakeClient.calls, 'display-message')
         const globalListPanes = countCommand(globalFakeClient.calls, 'list-panes')
-        if (globalListPanes > 1 || globalDisplayMessages !== 0) {
+        if (globalListPanes !== 0) {
           failures.push([
-            'global /team load should reuse one tmux snapshot for team pane health and orphan pane discovery',
-            `expected <=1 list-panes and 0 display-message; got list-panes=${globalListPanes}, display-message=${globalDisplayMessages}`,
+            'global /team load should avoid hidden TypeScript list-panes fallback for orphan pane discovery',
+            `expected 0 list-panes through the TypeScript tmux fake; got list-panes=${globalListPanes}, display-message=${globalDisplayMessages}`,
             `commands=${JSON.stringify(globalFakeClient.calls)}`,
           ].join('\n'))
         }

@@ -222,11 +222,11 @@ function assertRuntimeNotMigratedYet(root) {
   const snapshotSource = read(root, 'tmux/snapshot.ts')
   const clientSource = read(root, 'tmux/client.ts')
   const goSource = read(root, 'kernel/go/agentteam-kernel/main.go')
-  assert.match(snapshotSource, /runTmuxNoThrow\(\[/, 'v0.6.49 should not yet migrate tmux capture runtime')
-  assert.match(snapshotSource, /list-panes/, 'v0.6.49 should still use existing list-panes call until the next slice')
-  assert.match(clientSource, /execFileSync\(TMUX/, 'v0.6.49 should not remove the TypeScript tmux client yet')
-  assert.equal(/tmuxSnapshotCapture/.test(goSource), false, 'v0.6.49 should not add Go tmux capture runtime yet')
-  assert.equal(/exec\.Command\([^)]*tmux|list-panes/.test(goSource), false, 'v0.6.49 should not execute tmux from Go yet')
+  assert.match(snapshotSource, /createAgentTeamKernelAdapter\(\)\.captureTmuxSnapshot/, 'post-v0.6.49 first slice should migrate tmux capture through the kernel adapter')
+  assert.match(clientSource, /execFileSync\(TMUX/, 'TypeScript tmux client should remain for non-capture lifecycle operations')
+  assert.match(goSource, /case "tmuxSnapshotCapture"/, 'post-v0.6.49 first slice should add Go tmux capture runtime')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux capture must remain limited to list-panes snapshot capture')
+  assert.equal(/createTeammatePane|kill-pane|display-message|send-keys|PI_AGENTTEAM_HOME|team\.json|os\.ReadFile|os\.WriteFile|os\.Create/.test(goSource), false, 'post-v0.6.49 tmux capture slice must not migrate lifecycle/state/task/UI runtime yet')
 }
 
 function assertRepositoryArtifacts(root) {

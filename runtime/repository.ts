@@ -21,29 +21,8 @@ export type RuntimeRepository = {
   prepareTeamForPanel(team: TeamState, options?: ReconcileTeamPanesOptions): boolean
 }
 
-const defaultListAgentTeamPanes = tmux.listAgentTeamPanes
-
-function mergeSnapshotPanes(snapshot: TmuxSnapshot, panes: TmuxPaneSnapshotItem[]): TmuxSnapshot {
-  if (panes.length === 0) return snapshot
-  const byPaneId: TmuxSnapshot['byPaneId'] = { ...snapshot.byPaneId }
-  const order = snapshot.panes.map(pane => pane.paneId)
-  for (const pane of panes) {
-    if (!byPaneId[pane.paneId]) order.push(pane.paneId)
-    byPaneId[pane.paneId] = pane
-  }
-  return {
-    capturedAt: snapshot.capturedAt,
-    panes: order.map(paneId => byPaneId[paneId]!).filter(Boolean),
-    byPaneId,
-    ok: true,
-  }
-}
-
 function captureRuntimeSnapshot(): TmuxSnapshot {
-  const snapshot = tmux.captureTmuxSnapshot()
-  const listAgentTeamPanesWasPatched = tmux.listAgentTeamPanes !== defaultListAgentTeamPanes
-  if (!listAgentTeamPanesWasPatched) return snapshot
-  return mergeSnapshotPanes(snapshot, tmux.listAgentTeamPanes())
+  return tmux.captureTmuxSnapshot()
 }
 
 export function captureCurrentPaneBinding(): PaneBinding | null {

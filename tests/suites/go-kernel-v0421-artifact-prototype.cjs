@@ -22,7 +22,7 @@ const REQUIRED_PACKAGE_FILES = [
   MANIFEST_FILENAME,
   HELPER_FILENAME,
 ]
-const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint']
+const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
 const SENTINELS = {
   stdout: 'ARTIFACT_PROTOTYPE_STDOUT_SHOULD_NOT_LEAK',
   stderr: 'ARTIFACT_PROTOTYPE_STDERR_SHOULD_NOT_LEAK',
@@ -84,7 +84,7 @@ const baseHealth = {
 }
 function respond(result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n') }
 if (request.method === 'health') respond(baseHealth)
-else if (request.method === 'profile') respond({ ...baseHealth, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
+else if (request.method === 'profile') respond({ ...baseHealth, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, tmuxSnapshotCaptureConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
 else if (request.method === 'tmuxSnapshotParse') respond({ capturedAt: request.params.capturedAt, panes: [{ paneId: '%artifact', target: 'artifact:@1', label: 'artifact helper', currentCommand: 'pi' }], byPaneId: { '%artifact': { paneId: '%artifact', target: 'artifact:@1', label: 'artifact helper', currentCommand: 'pi' } }, ok: true })
 else if (request.method === 'compactReadModelFingerprint') respond({ ok: true, projection: request.params.input, fingerprint: 'artifact-helper-should-not-be-used', inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })
 else respond({ ok: true })

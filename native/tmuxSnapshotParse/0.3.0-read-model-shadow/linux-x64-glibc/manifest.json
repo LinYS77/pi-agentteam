@@ -9,6 +9,7 @@
     "health",
     "profile",
     "tmuxSnapshotParse",
+    "tmuxSnapshotCapture",
     "compactReadModelFingerprint"
   ],
   "businessPathsConnected": false,
@@ -21,8 +22,8 @@
   "artifact": {
     "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/agentteam-tmuxSnapshotParse",
     "filename": "agentteam-tmuxSnapshotParse",
-    "size": 2855822,
-    "sha256": "87ca2289d2f89fd6f1540a6c6c667c1bdb18c7c697d934ed1a1cc64e4aa4a310",
+    "size": 3400412,
+    "sha256": "f2233e79e54ba047a51856458a4ea08175d6dc34db76863064a99a5da7a8edea",
     "executable": true,
     "mode": "0755"
   },
@@ -37,7 +38,7 @@
   },
   "source": {
     "path": "kernel/go/agentteam-kernel",
-    "revision": "v0648-main-package-embedded-helper"
+    "revision": "v0650-go-tmux-snapshot-capture"
   },
   "build": {
     "command": [
@@ -53,7 +54,7 @@
     },
     "cwd": "kernel/go/agentteam-kernel",
     "toolchain": "go version go1.25.10 linux/amd64",
-    "runIdentity": "v0648-main-package-embedded-helper",
+    "runIdentity": "v0650-go-tmux-snapshot-capture",
     "generatedAt": "2026-06-25T00:00:00.000Z"
   },
   "smoke": {
@@ -62,13 +63,21 @@
       "ok": true,
       "paneCount": 1,
       "capturedAt": 1700000000000
+    },
+    "tmuxSnapshotCapture": {
+      "ok": false,
+      "acceptedFailureKinds": [
+        "tmux-command-failed",
+        "tmux-unavailable",
+        "tmux-command-timeout"
+      ]
     }
   },
   "attestation": {
     "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/attestation.intoto.jsonl",
     "kind": "placeholder-only",
     "signed": false,
-    "sha256": "7546c933ae5d87b3e01224abe791dda5f07a0332f5ca2cdcd359838ff0d8649c"
+    "sha256": "7c4402fd78cede0d1074eedf755255bea732989e83f6da6be1b208ac36f684c4"
   },
   "license": {
     "name": "MIT",

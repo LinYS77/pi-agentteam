@@ -82,10 +82,10 @@ function assertAllFixturesWithParser(parser, label) {
 
 function assertBoundaryScans(env) {
   const snapshotSource = env.helpers.readSource('tmux/snapshot.ts')
-  assert.match(snapshotSource, /runTmuxNoThrow\(\[/, 'TypeScript must still capture tmux output')
-  assert.match(snapshotSource, /list-panes/, 'TypeScript capture path must still call list-panes')
-  assert.match(snapshotSource, /TMUX_PANE_SNAPSHOT_FORMAT/, 'TypeScript capture path must own tmux format')
-  assert.match(snapshotSource, /createAgentTeamKernelAdapter/, 'only parser should optionally call kernel adapter')
+  assert.equal(snapshotSource.includes('runTmuxNoThrow(['), false, 'v0.6.50 moves snapshot capture execution out of TypeScript')
+  assert.match(snapshotSource, /TMUX_PANE_SNAPSHOT_FORMAT/, 'TypeScript should keep tmux format as public protocol constant')
+  assert.match(snapshotSource, /createAgentTeamKernelAdapter\(\)\.captureTmuxSnapshot/, 'capture should delegate to Go kernel adapter')
+  assert.match(snapshotSource, /createAgentTeamKernelAdapter\(\)\.parseTmuxPaneSnapshot/, 'parser should delegate to Go kernel adapter')
 
   for (const rel of ['adapters/tmux/teamPanes.ts', 'tools/workerSpawnService.ts', 'app/taskApplication.ts', 'app/taskReportWorkflow.ts', 'app/planRunApplication.ts']) {
     const source = env.helpers.readSource(rel)
@@ -104,13 +104,15 @@ function assertBoundaryScans(env) {
     'tmux/panes.ts',
     'tmux/windows.ts',
   ].map(rel => env.helpers.readSource(rel)).join('\n')
-  for (const token of ['createTeammatePane', 'killPane', 'ensureSwarmWindow', 'runTmuxNoThrow', 'list-panes', 'prepareTeamForPanel', 'reconcileTeamPanes']) {
+  for (const token of ['createTeammatePane', 'killPane', 'ensureSwarmWindow', 'runTmuxNoThrow', 'prepareTeamForPanel', 'reconcileTeamPanes']) {
     assert.ok(tmuxAdapterSources.includes(token), `TypeScript tmux/runtime sources should still own ${token}`)
   }
 
   const goSource = fs.readFileSync(path.join(env.helpers.extRoot, 'kernel/go/agentteam-kernel/main.go'), 'utf8')
-  for (const forbidden of ['exec.Command', 'os/exec', 'tmux ', 'list-panes', 'createTeammatePane', 'kill-pane', 'display-message', 'send-keys', 'PI_AGENTTEAM_HOME', 'team.json', 'os.Open', 'os.ReadFile', 'os.WriteFile', 'os.Create']) {
-    assert.equal(goSource.includes(forbidden), false, `Go helper must not own tmux/runtime/state authority: ${forbidden}`)
+  assert.match(goSource, /case "tmuxSnapshotCapture"/, 'Go helper should own the narrow tmux snapshot capture capability after v0.6.50')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go capture must be limited to list-panes snapshot capture')
+  for (const forbidden of ['createTeammatePane', 'kill-pane', 'display-message', 'send-keys', 'PI_AGENTTEAM_HOME', 'team.json', 'os.Open', 'os.ReadFile', 'os.WriteFile', 'os.Create']) {
+    assert.equal(goSource.includes(forbidden), false, `Go helper must not own lifecycle/state authority: ${forbidden}`)
   }
 }
 
@@ -209,7 +211,7 @@ process.stdout.write('{not json ${BAD_STDOUT_SENTINEL}\\n')
       assert.equal(metadata.kernel.calls, cases.length + 1, 'first adapter call should include health preflight, then one call per fixture')
       assert.equal(metadata.kernel.fallbacks, 0)
       assert.equal(metadata.kernel.businessPathsConnected, false)
-      assert.deepEqual(metadata.kernel.capabilities, ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'])
+      assert.deepEqual(metadata.kernel.capabilities, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'])
     } finally {
       fs.rmSync(helperPath, { force: true })
     }

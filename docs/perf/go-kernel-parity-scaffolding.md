@@ -23,7 +23,7 @@ State/read-model and panel/tmux benchmarks now include compact implementation me
     "protocolVersion": 1,
     "adapterVersion": "0.3.0-read-model-shadow",
     "helperVersion": "0.3.0-read-model-shadow",
-    "capabilities": ["health", "profile", "tmuxSnapshotParse", "compactReadModelFingerprint"],
+    "capabilities": ["health", "profile", "tmuxSnapshotParse", "tmuxSnapshotCapture", "compactReadModelFingerprint"],
     "businessPathsConnected": false
   },
   "fixtureProfile": {

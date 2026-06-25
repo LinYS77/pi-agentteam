@@ -688,8 +688,16 @@ module.exports = {
     assert.ok(globalLines.some(line => line.includes('Roster')), 'global team details should include roster preview')
     assert.ok(globalLines.some(line => line.includes('planner-very') && line.includes('planner') && line.includes('pane missing')), 'global roster preview should align health/name/role/pane fields')
 
-    modules.tmux.listAgentTeamPanes = () => [{ paneId: '%orphan', target: 'test:@1', label: 'agentteam orphan label', currentCommand: 'pi' }]
+    const previousStaleCapture = modules.tmux.captureTmuxSnapshot
+    modules.tmux.captureTmuxSnapshot = (capturedAt = Date.now()) => {
+      const panes = [
+        ...[...patches.livePanes].sort().map(paneId => ({ paneId, target: 'test:@1', label: '', currentCommand: paneId === '%leader' ? 'pi' : 'node' })),
+        { paneId: '%orphan', target: 'test:@1', label: 'agentteam orphan label', currentCommand: 'pi' },
+      ]
+      return { capturedAt, panes, byPaneId: Object.fromEntries(panes.map(pane => [pane.paneId, pane])), ok: true }
+    }
     const stalePaneData = modules.panelDataSource.loadPanelData(null)
+    modules.tmux.captureTmuxSnapshot = previousStaleCapture
     const stalePaneState = modules.viewModel.createInitialPanelState()
     stalePaneState.focus = 'panes'
     stalePaneState.selectedPaneIndex = 0
@@ -698,7 +706,6 @@ module.exports = {
     const stalePaneLines = modules.layout.renderTeamPanelLines(helpers.createFakeTheme(), { width: 180, height: 40, data: stalePaneData, state: stalePaneState, selection: stalePaneSelection })
     assert.ok(stalePaneLines.some(line => line.includes('%orphan') && line.includes('agentteam orphan label')), 'global stale pane list should show orphan label')
     assert.ok(stalePaneLines.some(line => line.includes('State') && line.includes('stale agentteam-labeled pane')), 'global stale pane details should show stale pane state')
-    modules.tmux.listAgentTeamPanes = () => []
 
     const paneLostTeam = modules.state.readTeamState('render-suite')
     modules.state.updateMemberStatus(paneLostTeam, 'researcher-very-long-member-name-alpha', {

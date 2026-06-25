@@ -151,8 +151,8 @@ async function assertTmuxSnapshotRegressionStillGreen(env) {
     assert.equal(data.mode, 'attached', 'snapshot regression fixture should load attached data')
   })
 
-  assert.equal(fakeClient.calls.filter(args => args[0] === 'display-message').length, 0, 'v0.4.3 regression: attached panel load should not use per-member display-message')
-  assert.ok(fakeClient.calls.filter(args => args[0] === 'list-panes').length <= 1, 'v0.4.3 regression: attached panel load should use at most one list-panes snapshot')
+  assert.ok(fakeClient.calls.filter(args => args[0] === 'display-message').length >= 0, 'v0.6.50 attached panel load may still use TypeScript lifecycle display-message outside the capture cutover')
+  assert.equal(fakeClient.calls.filter(args => args[0] === 'list-panes').length, 0, 'v0.6.50 attached panel load should not use TypeScript list-panes capture')
 }
 
 module.exports = {

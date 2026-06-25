@@ -21,6 +21,9 @@ const EXPECTED_FAILURE_KINDS = [
   'helper-incompatible-response',
   'helper-unsafe-response-shape',
   'previous-helper-failure',
+  'tmux-command-timeout',
+  'tmux-command-failed',
+  'tmux-unavailable',
 ]
 const ASSIGNED_FAILURE_KINDS = [
   'missing-helper',
@@ -37,6 +40,9 @@ const ASSIGNED_FAILURE_KINDS = [
   'helper-incompatible-response',
   'helper-unsafe-response-shape',
   'previous-helper-failure',
+  'tmux-command-timeout',
+  'tmux-command-failed',
+  'tmux-unavailable',
 ]
 const SAFE_KEYS = ['module', 'capability', 'status', 'resultMarker', 'failureKind', 'remediation', 'platformHint', 'freshnessHint', 'releaseDecision'].sort()
 const FORBIDDEN_SENTINELS = [

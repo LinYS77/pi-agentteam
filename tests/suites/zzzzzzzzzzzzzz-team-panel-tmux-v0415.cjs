@@ -361,11 +361,8 @@ async function exerciseAttachedWarmRefreshTmuxGate(env, failures) {
     })
     const displayCalls = commandCalls(fakeClient, 'display-message')
     const listCalls = commandCalls(fakeClient, 'list-panes')
-    if (displayCalls.length > 0) {
-      failures.push(`attached warm refresh should not fall back to force/per-member display-message checks; got ${displayCalls.length}: ${json(displayCalls)}`)
-    }
-    if (listCalls.length > 1) {
-      failures.push(`attached warm refresh should use at most one list-panes snapshot; got ${listCalls.length}: ${json(listCalls)}`)
+    if (listCalls.length !== 0) {
+      failures.push(`attached warm refresh should not use TypeScript list-panes capture after v0.6.50; got ${listCalls.length}: ${json(listCalls)} display-message=${json(displayCalls)}`)
     }
   })
 }
@@ -387,15 +384,12 @@ async function exerciseGlobalWarmRefreshTmuxGate(env, failures) {
       fakeClient.calls.length = 0
       const warm = modules.panelDataSource.loadPanelData(null)
       assert.equal(warm.mode, 'global', 'global warm refresh should stay global')
-      assert.ok(warm.orphanPanes.some(pane => pane.paneId === '%panel-tmux-v0415-global-orphan'), 'global refresh should retain orphan pane discovery from the bounded snapshot')
+      assert.deepEqual(warm.orphanPanes.filter(pane => pane.paneId === '%panel-tmux-v0415-global-orphan'), [], 'v0.6.50 global warm refresh should not synthesize orphan rows from the TypeScript tmux fake when Go capture is unavailable')
     })
     const displayCalls = commandCalls(fakeClient, 'display-message')
     const listCalls = commandCalls(fakeClient, 'list-panes')
-    if (displayCalls.length > 0) {
-      failures.push(`global warm refresh should not perform per-member display-message subprocess checks; got ${displayCalls.length}: ${json(displayCalls)}`)
-    }
-    if (listCalls.length > 1) {
-      failures.push(`global warm refresh should use at most one list-panes snapshot; got ${listCalls.length}: ${json(listCalls)}`)
+    if (listCalls.length !== 0) {
+      failures.push(`global warm refresh should not use TypeScript list-panes capture after v0.6.50; got ${listCalls.length}: ${json(listCalls)} display-message=${json(displayCalls)}`)
     }
   })
 }
@@ -454,11 +448,30 @@ async function exerciseLightVsForceReconcile(env, failures) {
 
   await withTempHome(modules, 'snapshot-failure', async () => {
     const fixture = makePanelTmuxTeam(modules, 'panel-tmux-v0415-snapshot-failure', { workerCount: 1 })
-    const fakeClient = createCountingTmuxClient(new Set(fixture.paneIds), { listPaneFailures: 1 })
-    await withTmuxClient(tmuxClient, fakeClient, async () => {
-      const data = modules.panelDataSource.loadPanelData(fixture.team.name)
-      assert.equal(data.mode, 'attached', 'snapshot failure fixture should still load attached data')
+    const unavailableSnapshot = {
+      capturedAt: 1700001503000,
+      panes: [],
+      byPaneId: {},
+      ok: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      module: 'tmuxSnapshotCapture',
+      capability: 'tmuxSnapshotCapture',
+      cutoverFailureKind: 'tmux-command-failed',
+      reason: 'Go kernel cutover unavailable (tmux-command-failed)',
+      error: 'Go kernel cutover unavailable (tmux-command-failed)',
+    }
+    const runtimeRepository = {
+      ...runtimeRepositoryModule.createRuntimeRepository(),
+      prepareTeamForPanel(team, options) {
+        return runtimeRepositoryModule.reconcileTeamPanes(team, { ...(options || {}), snapshot: unavailableSnapshot })
+      },
+    }
+    const data = modules.panelDataSource.loadPanelData(fixture.team.name, {
+      stateRepository: helpers.requireDist('state/repository.js').createStateRepository(),
+      runtimeRepository,
     })
+    assert.equal(data.mode, 'attached', 'snapshot failure fixture should still load attached data')
     const stored = modules.state.readTeamState(fixture.team.name)
     const worker = stored?.members['worker-1']
     if (!worker?.paneId || worker.status === 'error' || String(worker.lastError || '').includes('pane disappeared')) {

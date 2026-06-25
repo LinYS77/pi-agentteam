@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint']
+const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const BAD_STDOUT_SENTINEL = 'CUTOVER_MODE_BAD_STDOUT_SHOULD_NOT_LEAK'
 const BAD_STDERR_SENTINEL = 'CUTOVER_MODE_BAD_STDERR_SHOULD_NOT_LEAK'
@@ -48,7 +48,7 @@ ${handlerSource}
 function compatibleHelper() {
   return helperSource(`
 if (request.method === 'health') respond(baseHealth)
-else if (request.method === 'profile') respond({ ...baseHealth, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
+else if (request.method === 'profile') respond({ ...baseHealth, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, tmuxSnapshotCaptureConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
 else if (request.method === 'tmuxSnapshotParse') respond({ capturedAt: request.params.capturedAt, panes: [{ paneId: '%go-cutover', target: 'cutover:@1', label: 'go cutover', currentCommand: 'pi' }], byPaneId: { '%go-cutover': { paneId: '%go-cutover', target: 'cutover:@1', label: 'go cutover', currentCommand: 'pi' } }, ok: true })
 else if (request.method === 'compactReadModelFingerprint') respond({ ok: true, projection: request.params.input, fingerprint: JSON.stringify(request.params.input), inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })
 else error(-32601, 'unexpected')
@@ -143,6 +143,9 @@ module.exports = {
       'helper-incompatible-response',
       'helper-unsafe-response-shape',
       'previous-helper-failure',
+      'tmux-command-timeout',
+      'tmux-command-failed',
+      'tmux-unavailable',
     ])
     assert.match(source, /cutoverFailureKind\?: AgentTeamKernelCutoverFailureKind/, 'metadata type should include cutoverFailureKind distinct from fallbackKind')
     assert.match(source, /fallbackKind\?: AgentTeamKernelFallbackKind/, 'metadata should keep migration fallbackKind')

@@ -9,13 +9,15 @@ export const AGENTTEAM_KERNEL_PROTOCOL_VERSION = 1
 
 export const AGENTTEAM_KERNEL_ADAPTER_VERSION = '0.3.0-read-model-shadow'
 export const AGENTTEAM_KERNEL_HELPER_VERSION = '0.3.0-read-model-shadow'
-export const AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'] as const
+export const AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'] as const
 export const AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED = false
 
 export type AgentTeamKernelKnownMode = 'default' | 'disabled' | 'typescript' | 'go' | 'auto' | 'go-cutover' | 'go-packaged-preview'
 export type AgentTeamKernelActiveMode = 'typescript' | 'go'
 export type AgentTeamKernelCapability = typeof AGENTTEAM_KERNEL_CAPABILITIES[number]
 export const AGENTTEAM_KERNEL_CUTOVER_MODULE = 'tmuxSnapshotParse' as const
+export const AGENTTEAM_KERNEL_TMUX_SNAPSHOT_CAPTURE_MODULE = 'tmuxSnapshotCapture' as const
+export type AgentTeamKernelTmuxSnapshotCapability = typeof AGENTTEAM_KERNEL_CUTOVER_MODULE | typeof AGENTTEAM_KERNEL_TMUX_SNAPSHOT_CAPTURE_MODULE
 export const AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS = [
   'missing-helper',
   'disabled-helper',
@@ -32,6 +34,9 @@ export const AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS = [
   'helper-incompatible-response',
   'helper-unsafe-response-shape',
   'previous-helper-failure',
+  'tmux-command-timeout',
+  'tmux-command-failed',
+  'tmux-unavailable',
 ] as const
 export type AgentTeamKernelCutoverFailureKind = typeof AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS[number]
 export type AgentTeamKernelCutoverStatus = 'active' | 'unavailable'
@@ -112,6 +117,7 @@ export type AgentTeamKernelProfile = AgentTeamKernelHealth & {
     stateConnected: false
     tmuxConnected: false
     tmuxSnapshotParseConnected: boolean
+    tmuxSnapshotCaptureConnected: boolean
     compactReadModelFingerprintConnected: boolean
     panelConnected: false
     taskReportPlanRunConnected: false
@@ -133,8 +139,8 @@ export type AgentTeamKernelTmuxSnapshot = {
   error?: string
   status?: 'unknown'
   resultMarker?: 'stale'
-  module?: typeof AGENTTEAM_KERNEL_CUTOVER_MODULE
-  capability?: typeof AGENTTEAM_KERNEL_CUTOVER_MODULE
+  module?: AgentTeamKernelTmuxSnapshotCapability
+  capability?: AgentTeamKernelTmuxSnapshotCapability
   cutoverFailureKind?: AgentTeamKernelCutoverFailureKind
   reason?: string
 }
@@ -155,6 +161,7 @@ export type AgentTeamKernelAdapter = {
   health(): AgentTeamKernelHealth
   profile(params?: Record<string, unknown>): AgentTeamKernelProfile
   parseTmuxPaneSnapshot(stdout: string, capturedAt: number, fallback?: (stdout: string, capturedAt: number) => AgentTeamKernelTmuxSnapshot): AgentTeamKernelTmuxSnapshot
+  captureTmuxSnapshot(capturedAt: number): AgentTeamKernelTmuxSnapshot
   compactReadModelFingerprint(input: unknown, fallback?: (input: unknown) => AgentTeamKernelCompactReadModelResult): AgentTeamKernelCompactReadModelResult
 }
 
@@ -333,6 +340,7 @@ function fallbackProfile(metadata: AgentTeamKernelMetadata, params: Record<strin
       stateConnected: false,
       tmuxConnected: false,
       tmuxSnapshotParseConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('tmuxSnapshotParse'),
+      tmuxSnapshotCaptureConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('tmuxSnapshotCapture'),
       compactReadModelFingerprintConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('compactReadModelFingerprint'),
       panelConnected: false,
       taskReportPlanRunConnected: false,
@@ -381,7 +389,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
   const startupCutoverFailure = cutoverRequested
     ? packagedResolverFailure ?? packagedManifestFailure ?? (!helperAvailable ? {
       kind: 'missing-helper' as const,
-      detail: helperPath ? `helper not found: ${compactHelperPath(helperPath)}` : (packagedResolverRequested ? 'packaged helper not configured' : 'PI_AGENTTEAM_KERNEL_HELPER is not set'),
+      detail: helperPath ? 'helper not found' : (packagedResolverRequested ? 'packaged helper not configured' : 'PI_AGENTTEAM_KERNEL_HELPER is not set'),
     } : undefined)
     : undefined
   const startupCutoverFailureKind: AgentTeamKernelCutoverFailureKind | undefined = startupCutoverFailure?.kind
@@ -495,7 +503,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     if (!profile || typeof profile !== 'object') return undefined
     if (profile.scope !== 'skeleton-only') return undefined
     if (profile.stateConnected !== false || profile.tmuxConnected !== false) return undefined
-    if (profile.tmuxSnapshotParseConnected !== true || profile.compactReadModelFingerprintConnected !== true) return undefined
+    if (profile.tmuxSnapshotParseConnected !== true || profile.tmuxSnapshotCaptureConnected !== true || profile.compactReadModelFingerprintConnected !== true) return undefined
     if (profile.panelConnected !== false || profile.taskReportPlanRunConnected !== false) return undefined
     return {
       ...health,
@@ -505,6 +513,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         stateConnected: false,
         tmuxConnected: false,
         tmuxSnapshotParseConnected: true,
+        tmuxSnapshotCaptureConnected: true,
         compactReadModelFingerprintConnected: true,
         panelConnected: false,
         taskReportPlanRunConnected: false,
@@ -512,7 +521,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     }
   }
 
-  function cutoverUnavailableSnapshot(capturedAt: number): AgentTeamKernelTmuxSnapshot {
+  function cutoverUnavailableSnapshot(capturedAt: number, capability: AgentTeamKernelTmuxSnapshotCapability = AGENTTEAM_KERNEL_CUTOVER_MODULE): AgentTeamKernelTmuxSnapshot {
     if (!cutoverFailureKind) {
       recordCutoverUnavailable('previous-helper-failure', 'helper unavailable')
     }
@@ -524,8 +533,8 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       ok: false,
       status: 'unknown',
       resultMarker: 'stale',
-      module: AGENTTEAM_KERNEL_CUTOVER_MODULE,
-      capability: AGENTTEAM_KERNEL_CUTOVER_MODULE,
+      module: capability,
+      capability,
       cutoverFailureKind: cutoverFailureKind ?? 'previous-helper-failure',
       reason,
       error: reason,
@@ -575,11 +584,29 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       panes.push(normalized)
       byPaneId[paneId] = normalized
     }
+    const ok = snapshot.ok === undefined ? true : Boolean(snapshot.ok)
+    if (ok) {
+      return { capturedAt: snapshot.capturedAt, panes, byPaneId, ok: true }
+    }
+    const capability = snapshot.capability === AGENTTEAM_KERNEL_TMUX_SNAPSHOT_CAPTURE_MODULE
+      ? AGENTTEAM_KERNEL_TMUX_SNAPSHOT_CAPTURE_MODULE
+      : AGENTTEAM_KERNEL_CUTOVER_MODULE
+    const failureKind = AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS.includes(snapshot.cutoverFailureKind as AgentTeamKernelCutoverFailureKind)
+      ? snapshot.cutoverFailureKind as AgentTeamKernelCutoverFailureKind
+      : 'previous-helper-failure'
+    const reason = compactKernelText(snapshot.reason || snapshot.error || cutoverMessage(failureKind), cutoverMessage(failureKind))
     return {
       capturedAt: snapshot.capturedAt,
       panes,
       byPaneId,
-      ok: snapshot.ok === undefined ? true : Boolean(snapshot.ok),
+      ok: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      module: capability,
+      capability,
+      cutoverFailureKind: failureKind,
+      reason,
+      error: reason,
     }
   }
 
@@ -779,6 +806,18 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       }
       if (cutoverRequested || !fallback) return cutoverUnavailableSnapshot(capturedAt)
       return fallback(stdout, capturedAt)
+    },
+    captureTmuxSnapshot(capturedAt) {
+      const helperResult = callHelper<unknown>('tmuxSnapshotCapture', { capturedAt })
+      const unsafe = helperResult !== undefined ? classifyUnsafeTmuxSnapshotResult(helperResult) : undefined
+      if (!unsafe) {
+        const parsed = validateTmuxSnapshotResult(helperResult)
+        if (parsed) return parsed
+      }
+      if (helperResult !== undefined) {
+        recordRuntimeFallback(unsafe?.kind ?? 'helper-incompatible-response', unsafe?.detail ?? 'tmuxSnapshotCapture result shape')
+      }
+      return cutoverUnavailableSnapshot(capturedAt, AGENTTEAM_KERNEL_TMUX_SNAPSHOT_CAPTURE_MODULE)
     },
     compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint) {
       const compactInput = sanitizeCompactReadModelInput(input)

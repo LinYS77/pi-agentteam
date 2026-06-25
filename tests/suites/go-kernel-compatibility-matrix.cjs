@@ -6,7 +6,7 @@ const path = require('node:path')
 const BAD_STDOUT_SENTINEL = 'COMPAT_MATRIX_BAD_STDOUT_SHOULD_NOT_LEAK'
 const BAD_STDERR_SENTINEL = 'COMPAT_MATRIX_BAD_STDERR_SHOULD_NOT_LEAK'
 const FULL_PATH_SENTINEL = 'compat-secret-helper-path'
-const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint']
+const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 
 function writeHelper(name, source) {
@@ -138,7 +138,7 @@ function compatibilityHelper(overrides = {}) {
   return helperSource(`
 const health = { ...baseHealth, ...${healthOverrides} }
 if (request.method === 'health') respond(health)
-else if (request.method === 'profile') respond({ ...health, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
+else if (request.method === 'profile') respond({ ...health, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, tmuxSnapshotCaptureConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
 else if (request.method === 'compactReadModelFingerprint') respond({ ok: true, projection: request.params ? request.params.input : null, fingerprint: JSON.stringify(request.params ? request.params.input : null), inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })
 else if (request.method === 'tmuxSnapshotParse') respond({ capturedAt: request.params ? request.params.capturedAt : 0, panes: [{ paneId: '%go', target: 'go:@1', label: 'go parser', currentCommand: 'pi' }], byPaneId: { '%go': { paneId: '%go', target: 'go:@1', label: 'go parser', currentCommand: 'pi' } }, ok: true })
 else error(-32601, 'unexpected')

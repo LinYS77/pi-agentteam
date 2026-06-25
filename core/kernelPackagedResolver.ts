@@ -7,7 +7,7 @@ export const AGENTTEAM_PACKAGED_RESOLVER_PACKAGE_VERSION = '0.6.8'
 export const AGENTTEAM_PACKAGED_RESOLVER_MODULE = 'tmuxSnapshotParse'
 export const AGENTTEAM_PACKAGED_RESOLVER_PROTOCOL_VERSION = 1
 export const AGENTTEAM_PACKAGED_RESOLVER_HELPER_VERSION = '0.3.0-read-model-shadow'
-export const AGENTTEAM_PACKAGED_RESOLVER_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'] as const
+export const AGENTTEAM_PACKAGED_RESOLVER_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'] as const
 export const AGENTTEAM_PACKAGED_RESOLVER_BUSINESS_PATHS_CONNECTED = false
 
 export type AgentTeamPackagedResolverPlatform = {
@@ -340,7 +340,7 @@ function validateIdentity(manifest: Manifest): AgentTeamPackagedResolverUnavaila
   if (manifest.module !== AGENTTEAM_PACKAGED_RESOLVER_MODULE) return unavailable('module-mismatch', 'module')
   if (manifest.helperVersion !== AGENTTEAM_PACKAGED_RESOLVER_HELPER_VERSION || manifest.protocolVersion !== AGENTTEAM_PACKAGED_RESOLVER_PROTOCOL_VERSION) return unavailable('version-skew', 'version')
   const capabilities = stringArrayValue(manifest, 'capabilities')
-  if (!capabilities || !capabilities.includes(AGENTTEAM_PACKAGED_RESOLVER_MODULE)) return unavailable('capability-skew', 'capability')
+  if (!capabilities || !AGENTTEAM_PACKAGED_RESOLVER_CAPABILITIES.every(capability => capabilities.includes(capability))) return unavailable('capability-skew', 'capability')
   if (booleanValue(manifest, 'businessPathsConnected') !== AGENTTEAM_PACKAGED_RESOLVER_BUSINESS_PATHS_CONNECTED) return unavailable('manifest-invalid', 'business-paths')
   const artifact = recordValue(manifest, 'artifact')
   if (!artifact || stringValue(artifact, 'filename') === undefined || numberValue(artifact, 'size') === undefined || stringValue(artifact, 'sha256') === undefined || booleanValue(artifact, 'executable') !== true) return unavailable('manifest-invalid', 'artifact')

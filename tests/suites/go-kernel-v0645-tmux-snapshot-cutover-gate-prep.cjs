@@ -392,7 +392,7 @@ function assertDistRuntimeCutoverCoverage(env) {
   assert.equal(kernel.normalizeAgentTeamKernelMode(''), 'default')
   assert.equal(kernel.normalizeAgentTeamKernelMode('go-cutover'), 'go-cutover')
   assert.equal(kernel.normalizeAgentTeamKernelMode('go-packaged-preview'), 'go-packaged-preview')
-  assert.deepEqual(kernel.AGENTTEAM_KERNEL_CAPABILITIES, ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'])
+  assert.deepEqual(kernel.AGENTTEAM_KERNEL_CAPABILITIES, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'])
   assert.equal(kernel.AGENTTEAM_KERNEL_CUTOVER_MODULE, 'tmuxSnapshotParse')
   assert.deepEqual(kernel.AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS, [...FAILURE_CLASSES])
 
@@ -435,11 +435,11 @@ function assertNoRuntimeCutoverBehaviorChanged(root, env) {
   assertDistRuntimeCutoverCoverage(env)
 
   const snapshotSource = read(root, 'tmux/snapshot.ts')
-  assert.match(snapshotSource, /runTmuxNoThrow\(\[/, 'TypeScript must still capture tmux output')
-  assert.match(snapshotSource, /list-panes/, 'TypeScript capture path must still call list-panes')
-  assert.match(snapshotSource, /TMUX_PANE_SNAPSHOT_FORMAT/, 'TypeScript capture path must still own tmux format')
+  assert.equal(snapshotSource.includes('runTmuxNoThrow(['), false, 'post-v0.6.49 tmux capture no longer uses the TypeScript tmux client')
+  assert.match(snapshotSource, /TMUX_PANE_SNAPSHOT_FORMAT/, 'TypeScript should retain tmux format as protocol constant')
   assert.equal(/parseTmuxPaneSnapshotWithTypeScript/.test(snapshotSource), false, 'approved v0.6.48 cutover deletes TypeScript parser fallback')
   assert.match(snapshotSource, /createAgentTeamKernelAdapter\(\)\.parseTmuxPaneSnapshot/, 'adapter call remains parser seam')
+  assert.match(snapshotSource, /createAgentTeamKernelAdapter\(\)\.captureTmuxSnapshot/, 'post-v0.6.49 first slice moves tmux snapshot capture behind the kernel adapter')
 
   const kernelSource = read(root, 'core/kernel.ts')
   assert.match(kernelSource, /AGENTTEAM_KERNEL_CUTOVER_MODULE = 'tmuxSnapshotParse'/, 'tmuxSnapshotParse remains only cutover module marker')
@@ -461,8 +461,10 @@ function assertNoRuntimeCutoverBehaviorChanged(root, env) {
   assert.match(panelDataSource, /cutoverParserUnavailable/, 'panel diagnostic handling remains TypeScript-owned and non-authoritative')
 
   const goSource = read(root, 'kernel/go/agentteam-kernel/main.go')
-  for (const forbidden of ['exec.Command', 'os/exec', 'tmux ', 'list-panes', 'createTeammatePane', 'kill-pane', 'display-message', 'send-keys', 'PI_AGENTTEAM_HOME', 'team.json', 'os.Open', 'os.ReadFile', 'os.WriteFile', 'os.Create']) {
-    assert.equal(goSource.includes(forbidden), false, `Go helper must not own tmux/runtime/state authority: ${forbidden}`)
+  assert.match(goSource, /case "tmuxSnapshotCapture"/, 'post-v0.6.49 first slice may add narrow tmux snapshot capture')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux execution must be limited to snapshot capture')
+  for (const forbidden of ['createTeammatePane', 'kill-pane', 'display-message', 'send-keys', 'PI_AGENTTEAM_HOME', 'team.json', 'os.Open', 'os.ReadFile', 'os.WriteFile', 'os.Create']) {
+    assert.equal(goSource.includes(forbidden), false, `Go helper must not own lifecycle/state authority: ${forbidden}`)
   }
 }
 

@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint']
+const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const SENTINELS = {
   stdout: 'CUTOVER_FAILURE_STDOUT_BODY_SHOULD_NOT_LEAK',
@@ -172,6 +172,9 @@ module.exports = {
       'helper-incompatible-response',
       'helper-unsafe-response-shape',
       'previous-helper-failure',
+      'tmux-command-timeout',
+      'tmux-command-failed',
+      'tmux-unavailable',
     ])
     assert.match(source, /function toMigrationFallbackKind/, 'cutover-only helper classes should map back to migration fallback vocabulary outside go-cutover')
 

@@ -36,7 +36,6 @@ const GO_FORBIDDEN_API_PATTERNS = [
   ['os.Remove', /\bos\.Remove(?:All)?\s*\(/],
   ['os.Rename', /\bos\.Rename\s*\(/],
   ['os.Mkdir', /\bos\.Mkdir(?:All)?\s*\(/],
-  ['os/exec import', /"os\/exec"/],
   ['exec.Command', /\bexec\.Command\s*\(/],
   ['net import', /"net"/],
   ['net/http import', /"net\/http"/],
@@ -44,10 +43,8 @@ const GO_FORBIDDEN_API_PATTERNS = [
 ]
 
 const GO_FORBIDDEN_RUNTIME_PATTERNS = [
-  ['tmux command execution', /\btmux\b/],
   ['send-keys', /send-keys/],
   ['display-message', /display-message/],
-  ['list-panes', /list-panes/],
   ['kill-pane', /kill-pane/],
   ['new-window', /new-window/],
   ['split-window', /split-window/],
@@ -121,6 +118,8 @@ module.exports = {
     assertNoMatches(GO_HELPER_SOURCE, goSource, GO_FORBIDDEN_LITERAL_PATTERNS)
     assertNoMatches(GO_HELPER_SOURCE, goSource, GO_FORBIDDEN_API_PATTERNS)
     assertNoMatches(GO_HELPER_SOURCE, goSource, GO_FORBIDDEN_RUNTIME_PATTERNS)
+    assert.match(goSource, /"os\/exec"/, 'post-v0.6.49 Go helper may import os/exec for narrow tmux snapshot capture')
+    assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux command authority must be limited to list-panes snapshot capture')
     assert.match(goSource, /func run\(input io\.Reader, output io\.Writer\)/, 'Go helper should remain stdio reader/writer scoped')
     assert.match(goSource, /run\(os\.Stdin, os\.Stdout\)/, 'Go helper should remain stdio-only')
 

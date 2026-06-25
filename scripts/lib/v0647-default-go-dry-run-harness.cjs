@@ -13,7 +13,7 @@ const PACKAGE_NAME = 'pi-agentteam'
 const PACKAGE_VERSION = '0.6.8'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const PROTOCOL_VERSION = 1
-const REQUIRED_CAPABILITIES = ['health', 'profile', MODULE, 'compactReadModelFingerprint']
+const REQUIRED_CAPABILITIES = ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
 const GO_AUTHORITY = 'tmuxSnapshotParse-parser-only'
 const FIXED_GENERATED_AT = '2026-06-25T00:00:00.000Z'
 const FIXED_REVISION = 'v0647-default-go-dry-run-local-review'
@@ -223,11 +223,12 @@ function collectRepoInvariants(repoRoot) {
   const snapshot = readText(repoRoot, 'tmux/snapshot.ts')
   if (snapshot.includes('parseTmuxPaneSnapshotWithTypeScript')) fail('repo-invariant-changed', 'ts-parser-fallback-still-present')
   assertIncludes(snapshot, 'createAgentTeamKernelAdapter().parseTmuxPaneSnapshot', 'parser-seam-only')
-  assertIncludes(snapshot, 'runTmuxNoThrow([', 'ts-tmux-capture')
-  assertIncludes(snapshot, 'list-panes', 'ts-list-panes')
+  assertIncludes(snapshot, 'createAgentTeamKernelAdapter().captureTmuxSnapshot', 'go-tmux-capture-seam')
 
   const goSource = readText(repoRoot, 'kernel/go/agentteam-kernel/main.go')
-  for (const forbidden of ['exec.Command', 'os/exec', 'tmux ', 'list-panes', 'createTeammatePane', 'kill-pane', 'display-message', 'send-keys', 'PI_AGENTTEAM_HOME', 'team.json', 'os.Open', 'os.ReadFile', 'os.WriteFile', 'os.Create']) {
+  assertIncludes(goSource, 'case "tmuxSnapshotCapture"', 'go-tmux-capture-capability')
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat)', 'go-tmux-capture-command')
+  for (const forbidden of ['createTeammatePane', 'kill-pane', 'display-message', 'send-keys', 'PI_AGENTTEAM_HOME', 'team.json', 'os.Open', 'os.ReadFile', 'os.WriteFile', 'os.Create']) {
     if (goSource.includes(forbidden)) fail('repo-invariant-changed', `go-authority:${forbidden}`)
   }
 

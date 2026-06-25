@@ -7,7 +7,7 @@ const DOC = 'docs/perf/v0.4.23-compact-native-failure-diagnostics.md'
 const PLAN = 'docs/agentteam方案书.md'
 const EXPECTED_VERSION = '0.6.8'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
-const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint']
+const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
 const SAFE_DIAGNOSTIC_KEYS = ['module', 'capability', 'status', 'resultMarker', 'failureKind', 'remediation', 'platformHint', 'freshnessHint', 'releaseDecision'].sort()
 const SENTINELS = {
   helperPath: 'v0423-parser-policy-secret-helper-path',

@@ -7,7 +7,7 @@ const BAD_STDOUT_SENTINEL = 'FALLBACK_POLICY_BAD_STDOUT_SHOULD_NOT_LEAK'
 const BAD_STDERR_SENTINEL = 'FALLBACK_POLICY_BAD_STDERR_SHOULD_NOT_LEAK'
 const FULL_PATH_SENTINEL = 'fallback-policy-secret-helper-path'
 const FULL_TEXT_SENTINEL = 'FALLBACK_POLICY_FULL_TEXT_SHOULD_NOT_LEAK'
-const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint']
+const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 
 function writeHelper(name, source) {
@@ -177,7 +177,7 @@ respond(baseHealth)
     assert.equal(JSON.stringify(goMissing.metadata()).includes(FULL_PATH_SENTINEL), false, 'go missing diagnostic must not leak full helper path')
 
     runWithHelper('auto-incompatible', helperSource(`
-if (request.method === 'health') respond({ ...baseHealth, capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint', 'futureWriteAuthority'] })
+if (request.method === 'health') respond({ ...baseHealth, capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'futureWriteAuthority'] })
 else respond({ ok: true })
 `), helperPath => {
       const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })

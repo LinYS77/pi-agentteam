@@ -74,7 +74,7 @@ const FORBIDDEN_DOC_OVERCLAIMS = [
   'second platform support is approved',
 ]
 const FORBIDDEN_CONTROL_TERMS = /\b(?:default Go|default resolver|go-packaged-preview|go-cutover|PI_AGENTTEAM_KERNEL|native helper|native package|package-manager native|normal-user native availability UI|release asset|install source|signing|cosign|SLSA|platform matrix|second platform|download artifact|artifact download|package publish|npm publish|npm version|package native controls|default-disable|defaultDisable|DEFAULT_DISABLE)\b/i
-const GO_FORBIDDEN_TERMS = /\b(?:RegisterCommand|registerCommand|RegisterTool|registerTool|registerMessageRenderer|ExtensionAPI|pi-coding-agent|pi-tui|tmux\s+(?:capture|send|kill|new|split|display)|exec\.Command|os\/exec|shell|bash|sh -c|package-lock|npm publish|npm version|gh release|GITHUB_TOKEN|STATE|MAILBOX|REPORT|PLANRUN|PlanRun|TaskReport|mailbox|task report|release asset|install source|cosign|SLSA|default resolver|default Go|PI_AGENTTEAM_KERNEL)\b/i
+const GO_FORBIDDEN_TERMS = /\b(?:RegisterCommand|registerCommand|RegisterTool|registerTool|registerMessageRenderer|ExtensionAPI|pi-coding-agent|pi-tui|tmux\s+(?:capture|send|kill|new|split|display)|exec\.Command\s*\(|shell|bash|sh -c|package-lock|npm publish|npm version|gh release|GITHUB_TOKEN|STATE|MAILBOX|REPORT|PLANRUN|PlanRun|TaskReport|mailbox|task report|release asset|install source|cosign|SLSA|default resolver|default Go|PI_AGENTTEAM_KERNEL)\b/i
 const KERNEL_TS_FORBIDDEN_PI_TERMS = /@earendil-works\/pi-|registerCommand|registerTool|registerMessageRenderer|pi\.on|new Box\(|new Text\(|openTeamPanel|registerAgentTeamCommands|registerAgentTeamTools|registerAgentTeamRenderers|registerSessionHooks|registerContextHooks|registerAgentHooks|agentteam_create|agentteam_task|agentteam_planrun|agentteam_receive|agentteam_send/i
 const ROOT_FORBIDDEN_FILES = [
   'package-lock.json',
@@ -202,14 +202,14 @@ function assertTypeScriptControlPlane(root) {
 function assertGoAuthorityBounded(root) {
   const goSource = read(root, 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, 'package main', 'kernel/go/agentteam-kernel/main.go')
-  assertIncludes(goSource, 'var capabilities = []string{"health", "profile", "tmuxSnapshotParse", "compactReadModelFingerprint"}', 'kernel/go/agentteam-kernel/main.go')
+  assertIncludes(goSource, 'var capabilities = []string{"health", "profile", "tmuxSnapshotParse", "tmuxSnapshotCapture", "compactReadModelFingerprint"}', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, 'case "tmuxSnapshotParse":', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, 'BusinessPathsConnected: false', 'kernel/go/agentteam-kernel/main.go')
-  assertIncludes(goSource, '"scope":                      "skeleton-only",', 'kernel/go/agentteam-kernel/main.go')
-  assertIncludes(goSource, '"stateConnected":             false,', 'kernel/go/agentteam-kernel/main.go')
-  assertIncludes(goSource, '"tmuxConnected":              false,', 'kernel/go/agentteam-kernel/main.go')
+  assertIncludes(goSource, '"scope":                                "skeleton-only",', 'kernel/go/agentteam-kernel/main.go')
+  assertIncludes(goSource, '"stateConnected":                       false,', 'kernel/go/agentteam-kernel/main.go')
+  assertIncludes(goSource, '"tmuxConnected":                        false,', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, '"panelConnected":                       false,', 'kernel/go/agentteam-kernel/main.go')
-  assertIncludes(goSource, '"taskReportPlanRunConnected": false,', 'kernel/go/agentteam-kernel/main.go')
+  assertIncludes(goSource, '"taskReportPlanRunConnected":           false,', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, 'FullTextIncluded:  false,', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, 'StateFilesRead:    false,', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, 'StateFilesWritten: false,', 'kernel/go/agentteam-kernel/main.go')

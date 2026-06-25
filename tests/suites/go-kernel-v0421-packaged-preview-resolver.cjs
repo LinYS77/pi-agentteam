@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const DOC = 'docs/perf/v0.4.21-go-packaged-preview-resolver.md'
 const PLAN = 'docs/agentteam方案书.md'
-const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint']
+const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const SENTINELS = {
   stdout: 'PACKAGED_PREVIEW_STDOUT_SHOULD_NOT_LEAK',
@@ -73,7 +73,7 @@ ${handlerSource}
 function compatibleHelper(paneId) {
   return helperSource(`
 if (request.method === 'health') respond(baseHealth)
-else if (request.method === 'profile') respond({ ...baseHealth, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
+else if (request.method === 'profile') respond({ ...baseHealth, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, tmuxSnapshotCaptureConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
 else if (request.method === 'tmuxSnapshotParse') respond(validSnapshot('${paneId}'))
 else if (request.method === 'compactReadModelFingerprint') respond({ ok: true, projection: request.params.input, fingerprint: 'helper-should-not-be-used', inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })
 else respond({ ok: true })

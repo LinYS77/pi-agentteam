@@ -1,6 +1,6 @@
 const PROTOCOL_VERSION = 1
 const HELPER_VERSION = '0.3.0-read-model-shadow'
-const CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint']
+const CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
 
 const tmuxStdout = [
   '%pane-a\tsession:@1\tagentteam leader\tpi',
@@ -92,6 +92,10 @@ function validMethodCases() {
       request: request('tmuxSnapshotParse', { stdout: tmuxStdout, capturedAt: 1700000003000, extra: 'ignored' }, 'tmux-string-id'),
     },
     {
+      name: 'tmux snapshot capture',
+      request: request('tmuxSnapshotCapture', { capturedAt: 1700000003500 }, 'tmux-capture-string-id'),
+    },
+    {
       name: 'compact read-model fingerprint',
       request: request('compactReadModelFingerprint', { input: compactReadModelInput(), extra: 'ignored' }, 'read-model-string-id'),
     },
@@ -115,6 +119,10 @@ function paramsCases() {
     {
       name: 'tmux extra params ignored',
       request: request('tmuxSnapshotParse', { stdout: '%x\ts:@1\tlabel\tcmd\n', capturedAt: 7, unused: 'ignored' }, 'tmux-extra-params'),
+    },
+    {
+      name: 'tmux capture missing params uses helper timestamp',
+      request: request('tmuxSnapshotCapture', undefined, 'tmux-capture-missing-params'),
     },
     {
       name: 'compact read-model missing params returns null projection',
@@ -186,6 +194,7 @@ function multipleRequestBatch() {
     request('health', undefined, 'batch-health'),
     request('profile', { batch: true }, 204),
     request('tmuxSnapshotParse', { stdout: '%batch\ts:@1\tbatch label\tpi\n', capturedAt: 99 }, 'batch-tmux'),
+    request('tmuxSnapshotCapture', { capturedAt: 100 }, 'batch-tmux-capture'),
     request('compactReadModelFingerprint', { input: compactReadModelInput() }, 'batch-read-model'),
     { jsonrpc: '2.0', id: 'batch-unknown', method: 'unknownMethod' },
   ]

@@ -6,7 +6,7 @@ const path = require('node:path')
 const DOC = 'docs/perf/v0.4.22-native-helper-package-metadata.md'
 const PLAN = 'docs/agentteam方案书.md'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
-const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint']
+const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
 const SENTINELS = {
   stdout: 'V0422_PREVIEW_STDOUT_SHOULD_NOT_LEAK',
   stderr: 'V0422_PREVIEW_STDERR_SHOULD_NOT_LEAK',

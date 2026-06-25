@@ -213,9 +213,10 @@ function assertSourceBoundaries(root) {
   assert.match(kernelSource, /if \(cutoverRequested\) return fallback\(compactInput\)/, 'default/go compact read model stays TypeScript-owned')
   assert.equal(snapshotSource.includes('parseTmuxPaneSnapshotWithTypeScript'), false, 'TypeScript runtime parser fallback should be deleted')
   assert.match(snapshotSource, /createAgentTeamKernelAdapter\(\)\.parseTmuxPaneSnapshot\(stdout, capturedAt\)/, 'tmux snapshot parser should delegate to kernel adapter')
-  assert.match(snapshotSource, /runTmuxNoThrow\(\[/, 'TypeScript should still execute tmux capture')
-  assert.match(snapshotSource, /list-panes/, 'TypeScript should still own list-panes')
-  assert.equal(/exec\.Command\([^)]*tmux|execCommand\([^)]*tmux|list-panes/.test(goSource), false, 'Go helper must not execute or capture tmux')
+  assert.match(snapshotSource, /createAgentTeamKernelAdapter\(\)\.captureTmuxSnapshot\(capturedAt\)/, 'post-v0.6.49 tmux snapshot capture should delegate to kernel adapter')
+  assert.equal(snapshotSource.includes('runTmuxNoThrow(['), false, 'post-v0.6.49 tmux capture no longer uses the TypeScript tmux client')
+  assert.match(goSource, /case "tmuxSnapshotCapture"/, 'post-v0.6.49 first slice may add narrow tmux snapshot capture')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux execution must be limited to snapshot capture')
 }
 
 function fallbackSnapshot(stdout, capturedAt) {
@@ -301,7 +302,7 @@ function assertIncompatibleHelperFailClosed(env) {
   const testCase = cases().find(item => item.name === 'single row with trailing newline')
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-v0648-bad-helper-'))
   const helper = path.join(tmp, 'agentteam-tmuxSnapshotParse')
-  fs.writeFileSync(helper, `#!/usr/bin/env node\nlet input = ''\nprocess.stdin.on('data', chunk => { input += chunk })\nprocess.stdin.on('end', () => {\n  const request = JSON.parse(input || '{}')\n  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { ok: true, implementation: 'go', protocolVersion: 999, adapterVersion: 'bad', helperVersion: 'bad', capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'], businessPathsConnected: false } }) + '\\n')\n})\n`, 'utf8')
+  fs.writeFileSync(helper, `#!/usr/bin/env node\nlet input = ''\nprocess.stdin.on('data', chunk => { input += chunk })\nprocess.stdin.on('end', () => {\n  const request = JSON.parse(input || '{}')\n  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { ok: true, implementation: 'go', protocolVersion: 999, adapterVersion: 'bad', helperVersion: 'bad', capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'], businessPathsConnected: false } }) + '\\n')\n})\n`, 'utf8')
   fs.chmodSync(helper, 0o755)
   try {
     const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'default', env: {}, helperPath: helper })

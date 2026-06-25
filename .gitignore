@@ -79,6 +79,7 @@ docs/perf/*
 !docs/perf/v0.6.47-non-mutating-default-go-dry-run.md
 !docs/perf/v0.6.48-default-go-cutover-tmux-snapshot.md
 !docs/perf/v0.6.49-go-control-plane-expansion-gate.md
+!docs/perf/v0.6.50-go-tmux-snapshot-capture-cutover.md
 
 # Dependencies
 node_modules/

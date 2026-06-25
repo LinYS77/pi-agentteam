@@ -2,25 +2,28 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const protocolVersion = 1
 const helperVersion = "0.3.0-read-model-shadow"
 
-var capabilities = []string{"health", "profile", "tmuxSnapshotParse", "compactReadModelFingerprint"}
+var capabilities = []string{"health", "profile", "tmuxSnapshotParse", "tmuxSnapshotCapture", "compactReadModelFingerprint"}
 
 type rpcRequest struct {
-	JSONRPC string                 `json:"jsonrpc"`
-	ID      any                    `json:"id,omitempty"`
-	Method  string                 `json:"method"`
-	Params  map[string]any         `json:"params,omitempty"`
+	JSONRPC string         `json:"jsonrpc"`
+	ID      any            `json:"id,omitempty"`
+	Method  string         `json:"method"`
+	Params  map[string]any `json:"params,omitempty"`
 }
 
 type rpcError struct {
@@ -49,6 +52,8 @@ type profileResult struct {
 	Profile map[string]any `json:"profile"`
 }
 
+const tmuxPaneSnapshotFormat = "#{pane_id}\t#{session_name}:#{window_id}\t#{@agentteam-name}\t#{pane_current_command}"
+
 type tmuxPaneSnapshotItem struct {
 	PaneID         string `json:"paneId"`
 	Target         string `json:"target"`
@@ -61,6 +66,13 @@ type tmuxSnapshotResult struct {
 	Panes      []tmuxPaneSnapshotItem          `json:"panes"`
 	ByPaneID   map[string]tmuxPaneSnapshotItem `json:"byPaneId"`
 	OK         bool                            `json:"ok"`
+	Status     string                          `json:"status,omitempty"`
+	Marker     string                          `json:"resultMarker,omitempty"`
+	Module     string                          `json:"module,omitempty"`
+	Capability string                          `json:"capability,omitempty"`
+	Failure    string                          `json:"cutoverFailureKind,omitempty"`
+	Reason     string                          `json:"reason,omitempty"`
+	Error      string                          `json:"error,omitempty"`
 }
 
 type compactReadModelResult struct {
@@ -92,14 +104,15 @@ func profile(params map[string]any) profileResult {
 	return profileResult{
 		healthResult: health(),
 		Profile: map[string]any{
-			"scope":                      "skeleton-only",
-			"params":                     params,
-			"stateConnected":             false,
-			"tmuxConnected":              false,
+			"scope":                                "skeleton-only",
+			"params":                               params,
+			"stateConnected":                       false,
+			"tmuxConnected":                        false,
 			"tmuxSnapshotParseConnected":           true,
+			"tmuxSnapshotCaptureConnected":         true,
 			"compactReadModelFingerprintConnected": true,
 			"panelConnected":                       false,
-			"taskReportPlanRunConnected": false,
+			"taskReportPlanRunConnected":           false,
 		},
 	}
 }
@@ -170,6 +183,49 @@ func parseTmuxSnapshot(params map[string]any) tmuxSnapshotResult {
 		ByPaneID:   byPaneID,
 		OK:         true,
 	}
+}
+
+func unavailableTmuxSnapshot(capturedAt int64, kind string) tmuxSnapshotResult {
+	reason := "Go kernel cutover unavailable (" + kind + ")"
+	return tmuxSnapshotResult{
+		CapturedAt: capturedAt,
+		Panes:      []tmuxPaneSnapshotItem{},
+		ByPaneID:   map[string]tmuxPaneSnapshotItem{},
+		OK:         false,
+		Status:     "unknown",
+		Marker:     "stale",
+		Module:     "tmuxSnapshotCapture",
+		Capability: "tmuxSnapshotCapture",
+		Failure:    kind,
+		Reason:     reason,
+		Error:      reason,
+	}
+}
+
+func captureTmuxSnapshot(params map[string]any) tmuxSnapshotResult {
+	capturedAt := int64Param(params, "capturedAt")
+	if capturedAt == 0 {
+		capturedAt = time.Now().UnixMilli()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat)
+	cmd.Env = os.Environ()
+	output, err := cmd.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return unavailableTmuxSnapshot(capturedAt, "tmux-command-timeout")
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return unavailableTmuxSnapshot(capturedAt, "tmux-unavailable")
+		}
+		return unavailableTmuxSnapshot(capturedAt, "tmux-command-failed")
+	}
+	stdout := strings.TrimSpace(string(output))
+	if stdout == "" {
+		return tmuxSnapshotResult{CapturedAt: capturedAt, Panes: []tmuxPaneSnapshotItem{}, ByPaneID: map[string]tmuxPaneSnapshotItem{}, OK: true}
+	}
+	return parseTmuxSnapshot(map[string]any{"stdout": stdout, "capturedAt": capturedAt})
 }
 
 func splitLines(text string) []string {
@@ -279,6 +335,8 @@ func handle(request rpcRequest) rpcResponse {
 		return rpcResponse{JSONRPC: "2.0", ID: request.ID, Result: profile(request.Params)}
 	case "tmuxSnapshotParse":
 		return rpcResponse{JSONRPC: "2.0", ID: request.ID, Result: parseTmuxSnapshot(request.Params)}
+	case "tmuxSnapshotCapture":
+		return rpcResponse{JSONRPC: "2.0", ID: request.ID, Result: captureTmuxSnapshot(request.Params)}
 	case "compactReadModelFingerprint":
 		return rpcResponse{JSONRPC: "2.0", ID: request.ID, Result: compactReadModelFingerprint(request.Params)}
 	default:

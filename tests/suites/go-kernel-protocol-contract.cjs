@@ -68,6 +68,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.stateConnected, false)
   assert.equal(result.profile.tmuxConnected, false)
   assert.equal(result.profile.tmuxSnapshotParseConnected, true)
+  assert.equal(result.profile.tmuxSnapshotCaptureConnected, true)
   assert.equal(result.profile.compactReadModelFingerprintConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)
@@ -109,6 +110,23 @@ function assertMethodResult(response, request, fingerprintModule) {
     assertTmuxResult(response.result, params.capturedAt || 0)
     return
   }
+  if (request.method === 'tmuxSnapshotCapture') {
+    const params = request.params || {}
+    assert.equal(Number.isFinite(response.result.capturedAt), true)
+    if (params.capturedAt !== undefined) assert.equal(response.result.capturedAt, params.capturedAt)
+    assert.ok(Array.isArray(response.result.panes))
+    assert.ok(response.result.byPaneId && typeof response.result.byPaneId === 'object')
+    assert.equal(response.result.ok === true || response.result.ok === false, true)
+    if (response.result.ok === false) {
+      assert.equal(response.result.status, 'unknown')
+      assert.equal(response.result.resultMarker, 'stale')
+      assert.equal(response.result.module, 'tmuxSnapshotCapture')
+      assert.equal(response.result.capability, 'tmuxSnapshotCapture')
+      assert.ok(['tmux-command-timeout', 'tmux-command-failed', 'tmux-unavailable'].includes(response.result.cutoverFailureKind))
+      assert.equal(/stdout|stderr|stack|MAILBOX_BODY|REPORT_BODY|worker transcript/i.test(JSON.stringify(response.result)), false)
+    }
+    return
+  }
   if (request.method === 'compactReadModelFingerprint') {
     const input = request.params ? request.params.input : null
     const expectedProjection = input === undefined ? null : JSON.parse(JSON.stringify(input))
@@ -137,7 +155,7 @@ const baseHealth = {
   implementation: 'go',
   protocolVersion: 1,
   helperVersion: '0.3.0-read-model-shadow',
-  capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'],
+  capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'],
   businessPathsConnected: false,
 }
 function respond(result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n') }
@@ -259,6 +277,7 @@ module.exports = {
     assert.deepEqual(kernel.createKernelJsonRpcRequest('health', undefined, 'health-ts'), fixtures.request('health', undefined, 'health-ts'))
     assert.deepEqual(kernel.createKernelJsonRpcRequest('profile', { fixture: 'jsonrpc' }, 77), fixtures.request('profile', { fixture: 'jsonrpc' }, 77))
     assert.deepEqual(kernel.createKernelJsonRpcRequest('tmuxSnapshotParse', { stdout: 'x', capturedAt: 1 }, 'tmux-ts'), fixtures.request('tmuxSnapshotParse', { stdout: 'x', capturedAt: 1 }, 'tmux-ts'))
+    assert.deepEqual(kernel.createKernelJsonRpcRequest('tmuxSnapshotCapture', { capturedAt: 2 }, 'tmux-capture-ts'), fixtures.request('tmuxSnapshotCapture', { capturedAt: 2 }, 'tmux-capture-ts'))
     assert.deepEqual(kernel.createKernelJsonRpcRequest('compactReadModelFingerprint', { input: { mode: 'attached' } }, 'read-ts'), fixtures.request('compactReadModelFingerprint', { input: { mode: 'attached' } }, 'read-ts'))
 
     const directHelperRan = runDirectHelperContract(env, fingerprint)

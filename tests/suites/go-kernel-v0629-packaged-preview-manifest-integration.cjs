@@ -180,7 +180,7 @@ function helperSource(paneId, options = {}) {
     protocolVersion: 1,
     adapterVersion: HELPER_VERSION,
     helperVersion: HELPER_VERSION,
-    capabilities: ['health', 'profile', MODULE, 'compactReadModelFingerprint'],
+    capabilities: ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint'],
     businessPathsConnected: false,
   }
   return `#!/usr/bin/env node
@@ -191,7 +191,7 @@ const request = input ? JSON.parse(input) : {}
 const health = ${JSON.stringify(health)}
 function respond(result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n') }
 if (request.method === 'health') respond(health)
-else if (request.method === 'profile') respond({ ...health, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
+else if (request.method === 'profile') respond({ ...health, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, tmuxSnapshotCaptureConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
 else if (request.method === 'tmuxSnapshotParse') respond({ ok: true, capturedAt: request.params.capturedAt, panes: [{ paneId: '${paneId}', target: 'preview:@1', label: '${options.label || 'preview'}', currentCommand: 'pi' }], byPaneId: { '${paneId}': { paneId: '${paneId}', target: 'preview:@1', label: '${options.label || 'preview'}', currentCommand: 'pi' } } })
 else if (request.method === 'compactReadModelFingerprint') respond({ ok: true, projection: request.params.input, fingerprint: 'helper-should-not-run-for-read-model', inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })
 else respond({ ok: true })

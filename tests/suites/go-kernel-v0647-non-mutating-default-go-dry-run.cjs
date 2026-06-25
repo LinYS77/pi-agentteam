@@ -206,9 +206,12 @@ function assertRuntimeInvariants(root, env) {
   assert.match(kernelSource, /if \(cutoverRequested\) return fallback\(compactInput\)/, 'compactReadModelFingerprint remains non-cutover')
 
   const snapshotSource = read(root, 'tmux/snapshot.ts')
+  const goSource = read(root, 'kernel/go/agentteam-kernel/main.go')
   assert.equal(/parseTmuxPaneSnapshotWithTypeScript/.test(snapshotSource), false, 'approved v0.6.48 cutover deletes TypeScript parser fallback')
-  assert.match(snapshotSource, /runTmuxNoThrow\(\[/, 'TypeScript still captures tmux output')
-  assert.match(snapshotSource, /list-panes/, 'TypeScript still owns list-panes capture')
+  assert.equal(snapshotSource.includes('runTmuxNoThrow(['), false, 'post-v0.6.49 TypeScript no longer captures tmux output')
+  assert.match(snapshotSource, /createAgentTeamKernelAdapter\(\)\.captureTmuxSnapshot\(capturedAt\)/, 'post-v0.6.49 TypeScript delegates tmux capture through kernel adapter')
+  assert.match(goSource, /case "tmuxSnapshotCapture"/, 'post-v0.6.49 Go helper owns narrow tmux snapshot capture')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go capture remains limited to list-panes snapshot capture')
 
   if (typeof env.helpers.requireDist === 'function') {
     const kernel = env.helpers.requireDist('core/kernel.js')
