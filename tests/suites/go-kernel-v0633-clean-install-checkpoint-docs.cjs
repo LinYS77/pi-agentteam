@@ -289,7 +289,7 @@ function assertPackageRepoInvariants(root) {
   for (const key of ['optionalDependencies', 'bundledDependencies', 'bundleDependencies', 'agentteamGoHelper', 'binary', 'os', 'cpu', 'native', 'nativeHelper']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson, key), false, `package must not define native metadata ${key}`)
   }
-  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz|kernel\/go)/i.test(item)), false, 'package files must not include native/helper/generated artifacts')
+  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz|kernel\/go)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package files must not include native/helper/generated artifacts')
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define lifecycle script ${lifecycle}`)
   }
@@ -310,6 +310,7 @@ function assertNoCheckedInArtifacts(root) {
   const forbidden = walkFiles(root)
     .map(file => toRel(root, file))
     .filter(rel => !rel.startsWith('tests/suites/'))
+    .filter(rel => !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'))
     .filter(rel => !rel.startsWith('tests/helpers/'))
     .filter(rel => !rel.startsWith('docs/perf/') && !rel.startsWith('docs/agentteam'))
     .filter(rel => !rel.startsWith('scripts/lib/go-helper-hosted-observation-record.cjs'))
@@ -324,12 +325,14 @@ function assertRuntimeKernelInvariants(root, env) {
   const runtimeSources = `${kernelSource}\n${resolver}`
 
   assertIncludes(kernelSource, "const packagedPreviewRequested = requestedMode === 'go-packaged-preview'", 'kernel explicit preview gate')
-  assertIncludes(kernelSource, "const packagedResolverFailure = packagedPreviewRequested && !explicitHelperPath", 'kernel preview resolver gate')
-  assertIncludes(kernelSource, 'const packagedManifestRequested = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'kernel manifest resolver gate')
+  assertIncludes(kernelSource, "const packagedResolverFailure = packagedResolverRequested && !explicitHelperPath", 'kernel preview/default resolver gate')
+  assertIncludes(kernelSource, 'const packagedManifestRequested = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath', 'kernel manifest resolver gate')
   assertIncludes(kernelSource, 'const helperPath = explicitHelperPath || packagedHelperPath || packagedManifestHelperPath', 'kernel helper precedence')
-  assertIncludes(kernelSource, "const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested", 'kernel cutover modes')
+  assertIncludes(kernelSource, "const cutoverRequested = defaultCutoverRequested || requestedMode === 'go-cutover' || packagedPreviewRequested", 'kernel cutover modes')
   assertIncludes(kernelSource, 'if (cutoverRequested) return fallback(compactInput)', 'kernel fingerprint TS fallback')
-  assert.equal(/package\.json|node_modules|import\.meta\.url|__dirname|process\.cwd\(\)/i.test(kernelSource), false, 'kernel must not discover installed package layout by default')
+  assertIncludes(kernelSource, 'defaultAgentTeamKernelEmbeddedHelperRoot()', 'kernel embedded helper root')
+  assertIncludes(kernelSource, 'defaultAgentTeamKernelEmbeddedHelperManifestPath()', 'kernel embedded helper manifest')
+  assert.equal(/package\.json|node_modules|__dirname|process\.cwd\(\)/i.test(kernelSource), false, 'kernel must not discover unapproved installed package layout by default')
   assert.equal(/download-artifact|hosted-observation|workflow-run|github\.run_id|github\.run_attempt|github\.sha|workflow_dispatch|actions\/download-artifact/i.test(runtimeSources), false, 'runtime/resolver must not consume hosted workflow/artifact metadata')
   assert.equal(/npm\s+(?:publish|version|pack)|gh\s+release|cosign|slsa|postinstall|preinstall|install-time build|curl\b|wget\b|node-gyp|prebuild/i.test(runtimeSources), false, 'runtime/resolver must not contain release/npm/download/install behavior')
 
@@ -342,14 +345,22 @@ function assertRuntimeKernelInvariants(root, env) {
       PI_AGENTTEAM_KERNEL_PACKAGED_HELPER_MANIFEST: 'native/tmuxSnapshotParse/manifest.json',
       PI_AGENTTEAM_KERNEL_PACKAGED_HELPER: '/tmp/v0633-should-not-run-helper',
     }
-    for (const mode of [undefined, 'disabled', 'typescript', 'go', 'auto']) {
+    for (const mode of [undefined, 'go']) {
       const adapter = kernel.createAgentTeamKernelAdapter({ mode, env: packagedEnv })
       const metadata = adapter.metadata()
       const label = mode || 'default'
-      assert.equal(metadata.kernel.mode, 'typescript', `${label} must remain TypeScript without explicit helper`)
-      assert.equal(metadata.kernel.enabled, false, `${label} must not enable Go from packaged env`)
-      assert.equal(metadata.kernel.calls, 0, `${label} must not call packaged helper`)
-      assert.equal(metadata.kernel.cutoverStatus, undefined, `${label} must not enter cutover status`)
+      assert.equal(metadata.kernel.mode, 'go', `${label} must use approved embedded helper without packaged env`)
+      assert.equal(metadata.kernel.enabled, true, `${label} must enable Go from embedded helper`)
+      assert.equal(metadata.kernel.calls, 0, `${label} must not call helper before parser invocation`)
+      assert.equal(metadata.kernel.cutoverStatus, 'active', `${label} must enter active cutover status`)
+    }
+    for (const mode of ['disabled', 'typescript', 'auto']) {
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode, env: packagedEnv })
+      const metadata = adapter.metadata()
+      assert.equal(metadata.kernel.mode, 'typescript', `${mode} must remain TypeScript without explicit helper`)
+      assert.equal(metadata.kernel.enabled, false, `${mode} must not enable Go from packaged env`)
+      assert.equal(metadata.kernel.calls, 0, `${mode} must not call packaged helper`)
+      assert.equal(metadata.kernel.cutoverStatus, undefined, `${mode} must not enter cutover status`)
     }
 
     const preview = kernel.createAgentTeamKernelAdapter({ mode: 'go-packaged-preview', env: {} })

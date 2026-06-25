@@ -6,7 +6,7 @@ const LEDGER_RELATIVE_PATH = 'tests/fixtures/kernel/v0636/defaultGoReadinessLedg
 const PACKAGE_NAME = 'pi-agentteam'
 const PACKAGE_VERSION = '0.6.8'
 const EXPECTED_PI_EXTENSIONS = Object.freeze(['./index.ts'])
-const EXPECTED_KERNEL_MODES = Object.freeze(['disabled', 'typescript', 'go', 'auto', 'go-cutover', 'go-packaged-preview'])
+const EXPECTED_KERNEL_MODES = Object.freeze(['default', 'disabled', 'typescript', 'go', 'auto', 'go-cutover', 'go-packaged-preview'])
 const EXPECTED_WORKFLOW_FILES = Object.freeze(['go-helper-review-artifact.yml'])
 const STATIC_FACT_FILES = Object.freeze([
   'package.json',
@@ -195,22 +195,27 @@ function collectPackageFacts(repoRoot) {
 
 function collectKernelFacts(repoRoot) {
   const kernel = readText(repoRoot, 'core/kernel.ts')
-  assertIncludes(kernel, "export type AgentTeamKernelKnownMode = 'disabled' | 'typescript' | 'go' | 'auto' | 'go-cutover' | 'go-packaged-preview'", 'kernel-invariant-changed', 'known-modes')
+  assertIncludes(kernel, "export type AgentTeamKernelKnownMode = 'default' | 'disabled' | 'typescript' | 'go' | 'auto' | 'go-cutover' | 'go-packaged-preview'", 'kernel-invariant-changed', 'known-modes')
   assertIncludes(kernel, "const requestedMode = normalizeAgentTeamKernelMode(options.mode ?? env.PI_AGENTTEAM_KERNEL)", 'kernel-invariant-changed', 'requested-mode')
   assertIncludes(kernel, "const packagedPreviewRequested = requestedMode === 'go-packaged-preview'", 'kernel-invariant-changed', 'packaged-preview')
-  assertIncludes(kernel, "const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested", 'kernel-invariant-changed', 'cutover-request')
+  assertIncludes(kernel, "const defaultCutoverRequested = defaultRequested || requestedMode === 'go'", 'kernel-invariant-changed', 'default-cutover')
+  assertIncludes(kernel, "const packagedResolverRequested = packagedPreviewRequested || defaultCutoverRequested", 'kernel-invariant-changed', 'packaged-resolver')
+  assertIncludes(kernel, 'defaultAgentTeamKernelEmbeddedHelperManifestPath()', 'kernel-invariant-changed', 'embedded-manifest')
+  assertIncludes(kernel, 'defaultAgentTeamKernelEmbeddedHelperRoot()', 'kernel-invariant-changed', 'embedded-root')
+  assertIncludes(kernel, "const cutoverRequested = defaultCutoverRequested || requestedMode === 'go-cutover' || packagedPreviewRequested", 'kernel-invariant-changed', 'cutover-request')
   assertIncludes(kernel, "export const AGENTTEAM_KERNEL_CUTOVER_MODULE = 'tmuxSnapshotParse' as const", 'kernel-invariant-changed', 'cutover-module')
   assertIncludes(kernel, 'compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint)', 'kernel-invariant-changed', 'fingerprint-fallback')
   assertIncludes(kernel, 'if (cutoverRequested) return fallback(compactInput)', 'kernel-invariant-changed', 'fingerprint-non-cutover')
   return {
     knownModes: [...EXPECTED_KERNEL_MODES],
-    defaultUnsetMode: 'disabled',
-    defaultRuntime: 'typescript/non-native',
+    defaultUnsetMode: 'default',
+    defaultRuntime: 'go/embedded-helper',
+    defaultResolverEnabled: true,
+    defaultResolverSource: 'approved-embedded-helper-manifest',
     goPackagedPreviewExplicitOnly: true,
     goCutoverExplicitOnly: true,
     cutoverModule: 'tmuxSnapshotParse',
     compactReadModelFingerprintFallbackRetained: true,
-    defaultResolverEnabled: false,
   }
 }
 

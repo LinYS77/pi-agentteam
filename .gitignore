@@ -76,6 +76,7 @@ docs/perf/*
 !docs/perf/v0.6.45-tmux-snapshot-cutover-gate-prep.md
 !docs/perf/v0.6.46-default-go-readiness-approval-gate.md
 !docs/perf/v0.6.47-non-mutating-default-go-dry-run.md
+!docs/perf/v0.6.48-default-go-cutover-tmux-snapshot.md
 
 # Dependencies
 node_modules/

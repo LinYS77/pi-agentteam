@@ -120,8 +120,8 @@ function assertRuntimeBoundaryFacts(root) {
   assert.equal(/AGENTTEAM_KERNEL_CUTOVER_MODULE\s*=\s*'compactReadModelFingerprint'/.test(kernelSource), false, 'compactReadModelFingerprint must not become cutover module')
 
   const snapshotSource = read(root, 'tmux/snapshot.ts')
-  assert.match(snapshotSource, /parseTmuxPaneSnapshotWithTypeScript/, 'TypeScript parser fallback must remain present')
-  assert.match(snapshotSource, /createAgentTeamKernelAdapter\(\)\.parseTmuxPaneSnapshot/, 'tmux parser should still route through adapter seam')
+  assert.equal(snapshotSource.includes('parseTmuxPaneSnapshotWithTypeScript'), false, 'TypeScript parser fallback must be deleted after v0.6.48 cutover')
+  assert.match(snapshotSource, /createAgentTeamKernelAdapter\(\)\.parseTmuxPaneSnapshot\(stdout, capturedAt\)/, 'tmux parser should route through adapter seam without TS fallback')
 }
 
 function assertRuntimeUiNoDiagnosticsLeak(root) {
@@ -140,15 +140,17 @@ function assertRuntimeUiNoDiagnosticsLeak(root) {
 }
 
 function assertModeBehavior(kernel) {
-  for (const mode of ['disabled', 'typescript', 'go', 'auto', 'go-cutover', 'go-packaged-preview']) {
+  for (const mode of ['default', 'disabled', 'typescript', 'go', 'auto', 'go-cutover', 'go-packaged-preview']) {
     assert.equal(kernel.isKnownAgentTeamKernelMode(mode), true, `${mode} should remain known`)
     assert.equal(kernel.normalizeAgentTeamKernelMode(mode.toUpperCase()), mode, `${mode} normalization should be explicit`)
   }
   const defaultMetadata = kernel.createAgentTeamKernelAdapter({ env: {} }).metadata()
-  assert.equal(defaultMetadata.kernel.requestedMode, 'disabled', 'unset mode should remain disabled')
-  assert.equal(defaultMetadata.kernel.mode, 'typescript', 'unset mode should remain TypeScript')
-  assert.equal(defaultMetadata.kernel.enabled, false, 'cutover modes must not make Go default')
-  for (const mode of ['go-cutover', 'go-packaged-preview']) {
+  assert.equal(defaultMetadata.kernel.requestedMode, 'default', 'unset mode should normalize to default')
+  assert.equal(defaultMetadata.kernel.mode, 'go', 'unset/default mode should use embedded Go helper')
+  assert.equal(defaultMetadata.kernel.enabled, true, 'default tmuxSnapshotParse parser should be Go-enabled')
+  assert.equal(defaultMetadata.kernel.cutoverModule, 'tmuxSnapshotParse', 'default should stay scoped to tmuxSnapshotParse')
+  assert.equal(defaultMetadata.kernel.cutoverStatus, 'active', 'default embedded helper should resolve')
+  for (const mode of ['go', 'go-cutover', 'go-packaged-preview']) {
     const cutoverMissing = kernel.createAgentTeamKernelAdapter({ mode, helperPath: path.join(process.cwd(), `missing-${mode}-helper`) })
     assert.equal(cutoverMissing.metadata().kernel.requestedKnownKernel, true, `${mode} should be known explicit mode`)
     assert.equal(cutoverMissing.metadata().kernel.fallbacks, 0, `${mode} should not use migration fallback count`)

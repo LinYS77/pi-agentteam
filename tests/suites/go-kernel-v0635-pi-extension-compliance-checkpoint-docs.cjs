@@ -210,11 +210,11 @@ function assertPackageRuntimeInvariants(root) {
   const kernel = read(root, 'core/kernel.ts')
   assertIncludes(kernel, "const requestedMode = normalizeAgentTeamKernelMode(options.mode ?? env.PI_AGENTTEAM_KERNEL)", 'core/kernel.ts')
   assertIncludes(kernel, "const packagedPreviewRequested = requestedMode === 'go-packaged-preview'", 'core/kernel.ts')
-  assertIncludes(kernel, "const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested", 'core/kernel.ts')
+  assertIncludes(kernel, "const cutoverRequested = defaultCutoverRequested || requestedMode === 'go-cutover' || packagedPreviewRequested", 'core/kernel.ts')
   assertIncludes(kernel, "export const AGENTTEAM_KERNEL_CUTOVER_MODULE = 'tmuxSnapshotParse' as const", 'core/kernel.ts')
   assertIncludes(kernel, 'compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint)', 'core/kernel.ts')
   assertIncludes(kernel, 'if (cutoverRequested) return fallback(compactInput)', 'core/kernel.ts')
-  assert.equal(/default Go is enabled|default resolver is enabled|fallback deletion is approved|package release is approved|install source is approved|release asset is approved|signing is approved|cosign is approved|SLSA is approved|second platform support is approved/i.test(kernel), false, 'runtime must not overclaim default/release/signing/platform status')
+  assert.equal(/package release is approved|install source is approved|release asset is approved|signing is approved|cosign is approved|SLSA is approved|second platform support is approved/i.test(kernel), false, 'runtime must not overclaim release/signing/platform status')
 }
 
 function assertArtifactInvariants(root) {
@@ -224,8 +224,9 @@ function assertArtifactInvariants(root) {
   const forbiddenRecords = []
   for (const file of walkFiles(root)) {
     const rel = toRel(root, file)
-    if (FORBIDDEN_ARTIFACT.test(rel)) forbiddenArtifacts.push(rel)
-    const reviewHelper = rel.startsWith('docs/') || rel.startsWith('tests/') || rel.startsWith('scripts/') || rel.startsWith('.github/workflows/')
+    const approvedEmbeddedNative = rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')
+    if (FORBIDDEN_ARTIFACT.test(rel) && !approvedEmbeddedNative) forbiddenArtifacts.push(rel)
+    const reviewHelper = rel.startsWith('docs/') || rel.startsWith('tests/') || rel.startsWith('scripts/') || rel.startsWith('.github/workflows/') || approvedEmbeddedNative
     if (!reviewHelper && FORBIDDEN_GENERATED_RECORD.test(rel)) forbiddenRecords.push(rel)
   }
   assert.deepEqual(forbiddenArtifacts.sort(), [], 'repo must not contain checked-in native/archive/signing artifacts')

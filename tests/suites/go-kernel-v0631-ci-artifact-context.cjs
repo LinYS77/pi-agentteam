@@ -232,7 +232,7 @@ function assertRuntimePackageGuard(root) {
   for (const key of ['optionalDependencies', 'bundledDependencies', 'bundleDependencies', 'agentteamGoHelper', 'binary', 'os', 'cpu']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson, key), false, `package must not define ${key}`)
   }
-  assert.equal((packageJson.files || []).some(item => /(?:^|\/)(?:native|kernel\/go)(?:\/|$)|(?:helper|artifact|checksum|provenance|attestation|\.exe|\.dll|\.so|\.dylib|\.tgz|\.zip)/i.test(item)), false, 'package files must not include native/helper/generated outputs')
+  assert.equal((packageJson.files || []).some(item => /(?:^|\/)(?:native|kernel\/go)(?:\/|$)|(?:helper|artifact|checksum|provenance|attestation|\.exe|\.dll|\.so|\.dylib|\.tgz|\.zip)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package files must not include unapproved native/helper/generated outputs')
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define ${lifecycle}`)
   }

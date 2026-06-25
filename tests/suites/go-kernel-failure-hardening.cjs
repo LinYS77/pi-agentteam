@@ -108,8 +108,20 @@ module.exports = {
     const missingSecretPath = path.join(os.tmpdir(), FULL_PATH_SENTINEL, 'missing-helper')
     const missing = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: missingSecretPath })
     assert.deepEqual(missing.compactReadModelFingerprint(compactInput()), tsResult)
-    assertCompactDiagnostic(missing.metadata(), 'missing-helper', 0)
-    assert.match(missing.metadata().kernel.fallbackReason, /missing-helper/)
+    const missingSnapshot = missing.parseTmuxPaneSnapshot('%x\tx:@1\tlabel\tpi', 1700003000000, () => {
+      throw new Error('go missing helper must not call TypeScript parser fallback')
+    })
+    assert.equal(missingSnapshot.ok, false)
+    assert.equal(missingSnapshot.status, 'unknown')
+    assert.equal(missingSnapshot.resultMarker, 'stale')
+    assert.equal(missingSnapshot.module, 'tmuxSnapshotParse')
+    assert.equal(missingSnapshot.capability, 'tmuxSnapshotParse')
+    assert.equal(missingSnapshot.cutoverFailureKind, 'missing-helper')
+    assert.equal(missing.metadata().kernel.fallbacks, 0)
+    assert.equal(Object.prototype.hasOwnProperty.call(missing.metadata().kernel, 'fallbackKind'), false)
+    assert.equal(missing.metadata().kernel.cutoverStatus, 'unavailable')
+    assert.equal(missing.metadata().kernel.cutoverFailureKind, 'missing-helper')
+    assert.equal(JSON.stringify(missing.metadata()).includes(FULL_PATH_SENTINEL), false, 'go missing diagnostic must not leak full helper path')
 
     const autoMissing = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath: path.join(os.tmpdir(), 'missing-agentteam-auto-helper') })
     assert.deepEqual(autoMissing.compactReadModelFingerprint(compactInput()), tsResult)
@@ -122,7 +134,7 @@ module.exports = {
 
     const spawnErrorDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-kernel-spawn-error-'))
     try {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: spawnErrorDir })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath: spawnErrorDir })
       assertReadModelFallback(adapter, tsResult, 'helper-spawn-error', 1)
     } finally {
       fs.rmSync(spawnErrorDir, { recursive: true, force: true })
@@ -131,14 +143,14 @@ module.exports = {
     runCase(kernel, 'empty-response', `#!/usr/bin/env node
 process.exit(0)
 `, helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertReadModelFallback(adapter, tsResult, 'helper-empty-response', 1)
     })
 
     runCase(kernel, 'timeout', `#!/usr/bin/env node
 setTimeout(() => {}, 10000)
 `, helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath, timeoutMs: 100 })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath, timeoutMs: 100 })
       assertReadModelFallback(adapter, tsResult, 'helper-timeout', 1)
       assert.deepEqual(adapter.compactReadModelFingerprint(compactInput()), tsResult, 'repeated timeout fallback should stay TS-only')
       assert.equal(adapter.metadata().kernel.calls, 1, 'second call should not spawn helper after failure')
@@ -150,21 +162,21 @@ process.stdout.write('${BAD_STDOUT_SENTINEL} '.repeat(200))
 process.stderr.write('${BAD_STDERR_SENTINEL} '.repeat(200))
 process.exit(9)
 `, helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertReadModelFallback(adapter, tsResult, 'helper-nonzero-exit', 1)
     })
 
     runCase(kernel, 'malformed', `#!/usr/bin/env node
 process.stdout.write('{not json ${BAD_STDOUT_SENTINEL}\\n')
 `, helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertReadModelFallback(adapter, tsResult, 'helper-malformed-json', 1)
     })
 
     runCase(kernel, 'jsonrpc-error', nodeHelperSource(`
 error(-32001, '${BAD_STDOUT_SENTINEL} long json rpc error body')
 `), helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertReadModelFallback(adapter, tsResult, 'helper-jsonrpc-error', 1)
     })
 
@@ -173,28 +185,28 @@ const fs = require('node:fs')
 const request = JSON.parse(fs.readFileSync(0, 'utf8'))
 process.stdout.write(JSON.stringify({ jsonrpc: '1.0', id: request.id, result: { ok: true } }) + '\\n')
 `, helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertReadModelFallback(adapter, tsResult, 'helper-unsupported-protocol', 1)
     })
 
     runCase(kernel, 'bad-health-shape', nodeHelperSource(`
 respond({ ok: true, implementation: 'go', protocolVersion: 1, helperVersion: '0.3.0-read-model-shadow', capabilities: ['health'], businessPathsConnected: false })
 `), helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertReadModelFallback(adapter, tsResult, 'helper-unsupported-capability', 1)
     })
 
     runCase(kernel, 'bad-version', nodeHelperSource(`
 respond({ ...baseHealth, protocolVersion: 999 })
 `), helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertReadModelFallback(adapter, tsResult, 'helper-unsupported-version', 1)
     })
 
     runCase(kernel, 'bad-capability', nodeHelperSource(`
 respond({ ...baseHealth, capabilities: ['health', 'profile', 'tmuxSnapshotParse'] })
 `), helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertReadModelFallback(adapter, tsResult, 'helper-unsupported-capability', 1)
     })
 
@@ -202,7 +214,7 @@ respond({ ...baseHealth, capabilities: ['health', 'profile', 'tmuxSnapshotParse'
 if (request.method === 'health') respond(baseHealth)
 else respond({ ok: true, projection: { text: '${BAD_STDOUT_SENTINEL}' }, fingerprint: 'bad', inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })
 `), helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertReadModelFallback(adapter, tsResult, 'helper-incompatible-response', 2)
     })
 
@@ -211,7 +223,7 @@ if (request.method === 'health') respond(baseHealth)
 else if (request.method === 'compactReadModelFingerprint') respond({ ok: true, projection: request.params.input, fingerprint: JSON.stringify(request.params.input), inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })
 else error(-32601, 'unexpected')
 `), helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       const result = adapter.compactReadModelFingerprint(compactInput())
       assert.equal(result.readOnly, true)
       assert.equal(result.fullTextIncluded, false)

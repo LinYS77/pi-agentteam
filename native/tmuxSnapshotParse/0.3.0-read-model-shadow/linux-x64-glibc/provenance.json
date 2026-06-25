@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "builderVersion": "0.6.29-slice1-local-builder",
+  "packageName": "pi-agentteam",
+  "packageVersion": "0.6.8",
+  "module": "tmuxSnapshotParse",
+  "source": {
+    "path": "kernel/go/agentteam-kernel",
+    "revision": "v0648-main-package-embedded-helper"
+  },
+  "build": {
+    "command": [
+      "go",
+      "build",
+      "-trimpath",
+      "-o",
+      "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/agentteam-tmuxSnapshotParse",
+      "."
+    ],
+    "env": {
+      "GO111MODULE": "off"
+    },
+    "cwd": "kernel/go/agentteam-kernel",
+    "toolchain": "go version go1.25.10 linux/amd64",
+    "runIdentity": "v0648-main-package-embedded-helper",
+    "generatedAt": "2026-06-25T00:00:00.000Z"
+  },
+  "smoke": {
+    "health": true,
+    "tmuxSnapshotParse": {
+      "ok": true,
+      "paneCount": 1,
+      "capturedAt": 1700000000000
+    }
+  },
+  "outputRootKind": "os-temp"
+}

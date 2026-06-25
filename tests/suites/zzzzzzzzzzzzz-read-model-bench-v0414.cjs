@@ -162,28 +162,28 @@ module.exports = {
     const missingShadow = bench.buildShadowReport({
       kernelModule,
       panelData: compactPanelData,
-      requestedMode: 'go',
+      requestedMode: 'auto',
       helperPath: path.join(os.tmpdir(), 'missing-agentteam-kernel'),
     })
-    assert.equal(missingShadow.requested, 'go')
+    assert.equal(missingShadow.requested, 'auto')
     assert.equal(missingShadow.enabled, false)
     assert.equal(missingShadow.calls, 0)
-    assert.equal(missingShadow.fallbacks, 1)
+    assert.equal(missingShadow.fallbacks, 0)
     assert.equal(missingShadow.parityMatched, true)
     assert.equal(missingShadow.fullTextIncluded, false)
     assert.equal(missingShadow.stateFilesRead, false)
     assert.equal(missingShadow.stateFilesWritten, false)
     assert.equal(typeof missingShadow.tsFingerprint, 'string')
     assert.equal(missingShadow.tsFingerprint, missingShadow.kernelFingerprint)
-    assert.equal(missingShadow.fallbackKind, 'missing-helper')
-    assert.match(missingShadow.fallbackReason, /using TypeScript fallback/)
+    assert.equal(Object.prototype.hasOwnProperty.call(missingShadow, 'fallbackKind'), false)
+    assert.equal(Object.prototype.hasOwnProperty.call(missingShadow, 'fallbackReason'), false)
     assert.equal(JSON.stringify(missingShadow).includes(bench.BENCH_SENTINEL), false, 'missing-helper shadow report must not leak sentinel')
 
     if (hasGoToolchain()) {
       const helperPath = buildGoHelper(env.helpers.extRoot)
       try {
-        const goShadow = bench.buildShadowReport({ kernelModule, panelData: compactPanelData, requestedMode: 'go', helperPath })
-        assert.equal(goShadow.requested, 'go')
+        const goShadow = bench.buildShadowReport({ kernelModule, panelData: compactPanelData, requestedMode: 'auto', helperPath })
+        assert.equal(goShadow.requested, 'auto')
         assert.equal(goShadow.enabled, true)
         assert.equal(goShadow.calls, 2)
         assert.equal(goShadow.fallbacks, 0)

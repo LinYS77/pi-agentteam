@@ -98,7 +98,7 @@ function assertInstalledSummary(summary) {
   assert.equal(summary.installedPackage.rootKind, 'os-temp-project-node_modules-package')
   assert.equal(summary.installedPackage.requiredFilesPresent, true)
   assert.deepEqual(summary.installedPackage.requiredFiles, REQUIRED_INSTALLED_FILES)
-  assert.equal(summary.installedPackage.nativeHelperLayoutPresent, false)
+  assert.equal(summary.installedPackage.nativeHelperLayoutPresent, true)
   assert.equal(summary.installedPackage.generatedArtifactsPresent, false)
   assert.equal(summary.installedPackage.lockfilesPresent, false)
   assert.equal(summary.installedPackage.nativeArchivesOrBinariesPresent, false)
@@ -118,7 +118,7 @@ function assertPackageMetadata(root) {
   for (const key of ['optionalDependencies', 'bundledDependencies', 'bundleDependencies', 'agentteamGoHelper', 'binary', 'os', 'cpu']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson, key), false, `package must not define ${key}`)
   }
-  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item)), false, 'package files must not include native/helper/generated artifacts')
+  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package files must not include unapproved native/helper/generated artifacts')
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define ${lifecycle}`)
   }
@@ -140,6 +140,7 @@ function assertRepoNoForbiddenFiles(root) {
   const forbidden = walkFiles(root)
     .map(file => toRel(root, file))
     .filter(rel => !rel.startsWith('tests/suites/'))
+    .filter(rel => !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'))
     .filter(rel => !rel.startsWith('tests/helpers/'))
     .filter(rel => !rel.startsWith('docs/perf/') && !rel.startsWith('docs/agentteam'))
     .filter(rel => !rel.startsWith('scripts/lib/go-helper-hosted-observation-record.cjs'))

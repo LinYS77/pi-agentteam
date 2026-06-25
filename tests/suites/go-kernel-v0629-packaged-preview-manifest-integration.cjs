@@ -259,7 +259,7 @@ function assertPackageRuntimeGuardrails(root, kernelSource) {
   assert.equal(packageJson.version, PACKAGE_VERSION)
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'optionalDependencies'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'agentteamGoHelper'), false)
-  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item)), false)
+  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false)
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define ${lifecycle}`)
   }
@@ -267,8 +267,10 @@ function assertPackageRuntimeGuardrails(root, kernelSource) {
     assert.equal(fs.existsSync(path.join(root, rel)), false, `${rel} must not exist`)
   }
   assert.ok(kernelSource.includes("const packagedPreviewRequested = requestedMode === 'go-packaged-preview'"))
-  assert.ok(kernelSource.includes('const packagedManifestRequested = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath'))
+  assert.ok(kernelSource.includes('const packagedResolverRequested = packagedPreviewRequested || defaultCutoverRequested'))
+  assert.ok(kernelSource.includes('const packagedManifestRequested = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath'))
   assert.ok(kernelSource.includes('const helperPath = explicitHelperPath || packagedHelperPath || packagedManifestHelperPath'))
+  assert.ok(kernelSource.includes('defaultAgentTeamKernelEmbeddedHelperManifestPath()'))
   assert.ok(kernelSource.includes('compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint)'))
 }
 
@@ -284,7 +286,7 @@ function assertNoRepoGeneratedOutputs(root) {
       if (entry.isDirectory()) {
         if (rel === '.agentteam-artifacts' || rel.startsWith('.agentteam-artifacts/')) forbidden.push(rel)
         walk(full)
-      } else if (!rel.startsWith('tests/suites/') && !rel.startsWith('docs/perf/') && !rel.startsWith('docs/agentteam') && (/\.(?:exe|dll|so|dylib|tgz|tar|tar\.gz|zip)$/i.test(rel) || generatedNames.test(rel))) {
+      } else if (!rel.startsWith('tests/suites/') && !rel.startsWith('docs/perf/') && !rel.startsWith('docs/agentteam') && !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/') && (/\.(?:exe|dll|so|dylib|tgz|tar|tar\.gz|zip)$/i.test(rel) || generatedNames.test(rel))) {
         forbidden.push(rel)
       }
     }
@@ -365,19 +367,28 @@ module.exports = {
       assertCutoverFailure(incompleteAdapter, incompleteSnapshot, 'missing-helper', [root, tempRoot, fixture.installedRoot], 0)
 
       const nonPreviewEnv = { ...envManifest, SHOULD_NOT_RUN_FILE: path.join(tempRoot, 'resolver-should-not-spawn') }
-      for (const mode of [undefined, 'disabled', 'typescript', 'go', 'auto', 'go-cutover']) {
+      for (const mode of [undefined, 'go']) {
         const adapter = kernel.createAgentTeamKernelAdapter({ mode, env: nonPreviewEnv })
         const before = adapter.metadata().kernel.calls
-        const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700006000007, mode === 'go-cutover' ? throwingTmuxFallback : tmuxFallback)
+        const snapshot = adapter.parseTmuxPaneSnapshot('%go\tgo:@1\tGo default\tpi', 1700006000007, throwingTmuxFallback)
+        assert.equal(snapshot.ok, true, `${mode || 'default'} should use embedded helper`)
+        assert.equal(snapshot.panes[0].paneId, '%go')
+        assert.equal(adapter.metadata().kernel.calls, before + 2, `${mode || 'default'} should call health and parser helper methods`)
+        assert.equal(fs.existsSync(nonPreviewEnv.SHOULD_NOT_RUN_FILE), false, `${mode || 'default'} should not use test-only packaged preview helper marker`)
+      }
+      for (const mode of ['disabled', 'typescript', 'auto', 'go-cutover']) {
+        const adapter = kernel.createAgentTeamKernelAdapter({ mode, env: nonPreviewEnv })
+        const before = adapter.metadata().kernel.calls
+        const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700006000008, mode === 'go-cutover' ? throwingTmuxFallback : tmuxFallback)
         if (mode === 'go-cutover') {
           assert.equal(snapshot.ok, false, 'go-cutover must not discover packaged manifest')
           assert.equal(snapshot.cutoverFailureKind, 'missing-helper')
         } else {
-          assert.equal(snapshot.ok, true, `${mode || 'default'} should keep default behavior`)
+          assert.equal(snapshot.ok, true, `${mode} should keep explicit fallback behavior`)
           assert.equal(snapshot.panes[0].paneId, '%ts')
         }
-        assert.equal(adapter.metadata().kernel.calls, before, `${mode || 'default'} should not call helper`)
-        assert.equal(fs.existsSync(nonPreviewEnv.SHOULD_NOT_RUN_FILE), false, `${mode || 'default'} must not spawn helper`)
+        assert.equal(adapter.metadata().kernel.calls, before, `${mode} should not call helper`)
+        assert.equal(fs.existsSync(nonPreviewEnv.SHOULD_NOT_RUN_FILE), false, `${mode} must not spawn helper`)
       }
     } finally {
       if (tempRoot) fs.rmSync(tempRoot, { recursive: true, force: true })

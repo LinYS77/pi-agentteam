@@ -46,6 +46,13 @@ function walkFiles(root, out = []) {
   return out
 }
 
+function copyDir(source, target) {
+  if (!fs.existsSync(source)) return
+  fs.mkdirSync(path.dirname(target), { recursive: true })
+  fs.rmSync(target, { recursive: true, force: true })
+  fs.cpSync(source, target, { recursive: true })
+}
+
 function writeFile(p, content) {
   ensureDir(path.dirname(p))
   fs.writeFileSync(p, content, 'utf8')
@@ -189,6 +196,7 @@ function transpile() {
   if (fs.existsSync(configExamplePath)) {
     writeFile(path.join(DIST_ROOT, 'config.example.json'), fs.readFileSync(configExamplePath, 'utf8'))
   }
+  copyDir(path.join(EXT_ROOT, 'native'), path.join(DIST_ROOT, 'native'))
 
   const files = walkFiles(EXT_ROOT)
   for (const sourceFile of files) {

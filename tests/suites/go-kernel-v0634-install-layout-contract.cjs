@@ -119,19 +119,21 @@ function assertKernelSourceInvariants(root) {
   const runtimeSources = `${kernel}\n${resolver}`
 
   assertIncludes(kernel, "const packagedPreviewRequested = requestedMode === 'go-packaged-preview'", 'kernel explicit preview gate')
-  assertIncludes(kernel, "const packagedResolverFailure = packagedPreviewRequested && !explicitHelperPath", 'kernel preview resolver gate')
+  assertIncludes(kernel, "const packagedResolverFailure = packagedResolverRequested && !explicitHelperPath", 'kernel preview/default resolver gate')
   assertIncludes(kernel, 'const packagedHelperPath = packagedPreviewRequested && !explicitHelperPath && !packagedResolverFailure', 'kernel direct packaged helper gate')
-  assertIncludes(kernel, 'const packagedManifestPath = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'kernel manifest path gate')
-  assertIncludes(kernel, 'const packagedManifestInstallRoot = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'kernel manifest root gate')
-  assertIncludes(kernel, 'const packagedManifestRequested = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'kernel manifest resolver gate')
+  assertIncludes(kernel, 'const packagedManifestPath = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'kernel manifest path gate')
+  assertIncludes(kernel, 'const packagedManifestInstallRoot = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'kernel manifest root gate')
+  assertIncludes(kernel, 'defaultAgentTeamKernelEmbeddedHelperManifestPath()', 'kernel embedded manifest fallback')
+  assertIncludes(kernel, 'const packagedManifestRequested = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath', 'kernel manifest resolver gate')
   assertIncludes(kernel, 'const helperPath = explicitHelperPath || packagedHelperPath || packagedManifestHelperPath', 'kernel helper precedence')
-  assertIncludes(kernel, "const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested", 'kernel cutover modes')
+  assertIncludes(kernel, "const cutoverRequested = defaultCutoverRequested || requestedMode === 'go-cutover' || packagedPreviewRequested", 'kernel cutover modes')
   assertIncludes(kernel, 'if (cutoverRequested) return fallback(compactInput)', 'kernel fingerprint TS fallback')
 
-  assert.equal(/package\.json|node_modules|import\.meta\.url|__dirname|process\.cwd\(\)/i.test(kernel), false, 'kernel must not discover package layout by default')
+  assertIncludes(kernel, 'defaultAgentTeamKernelEmbeddedHelperRoot()', 'kernel embedded helper root')
+  assert.equal(/package\.json|node_modules|__dirname|process\.cwd\(\)/i.test(kernel), false, 'kernel must not discover unapproved package layout by default')
   assert.equal(/download-artifact|hosted-observation|workflow-run|github\.run_id|github\.run_attempt|github\.sha|workflow_dispatch|actions\/download-artifact|artifact URL|artifactUrl/i.test(runtimeSources), false, 'runtime/resolver must not consume hosted workflow/artifact metadata')
   assert.equal(/npm\s+(?:publish|version|pack)|gh\s+release|actions\/upload-artifact|cosign|slsa|postinstall|preinstall|install-time build|curl\b|wget\b|node-gyp|prebuild/i.test(runtimeSources), false, 'runtime/resolver must not contain release/npm/download/install/signing behavior')
-  assert.equal(/default Go is enabled|default resolver is enabled|normal-user native availability|package-manager native delivery|release asset is approved|fallback deletion is approved/i.test(runtimeSources), false, 'runtime/resolver must not claim package/default/release availability')
+  assert.equal(/normal-user native availability|package-manager native delivery|release asset is approved/i.test(runtimeSources), false, 'runtime/resolver must not claim package/release availability beyond approved embedded default cutover')
 }
 
 function assertPackagedResolverContractConstants(root) {
@@ -171,7 +173,7 @@ function assertPackageInvariants(root) {
   for (const key of ['optionalDependencies', 'bundledDependencies', 'bundleDependencies', 'agentteamGoHelper', 'binary', 'os', 'cpu', 'native', 'nativeHelper']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson, key), false, `package must not define native metadata ${key}`)
   }
-  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz|kernel\/go)/i.test(item)), false, 'package files must not include native/helper/generated artifacts')
+  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz|kernel\/go)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package files must not include unapproved native/helper/generated artifacts')
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define lifecycle script ${lifecycle}`)
   }
@@ -192,6 +194,7 @@ function assertNoRepoArtifacts(root) {
   const forbidden = walkFiles(root)
     .map(file => toRel(root, file))
     .filter(rel => !rel.startsWith('tests/suites/'))
+    .filter(rel => !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'))
     .filter(rel => !rel.startsWith('tests/helpers/'))
     .filter(rel => !rel.startsWith('tests/fixtures/'))
     .filter(rel => !rel.startsWith('docs/perf/') && !rel.startsWith('docs/agentteam'))

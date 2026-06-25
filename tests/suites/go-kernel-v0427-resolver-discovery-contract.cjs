@@ -288,10 +288,10 @@ function assertNoLeaks(result, root) {
 function assertCurrentKernelSourceInvariants(root) {
   const source = fs.readFileSync(path.join(root, 'core/kernel.ts'), 'utf8')
   assert.ok(source.includes("const packagedPreviewRequested = requestedMode === 'go-packaged-preview'"), 'packaged preview must remain explicit-only')
-  assert.ok(source.includes('const packagedResolverFailure = packagedPreviewRequested && !explicitHelperPath'), 'packaged resolver failure must only apply to packaged preview without explicit helper')
+  assert.ok(source.includes('const packagedResolverFailure = packagedResolverRequested && !explicitHelperPath'), 'packaged resolver failure should apply to preview/default resolver without explicit helper')
   assert.ok(source.includes('const packagedHelperPath = packagedPreviewRequested && !explicitHelperPath && !packagedResolverFailure'), 'packaged helper path must only be considered for packaged preview')
   assert.ok(source.includes('const helperPath = explicitHelperPath || packagedHelperPath'), 'explicit helper path must remain highest precedence')
-  assert.ok(source.includes("const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested"), 'cutover remains go-cutover or packaged preview only')
+  assert.ok(source.includes("const cutoverRequested = defaultCutoverRequested || requestedMode === 'go-cutover' || packagedPreviewRequested"), 'cutover includes default/go plus explicit go-cutover or packaged preview')
   assert.ok(source.includes('const startupFallback = cutoverRequested ? undefined'), 'cutover path must not use migration fallback startup')
   assert.ok(source.includes("export const AGENTTEAM_KERNEL_CUTOVER_MODULE = 'tmuxSnapshotParse'"), 'tmuxSnapshotParse remains cutover module')
   assert.ok(source.includes('compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint)'), 'compactReadModelFingerprint remains TS fallback path')
@@ -314,6 +314,7 @@ function assertRepoArtifactSanity(root) {
   const forbidden = walkFiles(root)
     .map(file => path.relative(root, file).replace(/\\/g, '/'))
     .filter(rel => !rel.startsWith('tests/suites/'))
+    .filter(rel => !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'))
     .filter(rel => /\.(?:exe|dll|so|dylib|tgz)$/i.test(rel) || generatedManifestNames.test(rel))
   assert.deepEqual(forbidden, [], 'repo must not contain checked-in native/tarball/generated resolver artifacts')
 }
@@ -323,7 +324,7 @@ function assertPackageNativeSanity(root) {
   assert.equal(packageJson.version, PACKAGE_VERSION, 'package version must remain 0.6.8')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'optionalDependencies'), false, 'package must not define optionalDependencies')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'agentteamGoHelper'), false, 'package must not define native helper metadata')
-  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item)), false, 'package files must not include native/helper/generated outputs')
+  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package files must not include unapproved native/helper/generated outputs')
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define ${lifecycle}`)
   }

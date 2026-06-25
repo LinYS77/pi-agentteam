@@ -163,19 +163,18 @@ module.exports = {
 
     const sentinelCase = cases.find(testCase => testCase.name === 'attached sentinels sanitized')
     const tsSentinel = kernel.createAgentTeamKernelAdapter({ mode: 'typescript', env: {} }).compactReadModelFingerprint(sentinelCase.input)
-    const missingGo = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: path.join(os.tmpdir(), 'missing-agentteam-kernel') })
+    const missingGo = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath: path.join(os.tmpdir(), 'missing-agentteam-kernel') })
     const missingResult = missingGo.compactReadModelFingerprint(sentinelCase.input)
     assert.deepEqual(missingResult, tsSentinel, 'missing Go helper should fall back to TS compact projection/fingerprint')
     assert.equal(missingGo.metadata().kernel.mode, 'typescript')
-    assert.equal(missingGo.metadata().kernel.fallbacks, 1)
-    assert.equal(missingGo.metadata().kernel.fallbackKind, 'missing-helper')
-    assert.match(missingGo.metadata().kernel.fallbackReason, /using TypeScript fallback/)
+    assert.equal(missingGo.metadata().kernel.fallbacks, 0)
+    assert.equal(Object.prototype.hasOwnProperty.call(missingGo.metadata().kernel, 'fallbackKind'), false)
 
     const malformedHelper = writeHelper('malformed', `#!/usr/bin/env node
 process.stdout.write('{not json ${MALFORMED_SENTINEL}\\n')
 `)
     try {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: malformedHelper.file })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath: malformedHelper.file })
       const malformedResult = adapter.compactReadModelFingerprint(sentinelCase.input)
       assert.deepEqual(malformedResult, tsSentinel, 'malformed helper should fall back to TS compact projection/fingerprint')
       assert.equal(adapter.metadata().kernel.fallbackKind, 'helper-malformed-json')
@@ -207,19 +206,19 @@ process.stdout.write('{not json ${MALFORMED_SENTINEL}\\n')
         assert.equal(response.result.fingerprint, expectedFingerprint, `${testCase.name} direct Go fingerprint`)
       }
 
-      const goAdapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const goAdapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       for (const testCase of cases) {
         const expectedProjection = fingerprint.compactReadModelProjection(testCase.input)
         const expectedFingerprint = fingerprint.compactPanelReadModelFingerprint(expectedProjection)
         const goResult = goAdapter.compactReadModelFingerprint(testCase.input)
-        assertReadOnlyResult(`Go adapter ${testCase.name}`, goResult)
-        assert.deepEqual(goResult.projection, expectedProjection, `${testCase.name} Go adapter projection`)
-        assert.equal(goResult.fingerprint, expectedFingerprint, `${testCase.name} Go adapter fingerprint`)
+        assertReadOnlyResult(`Auto adapter ${testCase.name}`, goResult)
+        assert.deepEqual(goResult.projection, expectedProjection, `${testCase.name} auto adapter projection`)
+        assert.equal(goResult.fingerprint, expectedFingerprint, `${testCase.name} auto adapter fingerprint`)
       }
       const metadata = goAdapter.metadata()
       assert.equal(metadata.kernel.mode, 'go')
       assert.equal(metadata.kernel.enabled, true)
-      assert.equal(metadata.kernel.calls, cases.length + 1, 'first adapter call should include health preflight, then one call per fixture')
+      assert.equal(metadata.kernel.calls, cases.length + 1, 'first auto adapter call should include health preflight, then one call per fixture')
       assert.equal(metadata.kernel.fallbacks, 0)
       assert.deepEqual(metadata.kernel.capabilities, ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'])
     } finally {

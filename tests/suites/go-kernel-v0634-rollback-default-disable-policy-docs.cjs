@@ -135,10 +135,10 @@ function assertDoc(root) {
 function assertKernelFailClosedInvariants(root) {
   const kernel = read(root, 'core/kernel.ts')
   assertIncludes(kernel, "const packagedPreviewRequested = requestedMode === 'go-packaged-preview'", 'kernel explicit preview gate')
-  assertIncludes(kernel, "const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested", 'kernel cutover modes')
+  assertIncludes(kernel, "const cutoverRequested = defaultCutoverRequested || requestedMode === 'go-cutover' || packagedPreviewRequested", 'kernel cutover modes')
   assertIncludes(kernel, 'const startupFallback = cutoverRequested ? undefined', 'cutover startup fail-closed path')
   assertIncludes(kernel, 'if (cutoverRequested) {\n      recordCutoverUnavailable(toCutoverFailureKind(kind), detail)\n      return\n    }', 'cutover runtime failures record unavailable')
-  assertIncludes(kernel, 'if (cutoverRequested) return cutoverUnavailableSnapshot(capturedAt)', 'tmux cutover unavailable snapshot')
+  assertIncludes(kernel, 'if (cutoverRequested || !fallback) return cutoverUnavailableSnapshot(capturedAt)', 'tmux cutover unavailable snapshot')
   assertIncludes(kernel, 'if (cutoverRequested) return fallback(compactInput)', 'compactReadModelFingerprint remains TS fallback')
   assertIncludes(kernel, "cutoverStatus: cutoverFailureKind ? 'unavailable' as const : 'active' as const", 'cutover metadata unavailable status')
   assertIncludes(kernel, "resultMarker: 'stale'", 'cutover unavailable stale marker')
@@ -147,10 +147,13 @@ function assertKernelFailClosedInvariants(root) {
 
 function assertRuntimeNoReleaseBehavior(root) {
   const runtimeSources = [read(root, 'core/kernel.ts'), read(root, 'core/kernelPackagedResolver.ts')].join('\n')
-  assert.equal(/package\.json|node_modules|import\.meta\.url|__dirname|process\.cwd\(\)/i.test(read(root, 'core/kernel.ts')), false, 'kernel must not discover installed package layout by default')
+  const kernel = read(root, 'core/kernel.ts')
+  assertIncludes(kernel, 'defaultAgentTeamKernelEmbeddedHelperRoot()', 'kernel embedded helper root')
+  assertIncludes(kernel, 'defaultAgentTeamKernelEmbeddedHelperManifestPath()', 'kernel embedded helper manifest')
+  assert.equal(/package\.json|node_modules|__dirname|process\.cwd\(\)/i.test(kernel), false, 'kernel must not discover unapproved installed package layout by default')
   assert.equal(/download-artifact|hosted-observation|workflow-run|github\.run_id|github\.run_attempt|github\.sha|workflow_dispatch|actions\/download-artifact|artifact URL|artifactUrl/i.test(runtimeSources), false, 'runtime/resolver must not consume hosted workflow/artifact metadata')
   assert.equal(/npm\s+(?:publish|version|pack)|gh\s+release|actions\/upload-artifact|cosign|slsa|postinstall|preinstall|install-time build|curl\b|wget\b|node-gyp|prebuild/i.test(runtimeSources), false, 'runtime/resolver must not contain release/npm/download/install/signing behavior')
-  assert.equal(/default Go is enabled|default resolver is enabled|normal-user native availability|package-manager native delivery|release asset is approved|fallback deletion is approved/i.test(runtimeSources), false, 'runtime/resolver must not claim package/default/release availability')
+  assert.equal(/normal-user native availability|package-manager native delivery|release asset is approved/i.test(runtimeSources), false, 'runtime/resolver must not claim package/release availability beyond approved embedded default cutover')
 }
 
 function assertPackageInvariants(root) {
@@ -161,7 +164,7 @@ function assertPackageInvariants(root) {
   for (const key of ['optionalDependencies', 'bundledDependencies', 'bundleDependencies', 'agentteamGoHelper', 'binary', 'os', 'cpu', 'native', 'nativeHelper']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson, key), false, `package must not define native metadata ${key}`)
   }
-  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz|kernel\/go)/i.test(item)), false, 'package files must not include native/helper/generated artifacts')
+  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz|kernel\/go)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package files must not include unapproved native/helper/generated artifacts')
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define lifecycle script ${lifecycle}`)
   }
@@ -182,6 +185,7 @@ function assertNoRepoArtifacts(root) {
   const forbidden = walkFiles(root)
     .map(file => toRel(root, file))
     .filter(rel => !rel.startsWith('tests/suites/'))
+    .filter(rel => !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'))
     .filter(rel => !rel.startsWith('tests/helpers/'))
     .filter(rel => !rel.startsWith('tests/fixtures/'))
     .filter(rel => !rel.startsWith('docs/perf/') && !rel.startsWith('docs/agentteam'))

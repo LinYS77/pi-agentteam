@@ -96,13 +96,19 @@ function walkFiles(root, out = []) {
   return out
 }
 
+function isApprovedEmbeddedHelperRel(rel) {
+  return rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')
+}
+
 function assertRepoArtifactSanity(root) {
   const generatedManifestNames = /(?:^|\/)(?:agentteam-native-manifest|native-manifest|generated-manifest|artifact-manifest|pipeline-manifest|artifact-output-manifest|provenance|attestation\.intoto)\.(?:json|jsonc|yaml|yml|jsonl)$/i
   const forbidden = walkFiles(root)
     .map(file => path.relative(root, file).replace(/\\/g, '/'))
     .filter(rel => !rel.startsWith('tests/suites/'))
+    .filter(rel => !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'))
+    .filter(rel => !isApprovedEmbeddedHelperRel(rel))
     .filter(rel => /\.(?:exe|dll|so|dylib|tgz)$/i.test(rel) || generatedManifestNames.test(rel))
-  assert.deepEqual(forbidden, [], 'repo must not contain checked-in native/tarball/generated manifest/package artifacts')
+  assert.deepEqual(forbidden, [], 'repo must not contain unapproved native/tarball/generated manifest/package artifacts')
 }
 
 function assertPackageNativeSanity(root) {
@@ -110,7 +116,7 @@ function assertPackageNativeSanity(root) {
   assert.equal(packageJson.version, PACKAGE_VERSION, 'package version must remain 0.6.8')
   const packageFiles = packageJson.files || []
   assert.equal(packageFiles.some(item => item === IGNORED_LOCAL_DIR || item.startsWith(IGNORED_LOCAL_DIR) || item.includes('.agentteam-artifacts')), false, 'package files must not include ignored artifact dir')
-  assert.equal(packageFiles.some(item => /(?:helper|native|manifest|artifact|generated|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item)), false, 'package files must not include native/helper/generated outputs')
+  assert.equal(packageFiles.some(item => /(?:helper|native|manifest|artifact|generated|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item) && !isApprovedEmbeddedHelperRel(item)), false, 'package files must not include unapproved native/helper/generated outputs')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'optionalDependencies'), false, 'package must not define optionalDependencies')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'agentteamGoHelper'), false, 'package must not define native helper metadata')
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {

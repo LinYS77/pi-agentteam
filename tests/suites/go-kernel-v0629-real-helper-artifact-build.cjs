@@ -375,7 +375,7 @@ function assertPackageRuntimeUnchanged(root) {
   assert.equal(packageJson.version, PACKAGE_VERSION, 'package version must remain unchanged')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'optionalDependencies'), false, 'package must not define optionalDependencies')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'agentteamGoHelper'), false, 'package must not define native helper metadata')
-  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item)), false, 'package files must not include native/helper/generated outputs')
+  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package files must not include native/helper/generated outputs')
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define ${lifecycle}`)
   }
@@ -390,7 +390,8 @@ function assertPackageRuntimeUnchanged(root) {
   }
   const kernelSource = fs.readFileSync(path.join(root, 'core/kernel.ts'), 'utf8')
   assert.equal(kernelSource.includes('go-helper-artifact-builder'), false, 'runtime kernel must not import builder')
-  assert.equal(kernelSource.includes('manifest.json'), false, 'runtime kernel must not implement manifest resolver in Slice 2')
+  assert.equal(kernelSource.includes('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/manifest.json'), true, 'runtime kernel may discover only the approved embedded tmuxSnapshotParse manifest')
+  assert.equal(/native\/(?!tmuxSnapshotParse\/0\.3\.0-read-model-shadow\/linux-x64-glibc\/manifest\.json)/.test(kernelSource), false, 'runtime kernel must not discover unapproved native manifests')
 }
 
 function assertNoRepoGeneratedOutputs(root) {
@@ -405,7 +406,7 @@ function assertNoRepoGeneratedOutputs(root) {
       if (entry.isDirectory()) {
         if (rel === '.agentteam-artifacts' || rel.startsWith('.agentteam-artifacts/')) forbidden.push(rel)
         walk(full)
-      } else if (!rel.startsWith('tests/suites/') && !rel.startsWith('docs/perf/') && !rel.startsWith('docs/agentteam') && (/\.(?:exe|dll|so|dylib|tgz|tar|tar\.gz|zip)$/i.test(rel) || generatedNames.test(rel))) {
+      } else if (!rel.startsWith('tests/suites/') && !rel.startsWith('docs/perf/') && !rel.startsWith('docs/agentteam') && !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/') && (/\.(?:exe|dll|so|dylib|tgz|tar|tar\.gz|zip)$/i.test(rel) || generatedNames.test(rel))) {
         forbidden.push(rel)
       }
     }

@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "packageName": "pi-agentteam",
+  "packageVersion": "0.6.8",
+  "module": "tmuxSnapshotParse",
+  "helperVersion": "0.3.0-read-model-shadow",
+  "protocolVersion": 1,
+  "capabilities": [
+    "health",
+    "profile",
+    "tmuxSnapshotParse",
+    "compactReadModelFingerprint"
+  ],
+  "businessPathsConnected": false,
+  "target": "linux-x64-glibc",
+  "platform": {
+    "os": "linux",
+    "arch": "x64",
+    "libc": "glibc"
+  },
+  "artifact": {
+    "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/agentteam-tmuxSnapshotParse",
+    "filename": "agentteam-tmuxSnapshotParse",
+    "size": 2855822,
+    "sha256": "87ca2289d2f89fd6f1540a6c6c667c1bdb18c7c697d934ed1a1cc64e4aa4a310",
+    "executable": true,
+    "mode": "0755"
+  },
+  "files": {
+    "helper": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/agentteam-tmuxSnapshotParse",
+    "manifest": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/manifest.json",
+    "checksums": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/SHA256SUMS",
+    "provenance": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/provenance.json",
+    "license": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/LICENSE",
+    "licenseMetadata": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/license.json",
+    "attestation": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/attestation.intoto.jsonl"
+  },
+  "source": {
+    "path": "kernel/go/agentteam-kernel",
+    "revision": "v0648-main-package-embedded-helper"
+  },
+  "build": {
+    "command": [
+      "go",
+      "build",
+      "-trimpath",
+      "-o",
+      "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/agentteam-tmuxSnapshotParse",
+      "."
+    ],
+    "env": {
+      "GO111MODULE": "off"
+    },
+    "cwd": "kernel/go/agentteam-kernel",
+    "toolchain": "go version go1.25.10 linux/amd64",
+    "runIdentity": "v0648-main-package-embedded-helper",
+    "generatedAt": "2026-06-25T00:00:00.000Z"
+  },
+  "smoke": {
+    "health": true,
+    "tmuxSnapshotParse": {
+      "ok": true,
+      "paneCount": 1,
+      "capturedAt": 1700000000000
+    }
+  },
+  "attestation": {
+    "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/attestation.intoto.jsonl",
+    "kind": "placeholder-only",
+    "signed": false,
+    "sha256": "7546c933ae5d87b3e01224abe791dda5f07a0332f5ca2cdcd359838ff0d8649c"
+  },
+  "license": {
+    "name": "MIT",
+    "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/LICENSE",
+    "sha256": "ecde5ac9dfe7dad8a43005f5d4a1fc950057d7d05ba41ab15cdedd03db7a7358",
+    "metadataPath": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/license.json",
+    "metadataSha256": "500f22d23ca9445c139a355b46899e42e1ce2033493f7980d6cb369ce9511765"
+  }
+}

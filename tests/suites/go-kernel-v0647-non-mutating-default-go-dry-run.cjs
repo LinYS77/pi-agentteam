@@ -41,6 +41,7 @@ const ROOT_FORBIDDEN_FILES = [
   'kernel/go/agentteam-kernel/go.mod',
   'kernel/go/agentteam-kernel/go.sum',
 ]
+const APPROVED_EMBEDDED_NATIVE_PREFIX = 'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'
 const POSITIVE_OVERCLAIMS = [
   'default Go enabled: true',
   'default Go is enabled',
@@ -194,7 +195,10 @@ function assertRuntimeInvariants(root, env) {
   }
 
   const kernelSource = read(root, 'core/kernel.ts')
-  assert.match(kernelSource, /if \(!raw \|\| raw === 'none' \|\| raw === 'off' \|\| raw === 'disabled'\) return 'disabled'/, 'default/unset should normalize to disabled')
+  assert.match(kernelSource, /if \(!raw \|\| raw === 'default'\) return 'default'/, 'default/unset should normalize to default cutover mode')
+  assert.match(kernelSource, /const defaultCutoverRequested = defaultRequested \|\| requestedMode === 'go'/, 'default and go use approved embedded cutover path')
+  assert.match(kernelSource, /defaultAgentTeamKernelEmbeddedHelperManifestPath\(\)/, 'default cutover should use embedded manifest')
+  assert.match(kernelSource, /defaultAgentTeamKernelEmbeddedHelperRoot\(\)/, 'default cutover should use embedded helper root')
   assert.match(kernelSource, /requestedMode === 'go-cutover'/, 'go-cutover remains explicit')
   assert.match(kernelSource, /requestedMode === 'go-packaged-preview'/, 'go-packaged-preview remains explicit')
   assert.match(kernelSource, /AGENTTEAM_KERNEL_CUTOVER_MODULE = 'tmuxSnapshotParse'/, 'tmuxSnapshotParse remains cutover module')
@@ -202,17 +206,18 @@ function assertRuntimeInvariants(root, env) {
   assert.match(kernelSource, /if \(cutoverRequested\) return fallback\(compactInput\)/, 'compactReadModelFingerprint remains non-cutover')
 
   const snapshotSource = read(root, 'tmux/snapshot.ts')
-  assert.match(snapshotSource, /parseTmuxPaneSnapshotWithTypeScript/, 'TypeScript parser fallback must remain present')
+  assert.equal(/parseTmuxPaneSnapshotWithTypeScript/.test(snapshotSource), false, 'approved v0.6.48 cutover deletes TypeScript parser fallback')
   assert.match(snapshotSource, /runTmuxNoThrow\(\[/, 'TypeScript still captures tmux output')
   assert.match(snapshotSource, /list-panes/, 'TypeScript still owns list-panes capture')
 
   if (typeof env.helpers.requireDist === 'function') {
     const kernel = env.helpers.requireDist('core/kernel.js')
     const adapter = kernel.createAgentTeamKernelAdapter({ env: {} })
-    assert.equal(adapter.metadata().kernel.requestedMode, 'disabled')
-    assert.equal(adapter.metadata().kernel.mode, 'typescript')
-    assert.equal(adapter.metadata().kernel.enabled, false)
+    assert.equal(adapter.metadata().kernel.requestedMode, 'default')
+    assert.equal(adapter.metadata().kernel.mode, 'go')
+    assert.equal(adapter.metadata().kernel.enabled, true)
     assert.equal(adapter.metadata().kernel.calls, 0)
+    assert.equal(adapter.metadata().kernel.cutoverStatus, 'active')
     assert.deepEqual(kernel.AGENTTEAM_KERNEL_CAPABILITIES, [...REQUIRED_CAPABILITIES])
   }
 }
@@ -225,8 +230,8 @@ function assertVerifierSource(root) {
   assertIncludes(cli, 'verifyV0647DefaultGoDryRun', CLI)
   assertIncludes(lib, 'fakeFutureDefaultResolver', LIB)
   assertIncludes(lib, 'go-packaged-preview', LIB)
-  assertIncludes(lib, 'defaultBehaviorChanged: false', LIB)
-  assertIncludes(lib, 'fallbackDeleted: false', LIB)
+  assertIncludes(lib, 'defaultBehaviorChanged: true', LIB)
+  assertIncludes(lib, 'fallbackDeleted: true', LIB)
   assertIncludes(lib, "goAuthority: GO_AUTHORITY", LIB)
   assertIncludes(lib, 'fs.mkdtempSync(path.join(os.tmpdir()', LIB)
   assert.equal(/npm\s+(?:pack|install|publish|version)\b/.test(lib), false, `${LIB} must not invoke npm packaging/release commands`)
@@ -246,7 +251,7 @@ function assertSummary(root) {
   assert.equal(summary.helper.built, true)
   assert.equal(summary.helper.rootKind, 'os-temp-only')
   assert.deepEqual(summary.helper.capabilities, [...REQUIRED_CAPABILITIES])
-  assert.equal(summary.futureDefaultResolver.mode, 'future-default-go-dry-run')
+  assert.equal(summary.futureDefaultResolver.mode, defaultGoDryRunContract.dryRunRuntimePath.futureResolverMode)
   assert.equal(summary.futureDefaultResolver.manifestResolved, true)
   assert.equal(summary.smoke.directHelperHealth, true)
   assert.equal(summary.smoke.directHelperTmuxSnapshotParse, true)
@@ -267,8 +272,8 @@ function assertSummary(root) {
 
   const text = formatV0647DefaultGoDryRunText(summary)
   assertIncludes(text, 'wouldUseGoForTmuxSnapshotParse=true', 'human summary')
-  assertIncludes(text, 'defaultBehaviorChanged=false', 'human summary')
-  assertIncludes(text, 'fallbackDeleted=false', 'human summary')
+  assertIncludes(text, 'defaultBehaviorChanged=true', 'human summary')
+  assertIncludes(text, 'fallbackDeleted=true', 'human summary')
   assertNoLeaks(text, [root])
 }
 
@@ -285,8 +290,10 @@ function assertCli(root) {
   assert.equal(summary.ok, true)
   assert.equal(summary.resultMarker, RESULT_MARKER)
   assert.equal(summary.wouldUseGoForTmuxSnapshotParse, true)
-  assert.equal(summary.defaultBehaviorChanged, false)
-  assert.equal(summary.fallbackDeleted, false)
+  assert.equal(summary.defaultBehaviorChanged, true)
+  assert.equal(summary.defaultGoEnabled, true)
+  assert.equal(summary.defaultResolverEnabled, true)
+  assert.equal(summary.fallbackDeleted, true)
   assertNoLeaks(summary, [root])
 }
 
@@ -296,10 +303,10 @@ function assertArtifacts(root) {
   const raw = []
   for (const file of walkFiles(root)) {
     const rel = toRel(root, file)
-    if (/(?:^|\/)(?:pi-agentteam-.*\.tgz|.*\.(?:exe|dll|so|dylib|tgz|tar|tar\.gz|zip|sig|sigstore|pem|key|crt|cert|p7s|minisig))$/i.test(rel)) forbidden.push(rel)
-    if (!rel.startsWith('docs/') && !rel.startsWith('tests/') && !rel.startsWith('scripts/') && /(?:^|\/)(?:.*v0647.*raw.*|.*raw-tmux.*|.*tmux.*stdout.*|.*tmux.*stderr.*|.*state-archive.*|.*raw-state.*|.*mailbox.*body.*|.*report.*body.*|.*worker.*transcript.*|.*terminal.*raw.*log.*)$/i.test(rel)) raw.push(rel)
+    if (!rel.startsWith(APPROVED_EMBEDDED_NATIVE_PREFIX) && /(?:^|\/)(?:pi-agentteam-.*\.tgz|.*\.(?:exe|dll|so|dylib|tgz|tar|tar\.gz|zip|sig|sigstore|pem|key|crt|cert|p7s|minisig))$/i.test(rel)) forbidden.push(rel)
+    if (!rel.startsWith(APPROVED_EMBEDDED_NATIVE_PREFIX) && !rel.startsWith('docs/') && !rel.startsWith('tests/') && !rel.startsWith('scripts/') && /(?:^|\/)(?:.*v0647.*raw.*|.*raw-tmux.*|.*tmux.*stdout.*|.*tmux.*stderr.*|.*state-archive.*|.*raw-state.*|.*mailbox.*body.*|.*report.*body.*|.*worker.*transcript.*|.*terminal.*raw.*log.*)$/i.test(rel)) raw.push(rel)
   }
-  assert.deepEqual(forbidden.sort(), [], 'repo must not contain checked-in native/archive/signing/release artifacts')
+  assert.deepEqual(forbidden.sort(), [], 'repo must not contain unapproved checked-in native/archive/signing/release artifacts')
   assert.deepEqual(raw.sort(), [], 'repo must not contain raw v0.6.47 evidence files')
 }
 

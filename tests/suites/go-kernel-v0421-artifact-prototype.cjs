@@ -353,21 +353,32 @@ module.exports = {
       assert.equal(directSnapshot.panes[0].paneId, '%artifact', 'direct tmuxSnapshotParse should come from helper')
 
       const defaultAdapter = kernel.createAgentTeamKernelAdapter({ env: {} })
-      assert.equal(defaultAdapter.metadata().kernel.requestedMode, 'disabled', 'default remains disabled')
-      assert.equal(defaultAdapter.metadata().kernel.mode, 'typescript', 'default remains TypeScript')
-      assert.equal(defaultAdapter.metadata().kernel.enabled, false, 'default must not enable Go')
-      for (const mode of ['disabled', 'typescript', 'go', 'auto', 'go-cutover']) {
+      assert.equal(defaultAdapter.metadata().kernel.requestedMode, 'default', 'default normalizes to default')
+      assert.equal(defaultAdapter.metadata().kernel.mode, 'go', 'default uses embedded Go helper')
+      assert.equal(defaultAdapter.metadata().kernel.enabled, true, 'default tmuxSnapshotParse enables Go')
+      assert.equal(defaultAdapter.metadata().kernel.cutoverStatus, 'active', 'default embedded helper is active')
+      for (const mode of ['disabled', 'typescript', 'auto']) {
         const adapter = kernel.createAgentTeamKernelAdapter({ mode, packagedHelperPath: installedValidation.helperPath, env: { PATH: process.env.PATH } })
         const beforeCalls = adapter.metadata().kernel.calls
-        if (mode === 'go-cutover') {
-          const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700006000002, throwingTmuxFallback)
-          assert.equal(snapshot.ok, false, 'go-cutover should not discover packaged helper')
-          assert.equal(snapshot.cutoverFailureKind, 'missing-helper', 'go-cutover missing helper failure kind')
-        } else {
-          const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700006000002, (stdout, capturedAt) => ({ capturedAt, panes: [{ paneId: '%ts', target: 'ts:@1', label: 'TypeScript fallback', currentCommand: 'pi' }], byPaneId: { '%ts': { paneId: '%ts', target: 'ts:@1', label: 'TypeScript fallback', currentCommand: 'pi' } }, ok: true }))
-          assert.equal(snapshot.panes[0].paneId, '%ts', `${mode} should not discover packaged helper`)
-        }
+        const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700006000002, (stdout, capturedAt) => ({ capturedAt, panes: [{ paneId: '%ts', target: 'ts:@1', label: 'TypeScript fallback', currentCommand: 'pi' }], byPaneId: { '%ts': { paneId: '%ts', target: 'ts:@1', label: 'TypeScript fallback', currentCommand: 'pi' } }, ok: true }))
+        assert.equal(snapshot.panes[0].paneId, '%ts', `${mode} should not discover packaged helper`)
         assert.equal(adapter.metadata().kernel.calls, beforeCalls, `${mode} should not call packaged helper`)
+      }
+      {
+        const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', packagedHelperPath: installedValidation.helperPath, env: { PATH: process.env.PATH } })
+        const beforeCalls = adapter.metadata().kernel.calls
+        const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700006000002, throwingTmuxFallback)
+        assert.equal(snapshot.ok, true, 'go should use approved embedded helper while ignoring raw packaged helper path')
+        assert.equal(snapshot.panes[0].paneId, '%ts')
+        assert.equal(adapter.metadata().kernel.calls, beforeCalls + 2, 'go should call embedded helper')
+      }
+      {
+        const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go-cutover', packagedHelperPath: installedValidation.helperPath, env: { PATH: process.env.PATH } })
+        const beforeCalls = adapter.metadata().kernel.calls
+        const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700006000002, throwingTmuxFallback)
+        assert.equal(snapshot.ok, false, 'go-cutover must not trust raw packaged helper path without manifest resolution')
+        assert.equal(snapshot.cutoverFailureKind, 'missing-helper', 'go-cutover missing helper failure kind')
+        assert.equal(adapter.metadata().kernel.calls, beforeCalls, 'go-cutover packaged helper calls')
       }
 
       const previewAdapter = kernel.createAgentTeamKernelAdapter({ mode: 'go-packaged-preview', packagedHelperPath: installedValidation.helperPath, env: { PATH: process.env.PATH } })

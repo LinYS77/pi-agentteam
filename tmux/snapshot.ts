@@ -41,38 +41,8 @@ function emptySnapshot(capturedAt: number, ok = true, error?: string): TmuxSnaps
   }
 }
 
-function parseTmuxPaneSnapshotWithTypeScript(stdout: string, capturedAt = Date.now()): TmuxSnapshot {
-  const byPaneId: Record<string, TmuxPaneSnapshotItem> = {}
-  const order: string[] = []
-
-  for (const rawLine of String(stdout || '').split('\n')) {
-    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
-    if (!line) continue
-    const fields = line.split('\t')
-    if (fields.length < 4) continue
-    const [paneId = '', target = '', label = '', currentCommand = ''] = fields
-    if (!paneId) continue
-    if (!Object.prototype.hasOwnProperty.call(byPaneId, paneId)) {
-      order.push(paneId)
-    }
-    byPaneId[paneId] = {
-      paneId,
-      target,
-      label,
-      currentCommand,
-    }
-  }
-
-  return {
-    capturedAt,
-    panes: order.map(paneId => byPaneId[paneId]!).filter(Boolean),
-    byPaneId,
-    ok: true,
-  }
-}
-
 export function parseTmuxPaneSnapshot(stdout: string, capturedAt = Date.now()): TmuxSnapshot {
-  return createAgentTeamKernelAdapter().parseTmuxPaneSnapshot(stdout, capturedAt, parseTmuxPaneSnapshotWithTypeScript)
+  return createAgentTeamKernelAdapter().parseTmuxPaneSnapshot(stdout, capturedAt)
 }
 
 export function findPaneInSnapshot(snapshot: TmuxSnapshot, paneId: string): TmuxPaneSnapshotItem | null {

@@ -37,7 +37,7 @@ const DOC_REQUIRED = [
   'Slice 6 — final checkpoint/tag policy.',
   'v0.6.33 is still not real native package delivery.',
   'v0.6.33 is still not normal-user native helper availability.',
-  'v0.6.33 is still not default Go, default resolver, release evidence, signing/security proof, fallback deletion, or second-platform support.',
+  'v0.6.33 predates the v0.6.48 approved embedded default-Go cutover and still is not release evidence, signing/security proof, or second-platform support.',
   '`package.json` remains `0.6.8`.',
   '`go-packaged-preview` remains explicit-only and non-default.',
   '`compactReadModelFingerprint` remains TypeScript fallback / non-cutover.',
@@ -47,12 +47,12 @@ const DOC_REQUIRED = [
 const SLICE5_DOC_REQUIRED = [
   '## Slice 5 — Package / Runtime Guardrail Consolidation',
   '`tests/suites/go-kernel-v0633-package-runtime-guardrails.cjs`',
-  'Package/repo invariants stay unchanged: `package.json` remains `0.6.8`, package files do not include native/helper/generated layouts, no native metadata or lifecycle hooks are added, and lockfiles plus `go.mod` / `go.sum` stay absent.',
-  'Artifact invariants stay unchanged: no root `pi-agentteam-*.tgz`, no checked-in native binaries, no generated manifests/checksums/provenance/attestations/verifier output/raw hosted records outside approved source, test, and bounded docs.',
-  'Runtime/kernel invariants stay unchanged: `go-packaged-preview` is explicit-only; default/unset, `disabled`, `typescript`, `go`, and `auto` modes do not consume packaged install roots/manifests/layouts; explicit helper precedence stays first; current `go-cutover` helper-path semantics stay unchanged; explicit helper failures do not silently become successful TS parser results in cutover/preview modes; `compactReadModelFingerprint` remains TypeScript fallback / non-cutover.',
+  'Package/repo invariants stay unchanged: `package.json` remains `0.6.8`, package files include only the approved embedded tmuxSnapshotParse native layout, no native metadata or lifecycle hooks are added, and lockfiles plus `go.mod` / `go.sum` stay absent.',
+  'Artifact invariants stay unchanged: no root `pi-agentteam-*.tgz`, no unapproved checked-in native binaries, no generated manifests/checksums/provenance/attestations/verifier output/raw hosted records outside approved source, test, embedded helper, and bounded docs.',
+  'Runtime/kernel invariants stay updated for v0.6.48: `go-packaged-preview` is explicit-only; default/unset and `go` use only the approved embedded helper and ignore packaged install roots/manifests/layouts; `disabled`, `typescript`, and `auto` modes do not consume packaged install roots/manifests/layouts; explicit helper precedence stays first; current `go-cutover` helper-path semantics stay unchanged; explicit helper failures do not silently become successful TS parser results in cutover/preview modes; `compactReadModelFingerprint` remains TypeScript fallback / non-cutover.',
   'Workflow/release/signing invariants stay unchanged: the only workflow is the review-only Go Helper Review Artifact workflow, contents permission is read-only, the matrix remains one `linux-x64-glibc` row, upload/download is artifact-review-only, and no release assets, npm publish/version, git tag/push, cosign, SLSA, signing, download, or install behavior is introduced.',
   'Readiness/UI/tool/control-plane invariants stay unchanged: `/team readiness` remains explicit transitional reviewer diagnostics and not normal-user native availability UI; no new command, tool, model-callable surface, runtime diagnostic surface, package/release control plane, tmux execution/capture authority, worker lifecycle authority, task/report/PlanRun governance, UI rendering authority, or full-text/state/mailbox/report access moves to Go.',
-  'Docs consistency stays unchanged: this v0.6.33 contract records Slice 1–5 as prototype/review-only/non-availability evidence, while `docs/agentteam方案书.md` continues to frame default Go and TypeScript fallback deletion as future gated goals after package, install, default, rollback, and security signoff.',
+  'Docs consistency stays updated: this v0.6.33 contract records historical Slice 1–5 prototype/review-only evidence, while v0.6.48 owns the approved embedded default-Go cutover and TypeScript tmux parser fallback deletion evidence.',
 ]
 
 const FORBIDDEN_DOC_OVERCLAIMS = [
@@ -159,7 +159,7 @@ function assertPackageRepoInvariants(root) {
   const files = packageJson.files || []
   assert.ok(files.includes('core/'), 'package still includes TS core facade sources')
   assert.equal(files.includes('kernel/'), false, 'package must not include Go source/kernel directory')
-  assert.equal(files.some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz|kernel\/go)/i.test(item)), false, 'package files must not include native/helper/generated artifacts')
+  assert.equal(files.some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz|kernel\/go)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package files must not include unapproved native/helper/generated artifacts')
 
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define lifecycle script ${lifecycle}`)
@@ -182,6 +182,7 @@ function assertCheckedInArtifactInvariants(root) {
   const forbidden = walkFiles(root)
     .map(file => toRel(root, file))
     .filter(rel => !rel.startsWith('tests/suites/'))
+    .filter(rel => !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'))
     .filter(rel => !rel.startsWith('tests/helpers/'))
     .filter(rel => !rel.startsWith('docs/perf/') && !rel.startsWith('docs/agentteam'))
     .filter(rel => !rel.startsWith('scripts/lib/go-helper-hosted-observation-record.cjs'))
@@ -199,20 +200,22 @@ function assertRuntimeSourceInvariants(root) {
   const runtimeSources = `${kernel}\n${resolver}`
 
   assertIncludes(kernel, "const packagedPreviewRequested = requestedMode === 'go-packaged-preview'", 'kernel explicit preview gate')
-  assertIncludes(kernel, "const packagedResolverFailure = packagedPreviewRequested && !explicitHelperPath", 'kernel preview resolver gate')
+  assertIncludes(kernel, "const packagedResolverFailure = packagedResolverRequested && !explicitHelperPath", 'kernel preview/default resolver gate')
   assertIncludes(kernel, 'const packagedHelperPath = packagedPreviewRequested && !explicitHelperPath && !packagedResolverFailure', 'kernel direct packaged helper gate')
-  assertIncludes(kernel, 'const packagedManifestPath = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'kernel manifest path gate')
-  assertIncludes(kernel, 'const packagedManifestInstallRoot = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'kernel manifest root gate')
-  assertIncludes(kernel, 'const packagedManifestRequested = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'kernel manifest resolver gate')
+  assertIncludes(kernel, 'const packagedManifestPath = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'kernel manifest path gate')
+  assertIncludes(kernel, 'const packagedManifestInstallRoot = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'kernel manifest root gate')
+  assertIncludes(kernel, 'defaultAgentTeamKernelEmbeddedHelperManifestPath()', 'kernel embedded manifest fallback')
+  assertIncludes(kernel, 'const packagedManifestRequested = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath', 'kernel manifest resolver gate')
   assertIncludes(kernel, 'const helperPath = explicitHelperPath || packagedHelperPath || packagedManifestHelperPath', 'kernel helper precedence')
-  assertIncludes(kernel, "const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested", 'kernel cutover modes')
+  assertIncludes(kernel, "const cutoverRequested = defaultCutoverRequested || requestedMode === 'go-cutover' || packagedPreviewRequested", 'kernel cutover modes')
   assertIncludes(kernel, 'if (cutoverRequested) return fallback(compactInput)', 'kernel fingerprint TS fallback')
 
-  assert.equal(/package\.json|node_modules|import\.meta\.url|__dirname|process\.cwd\(\)/i.test(kernel), false, 'kernel must not discover installed package layout by default')
+  assertIncludes(kernel, 'defaultAgentTeamKernelEmbeddedHelperRoot()', 'kernel embedded helper root')
+  assert.equal(/package\.json|node_modules|__dirname|process\.cwd\(\)/i.test(kernel), false, 'kernel must not discover unapproved installed package layout by default')
   assert.equal(/download-artifact|artifact-index|artifactIndex|artifact URL|artifactUrl|go-helper-review-artifact|hosted-observation|workflow-run|github\.run_id|github\.run_attempt|github\.sha|workflow_dispatch|actions\/download-artifact/i.test(runtimeSources), false, 'runtime/resolver must not consume hosted workflow/artifact metadata')
   assert.equal(/npm\s+(?:publish|version|pack)|gh\s+release|actions\/upload-artifact|cosign|slsa|postinstall|preinstall|install-time build|curl\b|wget\b|node-gyp|prebuild/i.test(runtimeSources), false, 'runtime/resolver must not contain release/npm/download/install behavior')
   assert.equal(/signed:\s*true|cosign|slsa|signing proof|signing approved/i.test(runtimeSources), false, 'runtime/resolver must not contain real signing approval behavior')
-  assert.equal(/default Go is enabled|default resolver is enabled|normal-user native availability|package-manager native delivery|release asset is approved|fallback deletion is approved/i.test(runtimeSources), false, 'runtime/resolver must not claim package/default/release availability')
+  assert.equal(/normal-user native availability|package-manager native delivery|release asset is approved/i.test(runtimeSources), false, 'runtime/resolver must not claim package/release availability beyond approved embedded default cutover')
 
   for (const rel of ['core/kernel.ts', 'core/kernelPackagedResolver.ts']) {
     const source = read(root, rel)
@@ -232,14 +235,22 @@ function assertKernelRuntimeBehavior(root, env) {
       PI_AGENTTEAM_KERNEL_PACKAGED_HELPER: '/tmp/v0633-should-not-run-helper',
     }
 
-    for (const mode of [undefined, 'disabled', 'typescript', 'go', 'auto']) {
+    for (const mode of [undefined, 'go']) {
       const adapter = kernel.createAgentTeamKernelAdapter({ mode, env: packagedEnv })
       const metadata = adapter.metadata()
       const label = mode || 'default'
-      assert.equal(metadata.kernel.mode, 'typescript', `${label} must remain TypeScript without explicit helper`)
-      assert.equal(metadata.kernel.enabled, false, `${label} must not enable Go from packaged env`)
-      assert.equal(metadata.kernel.calls, 0, `${label} must not call packaged helper`)
-      assert.equal(metadata.kernel.cutoverStatus, undefined, `${label} must not enter cutover status`)
+      assert.equal(metadata.kernel.mode, 'go', `${label} must use approved embedded helper without packaged env`)
+      assert.equal(metadata.kernel.enabled, true, `${label} must enable Go from embedded helper`)
+      assert.equal(metadata.kernel.calls, 0, `${label} must not call helper before parser invocation`)
+      assert.equal(metadata.kernel.cutoverStatus, 'active', `${label} must enter active cutover status`)
+    }
+    for (const mode of ['disabled', 'typescript', 'auto']) {
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode, env: packagedEnv })
+      const metadata = adapter.metadata()
+      assert.equal(metadata.kernel.mode, 'typescript', `${mode} must remain TypeScript without explicit helper`)
+      assert.equal(metadata.kernel.enabled, false, `${mode} must not enable Go from packaged env`)
+      assert.equal(metadata.kernel.calls, 0, `${mode} must not call packaged helper`)
+      assert.equal(metadata.kernel.cutoverStatus, undefined, `${mode} must not enter cutover status`)
     }
 
     const preview = kernel.createAgentTeamKernelAdapter({ mode: 'go-packaged-preview', env: {} })
@@ -345,7 +356,7 @@ function assertDocsConsistency(root) {
   assertIncludes(roadmap, 'release rollback 通过 GitHub tag/npm version，而不是 runtime 中长期偷偷走旧 TS path。', ROADMAP_DOC)
   assertIncludes(roadmap, 'fallback deletion remains blocked until runtime prerequisite signoff', ROADMAP_DOC)
   assertIncludes(roadmap, 'STOP gates：no TS fallback deletion until normal-user availability signoff', ROADMAP_DOC)
-  assert.equal(/v0\.6\.33[\s\S]{0,240}(?:default Go is enabled|normal-user native availability is proven|fallback deletion is approved|npm publish|cosign is approved|SLSA is approved)/i.test(`${doc}\n${roadmap}`), false, 'docs must not convert v0.6.33 prototype evidence into availability/release approval')
+  assert.equal(/v0\.6\.33[\s\S]{0,240}(?:normal-user native availability is proven|npm publish|cosign is approved|SLSA is approved)/i.test(`${doc}\n${roadmap}`), false, 'docs must not convert v0.6.33 prototype evidence into release/security approval')
 }
 
 module.exports = {

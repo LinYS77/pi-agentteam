@@ -44,7 +44,7 @@ function assertMainPackageUnchanged(root) {
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'optionalDependencies'), false, 'main package must not define optionalDependencies')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'dependencies'), false, 'main package must not add native/helper dependencies')
   assert.equal((packageJson.files || []).some(item => item === 'kernel' || item.startsWith('kernel/') || item.includes('/kernel/')), false, 'package.json#files must exclude kernel/')
-  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item)), false, 'package.json#files must exclude native helper/generated artifact paths')
+  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package.json#files must exclude native helper/generated artifact paths')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'agentteamGoHelper'), false, 'main package must not add native helper metadata')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'os'), false, 'main package must not add native os metadata')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'cpu'), false, 'main package must not add native cpu metadata')

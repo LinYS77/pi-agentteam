@@ -171,7 +171,7 @@ function assertPackageNativeSanity(root) {
   const packageJson = JSON.parse(read(root, 'package.json'))
   assert.equal(packageJson.version, EXPECTED_VERSION, 'package version must remain unchanged')
   assert.equal((packageJson.files || []).some(item => item === 'kernel' || item.startsWith('kernel/') || item.includes('/kernel/')), false, 'package.json#files must exclude kernel/')
-  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item)), false, 'package.json#files must exclude native/helper/generated artifacts')
+  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package.json#files must exclude native/helper/generated artifacts')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'optionalDependencies'), false, 'package must not define optionalDependencies')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'agentteamGoHelper'), false, 'package must not define native helper metadata')
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
@@ -256,9 +256,10 @@ else respond(validSnapshot({
     }
 
     const defaultMetadata = kernel.createAgentTeamKernelAdapter({ env: {} }).metadata()
-    assert.equal(defaultMetadata.kernel.requestedMode, 'disabled', 'unset mode should remain disabled')
-    assert.equal(defaultMetadata.kernel.mode, 'typescript', 'unset mode should remain TypeScript')
-    assert.equal(defaultMetadata.kernel.enabled, false, 'policy regression must not make Go default')
+    assert.equal(defaultMetadata.kernel.requestedMode, 'default', 'unset mode should normalize to default after v0.6.48')
+    assert.equal(defaultMetadata.kernel.mode, 'go', 'unset mode should use embedded Go for tmuxSnapshotParse')
+    assert.equal(defaultMetadata.kernel.enabled, true, 'default embedded helper should enable parser-only Go')
+    assert.equal(defaultMetadata.kernel.cutoverStatus, 'active', 'default embedded helper should be active')
 
     const readModelBench = require(path.join(root, 'tests/bench/team-read-model-baseline.cjs'))
     assert.equal(readModelBench.shouldRunShadow('go-cutover'), false, 'go-cutover should not run read-model shadow')

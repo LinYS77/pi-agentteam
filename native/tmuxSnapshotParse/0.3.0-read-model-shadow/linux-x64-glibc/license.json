@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "name": "MIT",
+  "packageName": "pi-agentteam",
+  "module": "tmuxSnapshotParse",
+  "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/LICENSE",
+  "sha256": "ecde5ac9dfe7dad8a43005f5d4a1fc950057d7d05ba41ab15cdedd03db7a7358"
+}

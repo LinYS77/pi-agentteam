@@ -128,14 +128,15 @@ function assertRuntimeUnchanged(root) {
   const runtimeSources = [
     read(root, 'core/kernel.ts'),
     read(root, 'core/kernelPackagedResolver.ts'),
-  ].join('\n')
-  assert.equal(/linux-x64-glibc|matrix|artifact-index|artifactIndex|go-helper-review-artifact/.test(runtimeSources), false, 'runtime/resolver must not depend on CI matrix or artifact index')
+  ].join('\n').replace(/native\/tmuxSnapshotParse\/0\.3\.0-read-model-shadow\/linux-x64-glibc\//g, '')
+  assert.equal(/linux-x64-glibc|matrix|artifact-index|artifactIndex|go-helper-review-artifact/.test(runtimeSources), false, 'runtime/resolver must not depend on CI matrix or artifact index outside approved embedded helper path')
 }
 
 function assertNoGeneratedCommitted(root) {
   const forbidden = walkFiles(root)
     .map(file => path.relative(root, file).replace(/\\/g, '/'))
     .filter(rel => !rel.startsWith('tests/suites/'))
+    .filter(rel => !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'))
     .filter(rel => !rel.startsWith('tests/helpers/'))
     .filter(rel => !rel.startsWith('docs/perf/') && !rel.startsWith('docs/agentteam'))
     .filter(rel => /(?:^|\/)\.agentteam-artifacts(?:\/|$)/.test(rel) || /artifact-index\.json$/i.test(rel) || /\.(?:exe|dll|so|dylib|tgz|tar|tar\.gz|zip)$/i.test(rel))

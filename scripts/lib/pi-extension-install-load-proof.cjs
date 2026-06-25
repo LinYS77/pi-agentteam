@@ -7,6 +7,7 @@ const { pathToFileURL } = require('node:url')
 const PACKAGE_NAME = 'pi-agentteam'
 const PACKAGE_VERSION = '0.6.8'
 const RESULT_MARKER = 'pi-extension-install-load-smoke'
+const APPROVED_EMBEDDED_NATIVE_PREFIX = 'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'
 const EXPECTED_COMMANDS = ['team']
 const EXPECTED_TOOLS = [
   'agentteam_create',
@@ -233,8 +234,8 @@ function assertPackageMetadata(packageJson, scope) {
       fail('repo-package-invalid', 'remove native helper build/download/install behavior from scripts', `${scope}:${name}`)
     }
   }
-  if ((packageJson.files || []).some(item => /(?:github|workflow|helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item))) {
-    fail('repo-package-invalid', 'keep native/generated/helper artifacts out of package files metadata', `${scope}:files`)
+  if ((packageJson.files || []).some(item => /(?:github|workflow|helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item) && !item.startsWith(APPROVED_EMBEDDED_NATIVE_PREFIX))) {
+    fail('repo-package-invalid', 'keep unapproved native/generated/helper artifacts out of package files metadata', `${scope}:files`)
   }
 }
 
@@ -334,6 +335,7 @@ function assertInstalledSurface(installedRoot) {
   const forbiddenNames = /(?:^|\/)(?:artifact-index|review-artifact-index|artifact-verifier|SHA256SUMS|checksum|provenance|attestation\.intoto|package-artifact|native-manifest|agentteam-native-manifest|generated-manifest|artifact-manifest|workflow-summary|verifier-output|hosted-observation-record|workflow-run|raw-payload|api-payload|signature|signed|cosign|slsa|release-bundle|release-asset)\.(?:json|jsonc|yaml|yml|jsonl|txt|sha256|sig|sigstore|bundle|intoto|md)$/i
   const forbidden = allFiles.filter(rel => {
     if (rel === 'package.json' || rel === 'LICENSE' || rel === 'README.md') return false
+    if (rel.startsWith(APPROVED_EMBEDDED_NATIVE_PREFIX)) return false
     return rel === '.agentteam-artifacts'
       || rel.startsWith('.agentteam-artifacts/')
       || rel === 'native'

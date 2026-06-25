@@ -269,7 +269,7 @@ module.exports = {
     runAdapterCase(kernel, 'malformed-json', `#!/usr/bin/env node
 process.stdout.write('{not json ${BAD_STDOUT_SENTINEL}\\n')
 `, helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assert.deepEqual(adapter.compactReadModelFingerprint(compactInput()), tsResult)
       assertAdapterFallback(adapter.metadata(), 'helper-malformed-json', 1)
     })
@@ -277,7 +277,7 @@ process.stdout.write('{not json ${BAD_STDOUT_SENTINEL}\\n')
     runAdapterCase(kernel, 'jsonrpc-error', nodeHelperSource(`
 error(-32001, '${BAD_STDOUT_SENTINEL} long protocol error')
 `), helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assert.deepEqual(adapter.compactReadModelFingerprint(compactInput()), tsResult)
       assertAdapterFallback(adapter.metadata(), 'helper-jsonrpc-error', 1)
     })
@@ -287,7 +287,7 @@ const fs = require('node:fs')
 const request = JSON.parse(fs.readFileSync(0, 'utf8'))
 process.stdout.write(JSON.stringify({ jsonrpc: '1.0', id: request.id, result: { ok: true, sentinel: '${BAD_STDOUT_SENTINEL}' } }) + '\\n')
 `, helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assert.deepEqual(adapter.compactReadModelFingerprint(compactInput()), tsResult)
       assertAdapterFallback(adapter.metadata(), 'helper-unsupported-protocol', 1)
     })
@@ -297,14 +297,31 @@ if (request.method === 'health') respond(baseHealth)
 else if (request.method === 'compactReadModelFingerprint') respond({ ok: true, projection: { text: '${BAD_STDOUT_SENTINEL}' }, fingerprint: 'bad', inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })
 else error(-32601, 'unexpected')
 `), helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assert.deepEqual(adapter.compactReadModelFingerprint(compactInput()), tsResult)
       assertAdapterFallback(adapter.metadata(), 'helper-incompatible-response', 2)
     })
 
     const secretHelperPath = path.join(os.tmpdir(), FULL_PATH_SENTINEL, 'missing-helper')
-    const missing = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: secretHelperPath })
+    const missing = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath: secretHelperPath })
     assert.deepEqual(missing.compactReadModelFingerprint(compactInput()), tsResult)
-    assertAdapterFallback(missing.metadata(), 'missing-helper', 0)
+    assert.equal(missing.metadata().kernel.calls, 0)
+    assert.equal(missing.metadata().kernel.fallbacks, 0)
+
+    const goMissing = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: secretHelperPath })
+    assert.deepEqual(goMissing.compactReadModelFingerprint(compactInput()), tsResult)
+    const snapshot = goMissing.parseTmuxPaneSnapshot('%x\tx:@1\tlabel\tpi', 1700004000000, () => {
+      throw new Error('go missing helper must not call TypeScript parser fallback')
+    })
+    assert.equal(snapshot.ok, false)
+    assert.equal(snapshot.status, 'unknown')
+    assert.equal(snapshot.resultMarker, 'stale')
+    assert.equal(snapshot.module, 'tmuxSnapshotParse')
+    assert.equal(snapshot.capability, 'tmuxSnapshotParse')
+    assert.equal(snapshot.cutoverFailureKind, 'missing-helper')
+    assert.equal(goMissing.metadata().kernel.fallbacks, 0)
+    assert.equal(Object.prototype.hasOwnProperty.call(goMissing.metadata().kernel, 'fallbackKind'), false)
+    assert.equal(goMissing.metadata().kernel.cutoverStatus, 'unavailable')
+    assert.equal(JSON.stringify(goMissing.metadata()).includes(FULL_PATH_SENTINEL), false, 'go missing diagnostic must not leak full helper path')
   },
 }

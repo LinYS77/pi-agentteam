@@ -359,19 +359,29 @@ function runNonPreviewModes(kernel, tempRoot, outputRoot, manifestRel) {
     PI_AGENTTEAM_KERNEL_PACKAGED_HELPER_MANIFEST: manifestRel,
     SHOULD_NOT_RUN_FILE: path.join(tempRoot, 'non-preview-helper-called'),
   }
-  for (const mode of [undefined, 'disabled', 'typescript', 'go', 'auto', 'go-cutover']) {
+  for (const mode of [undefined, 'go']) {
     const adapter = kernel.createAgentTeamKernelAdapter({ mode, env })
     const before = adapter.metadata().kernel.calls
-    const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700010000005, mode === 'go-cutover' ? throwingTmuxFallback : tmuxFallback)
+    const snapshot = adapter.parseTmuxPaneSnapshot('%go\tgo:@1\tGo default\tpi', 1700010000005, throwingTmuxFallback)
+    assert.equal(snapshot.ok, true, `${mode || 'default'} should use embedded helper`)
+    assert.equal(snapshot.panes[0].paneId, '%go')
+    assert.equal(adapter.metadata().kernel.calls, before + 2, `${mode || 'default'} must call health and parser helper methods`)
+    assert.equal(fs.existsSync(env.SHOULD_NOT_RUN_FILE), false, `${mode || 'default'} must not spawn preview fixture helper`)
+    assertNoLeaks(adapter.metadata(), [tempRoot, outputRoot])
+  }
+  for (const mode of ['disabled', 'typescript', 'auto', 'go-cutover']) {
+    const adapter = kernel.createAgentTeamKernelAdapter({ mode, env })
+    const before = adapter.metadata().kernel.calls
+    const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700010000006, mode === 'go-cutover' ? throwingTmuxFallback : tmuxFallback)
     if (mode === 'go-cutover') {
       assert.equal(snapshot.ok, false, 'current go-cutover must ignore packaged manifest env')
       assert.equal(snapshot.cutoverFailureKind, 'missing-helper')
     } else {
-      assert.equal(snapshot.ok, true, `${mode || 'default'} should keep TypeScript/default behavior`)
+      assert.equal(snapshot.ok, true, `${mode} should keep explicit fallback behavior`)
       assert.equal(snapshot.panes[0].paneId, '%ts')
     }
-    assert.equal(adapter.metadata().kernel.calls, before, `${mode || 'default'} must not call helper`)
-    assert.equal(fs.existsSync(env.SHOULD_NOT_RUN_FILE), false, `${mode || 'default'} must not spawn helper`)
+    assert.equal(adapter.metadata().kernel.calls, before, `${mode} must not call helper`)
+    assert.equal(fs.existsSync(env.SHOULD_NOT_RUN_FILE), false, `${mode} must not spawn helper`)
     assertNoLeaks(adapter.metadata(), [tempRoot, outputRoot])
   }
 }
@@ -404,8 +414,9 @@ function assertDocs(root) {
     'manifest without root and root without manifest fail closed',
     'unsupported platform/libc, missing helper executable, version/protocol skew, checksum mismatch, and executable-mode mistakes stay compact',
     'Explicit helper path still wins over direct packaged helper path and manifest resolver',
-    'default/unset/disabled/typescript/go/auto/current `go-cutover` ignore packaged manifest env',
-    'No `/team readiness`, ambient UI diagnostics, model-callable tools, default resolver, package install, release, or normal-user availability behavior is added',
+    'disabled/typescript/auto/current `go-cutover` ignore packaged manifest env',
+    'default/unset/go use only the approved embedded helper manifest and ignore preview fixture helper markers',
+    'No `/team readiness`, ambient UI diagnostics, model-callable tools, package install, release, or broadened normal-user availability behavior is added',
   ]) assert.ok(doc.includes(expected), `doc should include ${expected}`)
 }
 
@@ -413,6 +424,8 @@ function assertRuntimeSource(root) {
   const kernel = fs.readFileSync(path.join(root, 'core/kernel.ts'), 'utf8')
   assert.ok(kernel.includes("if (input.manifestPath && !input.installRoot) return { kind: 'missing-helper', detail: 'packaged manifest root missing' }"), 'kernel should distinguish missing root')
   assert.ok(kernel.includes("if (input.installRoot && !input.manifestPath) return { kind: 'missing-helper', detail: 'packaged manifest path missing' }"), 'kernel should distinguish missing manifest path')
+  assert.ok(kernel.includes('const packagedResolverRequested = packagedPreviewRequested || defaultCutoverRequested'), 'manifest resolver must be limited to preview/default cutover')
+  assert.ok(kernel.includes('defaultAgentTeamKernelEmbeddedHelperManifestPath()'), 'default/go must use approved embedded manifest fallback')
   assert.ok(kernel.includes('const helperPath = explicitHelperPath || packagedHelperPath || packagedManifestHelperPath'), 'helper precedence must remain explicit > direct packaged > manifest')
   assert.ok(kernel.includes('if (cutoverRequested) return fallback(compactInput)'), 'compactReadModelFingerprint remains TS fallback for cutover modes')
 }

@@ -121,6 +121,18 @@ function assertTmuxFallback(result, capturedAt) {
   assert.deepEqual(result.byPaneId, { '%ts': { paneId: '%ts', target: 'fallback:@1', label: 'TypeScript fallback', currentCommand: 'pi' } })
 }
 
+function assertCutoverUnavailable(result, capturedAt, kind) {
+  assert.equal(result.capturedAt, capturedAt)
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 'unknown')
+  assert.equal(result.resultMarker, 'stale')
+  assert.equal(result.module, 'tmuxSnapshotParse')
+  assert.equal(result.capability, 'tmuxSnapshotParse')
+  assert.equal(result.cutoverFailureKind, kind)
+  assert.deepEqual(result.panes, [])
+  assert.deepEqual(result.byPaneId, {})
+}
+
 module.exports = {
   name: 'Go kernel fallback policy',
   async run(env) {
@@ -155,8 +167,14 @@ respond(baseHealth)
 
     const goMissing = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: path.join(os.tmpdir(), FULL_PATH_SENTINEL, 'missing-go-helper') })
     assertReadOnlyFallback(goMissing.compactReadModelFingerprint(compactInput()), baseline)
-    assertTmuxFallback(goMissing.parseTmuxPaneSnapshot('%x\tx:@1\tlabel\tpi', 458, tmuxFallback), 458)
-    assertCompactDiagnostics(goMissing.metadata(), 'missing-helper', 0)
+    assertCutoverUnavailable(goMissing.parseTmuxPaneSnapshot('%x\tx:@1\tlabel\tpi', 458, () => {
+      throw new Error('go missing helper must not call TypeScript parser fallback')
+    }), 458, 'missing-helper')
+    assert.equal(goMissing.metadata().kernel.fallbacks, 0)
+    assert.equal(Object.prototype.hasOwnProperty.call(goMissing.metadata().kernel, 'fallbackKind'), false)
+    assert.equal(goMissing.metadata().kernel.cutoverStatus, 'unavailable')
+    assert.equal(goMissing.metadata().kernel.cutoverFailureKind, 'missing-helper')
+    assert.equal(JSON.stringify(goMissing.metadata()).includes(FULL_PATH_SENTINEL), false, 'go missing diagnostic must not leak full helper path')
 
     runWithHelper('auto-incompatible', helperSource(`
 if (request.method === 'health') respond({ ...baseHealth, capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint', 'futureWriteAuthority'] })
@@ -174,7 +192,7 @@ else respond({ ok: true })
 if (request.method === 'health') respond({ ...baseHealth, protocolVersion: 2 })
 else respond({ ok: true })
 `), helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertTmuxFallback(adapter.parseTmuxPaneSnapshot('%x\tx:@1\tlabel\tpi', 460, tmuxFallback), 460)
       assertCompactDiagnostics(adapter.metadata(), 'helper-unsupported-version', 1)
       assertReadOnlyFallback(adapter.compactReadModelFingerprint(compactInput()), baseline)
@@ -190,7 +208,7 @@ else if (request.method === 'compactReadModelFingerprint') {
 } else if (request.method === 'tmuxSnapshotParse') respond({ capturedAt: request.params.capturedAt, panes: [{ paneId: '%go', target: 'go:@1', label: 'go', currentCommand: 'pi' }], byPaneId: { '%go': { paneId: '%go', target: 'go:@1', label: 'go', currentCommand: 'pi' } }, ok: true })
 else error(-32601, 'unexpected')
 `), helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertReadOnlyFallback(adapter.compactReadModelFingerprint(compactInput()), baseline)
       assertCompactDiagnostics(adapter.metadata(), 'helper-nonzero-exit', 2)
       assertReadOnlyFallback(adapter.compactReadModelFingerprint(compactInput()), baseline)
@@ -204,7 +222,7 @@ else if (request.method === 'tmuxSnapshotParse') respond({ capturedAt: request.p
 else if (request.method === 'compactReadModelFingerprint') respond({ ok: true, projection: request.params.input, fingerprint: JSON.stringify(request.params.input), inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })
 else error(-32601, 'unexpected')
 `), helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertTmuxFallback(adapter.parseTmuxPaneSnapshot('%x\tx:@1\tlabel\tpi', 462, tmuxFallback), 462)
       assertCompactDiagnostics(adapter.metadata(), 'helper-incompatible-response', 2)
       assertReadOnlyFallback(adapter.compactReadModelFingerprint(compactInput()), baseline)
@@ -218,7 +236,7 @@ else {
   process.stderr.write('${BAD_STDERR_SENTINEL}\\n')
 }
 `), helperPath => {
-      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'auto', helperPath })
       assertReadOnlyFallback(adapter.compactReadModelFingerprint(compactInput()), baseline)
       assertCompactDiagnostics(adapter.metadata(), 'helper-malformed-json', 2)
       assertReadOnlyFallback(adapter.compactReadModelFingerprint(compactInput()), baseline)

@@ -154,7 +154,20 @@ module.exports = {
 
     const tsBaseline = kernel.createAgentTeamKernelAdapter({ mode: 'typescript', env: {} }).compactReadModelFingerprint(compactInput())
 
-    for (const mode of ['disabled', undefined, '', 'none', 'off']) {
+    for (const mode of [undefined, '']) {
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode, env: {} })
+      assertFallbackResult(adapter.compactReadModelFingerprint(compactInput()))
+      assertMetadata(adapter.metadata(), {
+        requestedMode: 'default',
+        mode: 'go',
+        enabled: true,
+        calls: 0,
+        fallbacks: 0,
+      })
+      assert.equal(adapter.metadata().kernel.cutoverStatus, 'active')
+    }
+
+    for (const mode of ['disabled', 'none', 'off']) {
       const adapter = kernel.createAgentTeamKernelAdapter({ mode, env: {} })
       assertFallbackResult(adapter.compactReadModelFingerprint(compactInput()))
       assertMetadata(adapter.metadata(), {
@@ -197,9 +210,10 @@ module.exports = {
       mode: 'typescript',
       enabled: false,
       calls: 0,
-      fallbacks: 1,
-      fallbackKind: 'missing-helper',
+      fallbacks: 0,
     })
+    assert.equal(goMissing.metadata().kernel.cutoverStatus, 'unavailable')
+    assert.equal(goMissing.metadata().kernel.cutoverFailureKind, 'missing-helper')
 
     const incompatibilityRows = [
       {
@@ -232,18 +246,22 @@ module.exports = {
     for (const row of incompatibilityRows) {
       runWithHelper(row.name, compatibilityHelper({ health: row.health }), helperPath => {
         const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
-        assert.deepEqual(adapter.compactReadModelFingerprint(compactInput()), tsBaseline)
+        const snapshot = adapter.parseTmuxPaneSnapshot('%x\tx:@1\tlabel\tpi', 1700000102000, () => {
+          throw new Error('go cutover incompatibility must not call TypeScript fallback')
+        })
+        assert.equal(snapshot.ok, false, `${row.name} should fail closed for tmuxSnapshotParse`)
         assertMetadata(adapter.metadata(), {
           requestedMode: 'go',
           mode: 'typescript',
           enabled: false,
           calls: 1,
-          fallbacks: 1,
-          fallbackKind: row.fallbackKind,
+          fallbacks: 0,
         })
+        assert.equal(adapter.metadata().kernel.cutoverStatus, 'unavailable')
+        assert.equal(adapter.metadata().kernel.cutoverFailureKind, row.fallbackKind)
         assert.deepEqual(adapter.compactReadModelFingerprint(compactInput()), tsBaseline, `${row.name} should stay TS-only after first failure`)
         assert.equal(adapter.metadata().kernel.calls, 1, `${row.name} should not spawn again after failure`)
-        assert.equal(adapter.metadata().kernel.fallbacks, 1, `${row.name} should not increment fallback repeatedly`)
+        assert.equal(adapter.metadata().kernel.fallbacks, 0, `${row.name} should not increment migration fallback count`)
       })
     }
 
@@ -270,6 +288,17 @@ module.exports = {
       assert.equal(result.fullTextIncluded, false)
       assert.equal(result.stateFilesRead, false)
       assert.equal(result.stateFilesWritten, false)
+      assertMetadata(adapter.metadata(), {
+        requestedMode: 'go',
+        mode: 'go',
+        enabled: true,
+        calls: 0,
+        fallbacks: 0,
+      })
+      const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tts fallback\tpi', 123, () => {
+        throw new Error('go cutover success must not call TypeScript fallback')
+      })
+      assert.equal(snapshot.panes[0].paneId, '%go')
       assertMetadata(adapter.metadata(), {
         requestedMode: 'go',
         mode: 'go',

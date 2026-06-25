@@ -200,16 +200,17 @@ function walkFiles(root, out = []) {
 
 function assertKernelSourceInvariants(root) {
   const source = read(root, 'core/kernel.ts')
-  assertIncludes(source, "if (!raw || raw === 'none' || raw === 'off' || raw === 'disabled') return 'disabled'", 'kernel source')
+  assertIncludes(source, "if (!raw || raw === 'default') return 'default'", 'kernel source')
+  assertIncludes(source, "if (raw === 'none' || raw === 'off' || raw === 'disabled') return 'disabled'", 'kernel source')
   assertIncludes(source, 'const requestedMode = normalizeAgentTeamKernelMode(options.mode ?? env.PI_AGENTTEAM_KERNEL)', 'kernel source')
   assertIncludes(source, "const activeMode: AgentTeamKernelActiveMode = usesGo() ? 'go' : 'typescript'", 'kernel source')
   assertIncludes(source, "enabled: activeMode === 'go'", 'kernel source')
   assertIncludes(source, "const packagedPreviewRequested = requestedMode === 'go-packaged-preview'", 'kernel source')
   assertIncludes(source, 'const packagedHelperPath = packagedPreviewRequested && !explicitHelperPath && !packagedResolverFailure', 'kernel source')
   assertIncludes(source, 'const helperPath = explicitHelperPath || packagedHelperPath', 'kernel source')
-  assertIncludes(source, "const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested", 'kernel source')
+  assertIncludes(source, "const cutoverRequested = defaultCutoverRequested || requestedMode === 'go-cutover' || packagedPreviewRequested", 'kernel source')
   assertIncludes(source, 'const startupFallback = cutoverRequested ? undefined', 'kernel source')
-  assertIncludes(source, 'if (cutoverRequested) return cutoverUnavailableSnapshot(capturedAt)', 'kernel source')
+  assertIncludes(source, 'if (cutoverRequested || !fallback) return cutoverUnavailableSnapshot(capturedAt)', 'kernel source')
   assertIncludes(source, "export const AGENTTEAM_KERNEL_CUTOVER_MODULE = 'tmuxSnapshotParse'", 'kernel source')
   assertIncludes(source, 'compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint)', 'kernel source')
   assertIncludes(source, 'if (cutoverRequested) return fallback(compactInput)', 'kernel source')
@@ -220,6 +221,7 @@ function assertRepoArtifactSanity(root) {
   const forbidden = walkFiles(root)
     .map(file => path.relative(root, file).replace(/\\/g, '/'))
     .filter(rel => !rel.startsWith('tests/suites/'))
+    .filter(rel => !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'))
     .filter(rel => !rel.startsWith('docs/perf/') && !rel.startsWith('docs/agentteam'))
     .filter(rel => /(?:^|\/)\.agentteam-artifacts\//.test(rel) || /\.(?:exe|dll|so|dylib|tgz|tar|tar\.gz|zip)$/i.test(rel) || generatedManifestNames.test(rel))
   assert.deepEqual(forbidden, [], 'repo must not contain checked-in native/tarball/generated/checksum/provenance/attestation/package artifacts')
@@ -230,7 +232,7 @@ function assertPackageNativeSanity(root) {
   assert.equal(packageJson.version, PACKAGE_VERSION, 'package version must remain 0.6.8')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'optionalDependencies'), false, 'package must not define optionalDependencies')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'agentteamGoHelper'), false, 'package must not define native helper metadata')
-  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item)), false, 'package files must not include native/helper/generated outputs')
+  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package files must not include native/helper/generated outputs')
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define ${lifecycle}`)
   }

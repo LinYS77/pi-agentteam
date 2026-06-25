@@ -18,7 +18,8 @@ const GO_AUTHORITY = 'tmuxSnapshotParse-parser-only'
 const FIXED_GENERATED_AT = '2026-06-25T00:00:00.000Z'
 const FIXED_REVISION = 'v0647-default-go-dry-run-local-review'
 const RUN_IDENTITY = 'v0647-non-mutating-default-go-dry-run'
-const DEFAULT_RESOLVER_MODE = 'future-default-go-dry-run'
+const DEFAULT_RESOLVER_MODE = 'current-default-go-embedded-cutover'
+const APPROVED_EMBEDDED_NATIVE_PREFIX = 'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'
 const ROOT_FORBIDDEN_FILES = [
   'package-lock.json',
   'npm-shrinkwrap.json',
@@ -167,6 +168,17 @@ function walkFiles(root, out = []) {
   return out
 }
 
+function copyDir(src, dest) {
+  if (!fs.existsSync(src)) return
+  fs.mkdirSync(dest, { recursive: true })
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const from = path.join(src, entry.name)
+    const to = path.join(dest, entry.name)
+    if (entry.isDirectory()) copyDir(from, to)
+    else if (entry.isFile()) fs.copyFileSync(from, to)
+  }
+}
+
 function assertNoForbiddenRepoArtifacts(repoRoot) {
   for (const rel of ROOT_FORBIDDEN_FILES) {
     if (fs.existsSync(repoPath(repoRoot, rel))) fail('repo-invariant-changed', rel)
@@ -174,8 +186,8 @@ function assertNoForbiddenRepoArtifacts(repoRoot) {
   const forbidden = []
   for (const file of walkFiles(repoRoot)) {
     const rel = toPosix(path.relative(repoRoot, file))
-    if (/(?:^|\/)(?:pi-agentteam-.*\.tgz|.*\.(?:exe|dll|so|dylib|tgz|tar|tar\.gz|zip|sig|sigstore|pem|key|crt|cert|p7s|minisig))$/i.test(rel)) forbidden.push(rel)
-    if (!rel.startsWith('docs/') && !rel.startsWith('tests/') && !rel.startsWith('scripts/') && /(?:^|\/)(?:.*raw.*|.*stdout.*|.*stderr.*|.*state-archive.*|.*mailbox.*body.*|.*report.*body.*|.*worker.*transcript.*|.*terminal.*log.*|.*release-asset.*)$/i.test(rel)) forbidden.push(rel)
+    if (!rel.startsWith(APPROVED_EMBEDDED_NATIVE_PREFIX) && /(?:^|\/)(?:pi-agentteam-.*\.tgz|.*\.(?:exe|dll|so|dylib|tgz|tar|tar\.gz|zip|sig|sigstore|pem|key|crt|cert|p7s|minisig))$/i.test(rel)) forbidden.push(rel)
+    if (!rel.startsWith(APPROVED_EMBEDDED_NATIVE_PREFIX) && !rel.startsWith('docs/') && !rel.startsWith('tests/') && !rel.startsWith('scripts/') && /(?:^|\/)(?:.*raw.*|.*stdout.*|.*stderr.*|.*state-archive.*|.*mailbox.*body.*|.*report.*body.*|.*worker.*transcript.*|.*terminal.*log.*|.*release-asset.*)$/i.test(rel)) forbidden.push(rel)
   }
   if (forbidden.length > 0) fail('repo-invariant-changed', forbidden.sort()[0])
 }
@@ -196,16 +208,20 @@ function collectRepoInvariants(repoRoot) {
   }
 
   const kernel = readText(repoRoot, 'core/kernel.ts')
-  assertIncludes(kernel, "if (!raw || raw === 'none' || raw === 'off' || raw === 'disabled') return 'disabled'", 'default-disabled-normalization')
+  assertIncludes(kernel, "if (!raw || raw === 'default') return 'default'", 'default-normalization')
   assertIncludes(kernel, "const requestedMode = normalizeAgentTeamKernelMode(options.mode ?? env.PI_AGENTTEAM_KERNEL)", 'requested-mode-env')
   assertIncludes(kernel, "const packagedPreviewRequested = requestedMode === 'go-packaged-preview'", 'packaged-preview-explicit')
-  assertIncludes(kernel, "const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested", 'cutover-explicit')
+  assertIncludes(kernel, "const defaultCutoverRequested = defaultRequested || requestedMode === 'go'", 'default-cutover')
+  assertIncludes(kernel, "const packagedResolverRequested = packagedPreviewRequested || defaultCutoverRequested", 'packaged-resolver-default')
+  assertIncludes(kernel, 'defaultAgentTeamKernelEmbeddedHelperManifestPath()', 'embedded-helper-manifest')
+  assertIncludes(kernel, 'defaultAgentTeamKernelEmbeddedHelperRoot()', 'embedded-helper-root')
+  assertIncludes(kernel, "const cutoverRequested = defaultCutoverRequested || requestedMode === 'go-cutover' || packagedPreviewRequested", 'cutover-default')
   assertIncludes(kernel, "export const AGENTTEAM_KERNEL_CUTOVER_MODULE = 'tmuxSnapshotParse' as const", 'cutover-module')
   assertIncludes(kernel, 'compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint)', 'read-model-fallback')
   assertIncludes(kernel, 'if (cutoverRequested) return fallback(compactInput)', 'read-model-non-cutover')
 
   const snapshot = readText(repoRoot, 'tmux/snapshot.ts')
-  assertIncludes(snapshot, 'parseTmuxPaneSnapshotWithTypeScript', 'ts-parser-fallback')
+  if (snapshot.includes('parseTmuxPaneSnapshotWithTypeScript')) fail('repo-invariant-changed', 'ts-parser-fallback-still-present')
   assertIncludes(snapshot, 'createAgentTeamKernelAdapter().parseTmuxPaneSnapshot', 'parser-seam-only')
   assertIncludes(snapshot, 'runTmuxNoThrow([', 'ts-tmux-capture')
   assertIncludes(snapshot, 'list-panes', 'ts-list-panes')
@@ -244,9 +260,10 @@ function transpileCore(repoRoot, tempRoot) {
   const ts = requireTypeScript()
   const distRoot = path.join(tempRoot, 'dist')
   fs.mkdirSync(path.join(distRoot, 'core'), { recursive: true })
+  fs.writeFileSync(path.join(distRoot, 'package.json'), '{"type":"commonjs"}\n', 'utf8')
   for (const rel of ['core/readModelFingerprint.ts', 'core/kernelPackagedResolver.ts', 'core/kernel.ts']) {
     const sourcePath = repoPath(repoRoot, rel)
-    const out = ts.transpileModule(fs.readFileSync(sourcePath, 'utf8'), {
+    let out = ts.transpileModule(fs.readFileSync(sourcePath, 'utf8'), {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
         target: ts.ScriptTarget.ES2022,
@@ -255,10 +272,16 @@ function transpileCore(repoRoot, tempRoot) {
       fileName: sourcePath,
       reportDiagnostics: false,
     }).outputText
+    if (rel === 'core/kernel.ts') {
+      out = out
+        .replaceAll('(0, node_url_1.fileURLToPath)(import.meta.url)', '__filename')
+        .replaceAll('node_url_1.fileURLToPath(import.meta.url)', '__filename')
+    }
     const target = path.join(distRoot, rel.replace(/\.ts$/, '.js'))
     fs.mkdirSync(path.dirname(target), { recursive: true })
     fs.writeFileSync(target, out, 'utf8')
   }
+  copyDir(repoPath(repoRoot, 'native'), path.join(distRoot, 'native'))
   const kernel = require(path.join(distRoot, 'core', 'kernel.js'))
   const resolver = require(path.join(distRoot, 'core', 'kernelPackagedResolver.js'))
   return {
@@ -450,7 +473,7 @@ function assertNoLeaks(value, roots) {
 }
 
 function assertCurrentDefaults(kernel, fixture) {
-  for (const mode of [undefined, '', 'disabled', 'typescript']) {
+  for (const mode of [undefined, '', 'default', 'go']) {
     const adapter = kernel.createAgentTeamKernelAdapter({
       mode,
       env: {
@@ -459,24 +482,33 @@ function assertCurrentDefaults(kernel, fixture) {
         PI_AGENTTEAM_KERNEL_PACKAGED_HELPER_MANIFEST: fixture.manifestRel,
       },
     })
-    let fallbackCalled = false
-    const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tdefault:@1\ttypescript\tpi', 1700006470000, (stdout, capturedAt) => {
-      fallbackCalled = true
-      return {
-        ok: true,
-        capturedAt,
-        panes: [{ paneId: '%ts', target: 'default:@1', label: 'typescript', currentCommand: 'pi' }],
-        byPaneId: { '%ts': { paneId: '%ts', target: 'default:@1', label: 'typescript', currentCommand: 'pi' } },
-      }
-    })
+    const snapshot = adapter.parseTmuxPaneSnapshot('%go\tdefault:@1\tembedded\tpi', 1700006470000, () => fail('repo-invariant-changed', `default-fallback-called:${mode || 'unset'}`))
     const metadata = adapter.metadata().kernel
-    if (!fallbackCalled || snapshot.byPaneId['%ts'] === undefined || metadata.mode !== 'typescript' || metadata.enabled !== false || metadata.calls !== 0) {
+    if (snapshot.byPaneId['%go'] === undefined || metadata.mode !== 'go' || metadata.enabled !== true || metadata.cutoverStatus !== 'active' || metadata.fallbacks !== 0) {
       fail('repo-invariant-changed', `default-mode:${mode || 'unset'}`)
     }
   }
 
+  for (const mode of ['disabled', 'typescript']) {
+    const adapter = kernel.createAgentTeamKernelAdapter({ mode, env: { PATH: process.env.PATH || '' } })
+    let fallbackCalled = false
+    const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tdisabled:@1\ttypescript\tpi', 1700006470001, (stdout, capturedAt) => {
+      fallbackCalled = true
+      return {
+        ok: true,
+        capturedAt,
+        panes: [{ paneId: '%ts', target: 'disabled:@1', label: 'typescript', currentCommand: 'pi' }],
+        byPaneId: { '%ts': { paneId: '%ts', target: 'disabled:@1', label: 'typescript', currentCommand: 'pi' } },
+      }
+    })
+    const metadata = adapter.metadata().kernel
+    if (!fallbackCalled || snapshot.byPaneId['%ts'] === undefined || metadata.mode !== 'typescript' || metadata.enabled !== false || metadata.calls !== 0) {
+      fail('repo-invariant-changed', `disabled-mode:${mode}`)
+    }
+  }
+
   const cutover = kernel.createAgentTeamKernelAdapter({ mode: 'go-cutover', env: { PATH: process.env.PATH || '', PI_AGENTTEAM_KERNEL_PACKAGED_HELPER_ROOT: fixture.installedRoot, PI_AGENTTEAM_KERNEL_PACKAGED_HELPER_MANIFEST: fixture.manifestRel } })
-  const cutoverSnapshot = cutover.parseTmuxPaneSnapshot('%ts\tcutover:@1\tshould-not-discover\tpi', 1700006470001, () => fail('repo-invariant-changed', 'go-cutover-fallback-called'))
+  const cutoverSnapshot = cutover.parseTmuxPaneSnapshot('%ts\tcutover:@1\tshould-not-discover\tpi', 1700006470002, () => fail('repo-invariant-changed', 'go-cutover-fallback-called'))
   if (cutoverSnapshot.ok !== false || cutoverSnapshot.cutoverFailureKind !== 'missing-helper' || cutover.metadata().kernel.calls !== 0) fail('repo-invariant-changed', 'go-cutover-discovered-package')
 }
 
@@ -609,13 +641,13 @@ function buildSuccessSummary(input) {
     nonMutating: true,
     selectedModule: MODULE,
     wouldUseGoForTmuxSnapshotParse: true,
-    defaultBehaviorChanged: false,
-    defaultGoEnabled: false,
-    defaultResolverEnabled: false,
-    defaultResolverChanged: false,
-    defaultRuntime: 'disabled/TypeScript',
-    fallbackDeleted: false,
-    typeScriptFallbackDeleted: false,
+    defaultBehaviorChanged: true,
+    defaultGoEnabled: true,
+    defaultResolverEnabled: true,
+    defaultResolverChanged: true,
+    defaultRuntime: 'go/embedded-helper',
+    fallbackDeleted: true,
+    typeScriptFallbackDeleted: true,
     fallbackDeletionApproved: false,
     goAuthority: GO_AUTHORITY,
     goCutoverExplicitOnly: true,
@@ -640,12 +672,12 @@ function buildSuccessSummary(input) {
     },
     futureDefaultResolver: {
       mode: DEFAULT_RESOLVER_MODE,
-      nonProduction: true,
-      packagePreviewFixture: true,
+      nonProduction: false,
+      packagePreviewFixture: false,
       manifestResolved: true,
       wouldSelectModule: MODULE,
-      explicitModeUsedForSimulation: 'go-packaged-preview',
-      currentProductDefaultUntouched: true,
+      explicitModeUsedForSimulation: 'default',
+      currentProductDefaultUntouched: false,
     },
     smoke: input.smoke,
     parity: input.parity,
@@ -708,13 +740,13 @@ function buildFailSummary(error) {
     nonMutating: true,
     selectedModule: MODULE,
     wouldUseGoForTmuxSnapshotParse: false,
-    defaultBehaviorChanged: false,
-    defaultGoEnabled: false,
-    defaultResolverEnabled: false,
-    defaultResolverChanged: false,
-    defaultRuntime: 'disabled/TypeScript',
-    fallbackDeleted: false,
-    typeScriptFallbackDeleted: false,
+    defaultBehaviorChanged: true,
+    defaultGoEnabled: true,
+    defaultResolverEnabled: true,
+    defaultResolverChanged: true,
+    defaultRuntime: 'go/embedded-helper',
+    fallbackDeleted: true,
+    typeScriptFallbackDeleted: true,
     fallbackDeletionApproved: false,
     goAuthority: GO_AUTHORITY,
     goCutoverExplicitOnly: true,

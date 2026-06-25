@@ -232,7 +232,7 @@ function assertRuntimeWorkflowPackageBoundaries(root) {
     .map(rel => read(root, rel))
     .join('\n')
   assertIncludes(runtimeSources, "const packagedPreviewRequested = requestedMode === 'go-packaged-preview'", 'core/kernel.ts')
-  assertIncludes(runtimeSources, "const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested", 'core/kernel.ts')
+  assertIncludes(runtimeSources, "const cutoverRequested = defaultCutoverRequested || requestedMode === 'go-cutover' || packagedPreviewRequested", 'core/kernel.ts')
   assertIncludes(runtimeSources, 'if (cutoverRequested) return fallback(compactInput)', 'core/kernel.ts')
   assert.equal(/registerCommand|registerTool|registerMessageRenderer|registerProvider|npm\s+(?:publish|version)|gh\s+release|cosign|slsa|default Go is enabled|default resolver is enabled/i.test(runtimeSources), false, 'runtime/kernel must not expose pi/default/release/signing control plane')
 

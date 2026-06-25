@@ -89,6 +89,7 @@ const ROOT_FORBIDDEN_FILES = [
 ]
 const FORBIDDEN_ARTIFACT = /\.(?:exe|dll|so|dylib|tgz|tar|tar\.gz|zip|sig|sigstore|pem|key|crt|cert|p7s|minisig)$/i
 const FORBIDDEN_RAW_EVIDENCE = /(?:^|\/)(?:.*data-change-render-debounce.*\.json|.*v0642.*raw.*|.*state-archive.*|.*raw-state.*|.*mailbox.*body.*|.*report.*body.*|.*worker.*transcript.*|.*screenshot.*|.*terminal.*raw.*log.*)$/i
+const APPROVED_EMBEDDED_NATIVE_PREFIX = 'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'
 
 function read(root, rel) {
   return fs.readFileSync(path.join(root, ...rel.split('/')), 'utf8')
@@ -241,10 +242,10 @@ function assertArtifactInvariants(root) {
   const forbiddenRawEvidence = []
   for (const file of walkFiles(root)) {
     const rel = toRel(root, file)
-    if (FORBIDDEN_ARTIFACT.test(rel)) forbiddenArtifacts.push(rel)
-    if (!rel.startsWith('docs/') && !rel.startsWith('tests/') && !rel.startsWith('scripts/') && FORBIDDEN_RAW_EVIDENCE.test(rel)) forbiddenRawEvidence.push(rel)
+    if (!rel.startsWith(APPROVED_EMBEDDED_NATIVE_PREFIX) && FORBIDDEN_ARTIFACT.test(rel)) forbiddenArtifacts.push(rel)
+    if (!rel.startsWith(APPROVED_EMBEDDED_NATIVE_PREFIX) && !rel.startsWith('docs/') && !rel.startsWith('tests/') && !rel.startsWith('scripts/') && FORBIDDEN_RAW_EVIDENCE.test(rel)) forbiddenRawEvidence.push(rel)
   }
-  assert.deepEqual(forbiddenArtifacts.sort(), [], 'repo must not contain checked-in native/archive/signing/release artifacts')
+  assert.deepEqual(forbiddenArtifacts.sort(), [], 'repo must not contain unapproved checked-in native/archive/signing/release artifacts')
   assert.deepEqual(forbiddenRawEvidence.sort(), [], 'repo must not contain raw v0.6.42 timing/body/state evidence files')
 }
 

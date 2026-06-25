@@ -121,27 +121,45 @@ module.exports = {
     const snapshotModule = env.helpers.requireDist('tmux/snapshot.js')
     const cases = fixtures.cases()
 
-    assertAllFixturesWithParser(snapshotModule.parseTmuxPaneSnapshot, 'TypeScript parser')
+    assertAllFixturesWithParser(snapshotModule.parseTmuxPaneSnapshot, 'default embedded Go parser')
 
-    const disabledAdapter = kernel.createAgentTeamKernelAdapter({ env: {} })
+    const defaultAdapter = kernel.createAgentTeamKernelAdapter({ env: {} })
     for (const testCase of cases) {
-      const fallbackSnapshot = disabledAdapter.parseTmuxPaneSnapshot(testCase.stdout, testCase.capturedAt, snapshotModule.parseTmuxPaneSnapshot)
-      assertCanonicalSnapshot(fallbackSnapshot, testCase.expected, `disabled/default adapter fallback: ${testCase.name}`)
+      const defaultSnapshot = defaultAdapter.parseTmuxPaneSnapshot(testCase.stdout, testCase.capturedAt, () => {
+        throw new Error('default Go parser must not call TypeScript parser fallback')
+      })
+      assertCanonicalSnapshot(defaultSnapshot, testCase.expected, `default adapter Go parser: ${testCase.name}`)
     }
+    assert.equal(defaultAdapter.metadata().kernel.mode, 'go')
+    assert.equal(defaultAdapter.metadata().kernel.enabled, true)
+    assert.equal(defaultAdapter.metadata().kernel.calls, cases.length + 1)
+    assert.equal(defaultAdapter.metadata().kernel.fallbacks, 0)
+    assert.equal(defaultAdapter.metadata().kernel.cutoverStatus, 'active')
+
+    const disabledAdapter = kernel.createAgentTeamKernelAdapter({ mode: 'disabled', env: {} })
+    const disabledSnapshot = disabledAdapter.parseTmuxPaneSnapshot('%x\tx:@1\tlabel\tpi', 1700005000000)
+    assert.equal(disabledSnapshot.ok, false, 'explicit disabled has no hidden parser fallback after deletion')
+    assert.equal(disabledSnapshot.status, 'unknown')
+    assert.equal(disabledSnapshot.cutoverFailureKind, 'previous-helper-failure')
     assert.equal(disabledAdapter.metadata().kernel.calls, 0)
     assert.equal(disabledAdapter.metadata().kernel.fallbacks, 0)
 
     const missingGo = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: path.join(os.tmpdir(), 'missing-agentteam-kernel') })
-    for (const testCase of cases) {
-      const missingSnapshot = missingGo.parseTmuxPaneSnapshot(testCase.stdout, testCase.capturedAt, snapshotModule.parseTmuxPaneSnapshot)
-      assertCanonicalSnapshot(missingSnapshot, testCase.expected, `missing Go helper fallback: ${testCase.name}`)
-    }
+    const missingSnapshot = missingGo.parseTmuxPaneSnapshot('%x\tx:@1\tlabel\tpi', 1700005000001, () => {
+      throw new Error('missing Go helper must not call TypeScript parser fallback')
+    })
+    assert.equal(missingSnapshot.ok, false)
+    assert.equal(missingSnapshot.status, 'unknown')
+    assert.equal(missingSnapshot.resultMarker, 'stale')
+    assert.equal(missingSnapshot.module, 'tmuxSnapshotParse')
+    assert.equal(missingSnapshot.capability, 'tmuxSnapshotParse')
+    assert.equal(missingSnapshot.cutoverFailureKind, 'missing-helper')
     assert.equal(missingGo.metadata().kernel.mode, 'typescript')
     assert.equal(missingGo.metadata().kernel.enabled, false)
     assert.equal(missingGo.metadata().kernel.calls, 0)
-    assert.equal(missingGo.metadata().kernel.fallbacks, 1)
-    assert.equal(missingGo.metadata().kernel.fallbackKind, 'missing-helper')
-    assert.match(missingGo.metadata().kernel.fallbackReason, /using TypeScript fallback/)
+    assert.equal(missingGo.metadata().kernel.fallbacks, 0)
+    assert.equal(missingGo.metadata().kernel.cutoverStatus, 'unavailable')
+    assert.equal(missingGo.metadata().kernel.cutoverFailureKind, 'missing-helper')
 
     const malformedHelper = writeHelper('malformed', `#!/usr/bin/env node
 process.stdout.write('{not json ${BAD_STDOUT_SENTINEL}\\n')
@@ -149,10 +167,14 @@ process.stdout.write('{not json ${BAD_STDOUT_SENTINEL}\\n')
     try {
       const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: malformedHelper.file })
       const testCase = cases.find(item => item.name === 'mixed corpus canonical snapshot') || cases[0]
-      const snapshot = adapter.parseTmuxPaneSnapshot(testCase.stdout, testCase.capturedAt, snapshotModule.parseTmuxPaneSnapshot)
-      assertCanonicalSnapshot(snapshot, testCase.expected, 'malformed helper fallback should return TS parser output')
-      assert.equal(adapter.metadata().kernel.fallbackKind, 'helper-malformed-json')
-      assert.equal(JSON.stringify(adapter.metadata()).includes(BAD_STDOUT_SENTINEL), false, 'fallback diagnostics should not leak malformed stdout')
+      const snapshot = adapter.parseTmuxPaneSnapshot(testCase.stdout, testCase.capturedAt, () => {
+        throw new Error('malformed Go helper must not call TypeScript parser fallback')
+      })
+      assert.equal(snapshot.ok, false)
+      assert.equal(snapshot.status, 'unknown')
+      assert.equal(snapshot.cutoverFailureKind, 'helper-malformed-json')
+      assert.equal(adapter.metadata().kernel.cutoverFailureKind, 'helper-malformed-json')
+      assert.equal(JSON.stringify(adapter.metadata()).includes(BAD_STDOUT_SENTINEL), false, 'cutover diagnostics should not leak malformed stdout')
     } finally {
       fs.rmSync(malformedHelper.dir, { recursive: true, force: true })
     }

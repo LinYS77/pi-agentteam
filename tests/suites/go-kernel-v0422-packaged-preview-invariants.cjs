@@ -129,19 +129,26 @@ module.exports = {
       const wrongVersionHelper = writeHelper(tempRoot, 'wrong-version-helper', helperSource('%wrong-version', { helperVersion: '9.9.9' }))
 
       const defaultAdapter = kernel.createAgentTeamKernelAdapter({ env: { PI_AGENTTEAM_KERNEL_PACKAGED_HELPER: packagedHelper, V0422_HELPER_MARKER: packagedMarker, PATH: process.env.PATH } })
-      assert.equal(defaultAdapter.metadata().kernel.requestedMode, 'disabled', 'default remains disabled')
-      assert.equal(defaultAdapter.metadata().kernel.mode, 'typescript', 'default remains TypeScript')
-      assert.equal(defaultAdapter.metadata().kernel.enabled, false, 'default does not enable Go')
-      const defaultSnapshot = defaultAdapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700007000001, tmuxFallback)
-      assert.equal(defaultSnapshot.panes[0].paneId, '%ts', 'default should use TS fallback')
-      assert.equal(fs.existsSync(packagedMarker), false, 'default must not discover packaged helper')
+      assert.equal(defaultAdapter.metadata().kernel.requestedMode, 'default', 'default normalizes to default')
+      assert.equal(defaultAdapter.metadata().kernel.mode, 'go', 'default uses embedded Go helper')
+      assert.equal(defaultAdapter.metadata().kernel.enabled, true, 'default enables parser-only Go')
+      const defaultSnapshot = defaultAdapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700007000001, throwingFallback)
+      assert.equal(defaultSnapshot.panes[0].paneId, '%ts', 'default should parse via embedded helper')
+      assert.equal(fs.existsSync(packagedMarker), false, 'default must not discover arbitrary packaged helper env')
 
-      for (const mode of ['disabled', 'typescript', 'go', 'auto']) {
+      for (const mode of ['disabled', 'typescript', 'auto']) {
         const marker = path.join(tempRoot, `${mode}-called.log`)
         const adapter = kernel.createAgentTeamKernelAdapter({ mode, packagedHelperPath: packagedHelper, env: { V0422_HELPER_MARKER: marker, PATH: process.env.PATH } })
         const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700007000002, tmuxFallback)
         assert.equal(snapshot.panes[0].paneId, '%ts', `${mode} should not use packaged helper`)
         assert.equal(fs.existsSync(marker), false, `${mode} must not call packaged helper`)
+      }
+      {
+        const marker = path.join(tempRoot, 'go-called.log')
+        const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', packagedHelperPath: packagedHelper, env: { V0422_HELPER_MARKER: marker, PATH: process.env.PATH } })
+        const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700007000002, throwingFallback)
+        assert.equal(snapshot.panes[0].paneId, '%ts', 'go should use approved embedded helper while ignoring raw packaged path')
+        assert.equal(fs.existsSync(marker), false, 'go must not call arbitrary packaged helper')
       }
 
       const goCutoverPackagedOnly = kernel.createAgentTeamKernelAdapter({ mode: 'go-cutover', packagedHelperPath: packagedHelper, env: { V0422_HELPER_MARKER: packagedMarker, PATH: process.env.PATH } })

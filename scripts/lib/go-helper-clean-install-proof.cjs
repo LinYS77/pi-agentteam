@@ -9,6 +9,7 @@ const verifier = require('./go-helper-artifact-verifier.cjs')
 const PACKAGE_NAME = 'pi-agentteam'
 const PACKAGE_VERSION = '0.6.8'
 const RESULT_MARKER = 'clean-ts-package-install-baseline'
+const APPROVED_EMBEDDED_NATIVE_PREFIX = 'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'
 const REQUIRED_INSTALLED_FILES = [
   'package.json',
   'index.ts',
@@ -189,8 +190,8 @@ function assertPackageMetadata(packageJson, scope) {
       fail('package-metadata-invalid', 'remove native helper build/download/install behavior from scripts', `${scope}:${name}`)
     }
   }
-  if ((packageJson.files || []).some(item => /(?:github|workflow|helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item))) {
-    fail('package-metadata-invalid', 'keep native/generated/helper artifacts out of package files metadata', `${scope}:files`)
+  if ((packageJson.files || []).some(item => /(?:github|workflow|helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|hosted-observation|record|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item) && !item.startsWith(APPROVED_EMBEDDED_NATIVE_PREFIX))) {
+    fail('package-metadata-invalid', 'keep unapproved native/generated/helper artifacts out of package files metadata', `${scope}:files`)
   }
 }
 
@@ -219,6 +220,7 @@ function assertInstalledSurface(installedRoot, options = {}) {
   const allowNativeLayout = Boolean(options.allowNativeLayout)
   const forbidden = allFiles.filter(rel => {
     if (rel === 'package.json' || rel === 'LICENSE') return false
+    if (rel.startsWith(APPROVED_EMBEDDED_NATIVE_PREFIX)) return false
     return rel === '.agentteam-artifacts'
       || rel.startsWith('.agentteam-artifacts/')
       || (!allowNativeLayout && (rel === 'native' || rel.startsWith('native/')))
@@ -420,6 +422,7 @@ function requireTypeScript() {
 function transpileInstalledKernel(installedRoot) {
   const ts = requireTypeScript()
   const distRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-v0633-installed-code-'))
+  fs.writeFileSync(path.join(distRoot, 'package.json'), `${JSON.stringify({ private: true, type: 'commonjs' }, null, 2)}\n`, 'utf8')
   fs.mkdirSync(path.join(distRoot, 'core'), { recursive: true })
   for (const rel of ['core/readModelFingerprint.ts', 'core/kernelPackagedResolver.ts', 'core/kernel.ts']) {
     const sourcePath = path.join(installedRoot, ...rel.split('/'))
@@ -432,11 +435,13 @@ function transpileInstalledKernel(installedRoot) {
       },
       fileName: sourcePath,
       reportDiagnostics: false,
-    }).outputText
+    }).outputText.replace(/import\.meta\.url/g, "require('node:url').pathToFileURL(__filename).href")
     const target = path.join(distRoot, rel.replace(/\.ts$/, '.js'))
     fs.mkdirSync(path.dirname(target), { recursive: true })
     fs.writeFileSync(target, out, 'utf8')
   }
+  const installedNativeRoot = path.join(installedRoot, 'native')
+  if (fs.existsSync(installedNativeRoot)) fs.cpSync(installedNativeRoot, path.join(distRoot, 'native'), { recursive: true })
   return {
     distRoot,
     sourceKind: 'installed-package-root',
@@ -484,7 +489,7 @@ function fallbackTmuxSnapshot(stdout, capturedAt) {
 }
 
 function assertNonPreviewModesIgnoreInstalledLayout(kernel, installedRoot, manifestRelPath) {
-  for (const mode of [undefined, 'disabled', 'typescript', 'go', 'auto']) {
+  for (const mode of [undefined, 'go']) {
     const adapter = kernel.createAgentTeamKernelAdapter({
       mode,
       env: {
@@ -494,10 +499,28 @@ function assertNonPreviewModesIgnoreInstalledLayout(kernel, installedRoot, manif
       },
     })
     const before = adapter.metadata().kernel.calls
-    const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tfallback:@1\tTypeScript fallback\tpi', 1700013300000, fallbackTmuxSnapshot)
+    const snapshot = adapter.parseTmuxPaneSnapshot('%go\tembedded:@1\tEmbedded helper\tpi', 1700013300000, () => {
+      fail('installed-preview-smoke-failed', 'default/go must not use TypeScript fallback', `non-preview:${mode || 'default'}`)
+    })
+    const after = adapter.metadata().kernel.calls
+    if (!snapshot || snapshot.ok !== true || !snapshot.byPaneId || !snapshot.byPaneId['%go'] || after !== before + 2) {
+      fail('installed-preview-smoke-failed', 'default/go must use embedded helper and ignore installed preview layout', `non-preview:${mode || 'default'}`)
+    }
+  }
+  for (const mode of ['disabled', 'typescript', 'auto']) {
+    const adapter = kernel.createAgentTeamKernelAdapter({
+      mode,
+      env: {
+        PATH: process.env.PATH || '',
+        PI_AGENTTEAM_KERNEL_PACKAGED_HELPER_ROOT: installedRoot,
+        PI_AGENTTEAM_KERNEL_PACKAGED_HELPER_MANIFEST: manifestRelPath,
+      },
+    })
+    const before = adapter.metadata().kernel.calls
+    const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tfallback:@1\tTypeScript fallback\tpi', 1700013300001, fallbackTmuxSnapshot)
     const after = adapter.metadata().kernel.calls
     if (!snapshot || snapshot.ok !== true || !snapshot.byPaneId || !snapshot.byPaneId['%ts'] || after !== before) {
-      fail('installed-preview-smoke-failed', 'keep installed layout ignored outside explicit go-packaged-preview', `non-preview:${mode || 'default'}`)
+      fail('installed-preview-smoke-failed', 'keep installed layout ignored outside explicit go-packaged-preview/default-go', `non-preview:${mode}`)
     }
   }
 }

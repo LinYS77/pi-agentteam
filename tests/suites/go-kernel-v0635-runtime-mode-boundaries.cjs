@@ -181,21 +181,23 @@ function assertKernelSourceBoundaries(root) {
   const resolver = read(root, 'core/kernelPackagedResolver.ts')
   const readModel = read(root, 'core/readModelFingerprint.ts')
 
-  assertIncludes(kernel, "export type AgentTeamKernelKnownMode = 'disabled' | 'typescript' | 'go' | 'auto' | 'go-cutover' | 'go-packaged-preview'", 'core/kernel.ts')
+  assertIncludes(kernel, "export type AgentTeamKernelKnownMode = 'default' | 'disabled' | 'typescript' | 'go' | 'auto' | 'go-cutover' | 'go-packaged-preview'", 'core/kernel.ts')
   assertIncludes(kernel, "export const AGENTTEAM_KERNEL_CUTOVER_MODULE = 'tmuxSnapshotParse' as const", 'core/kernel.ts')
   assertIncludes(kernel, "const requestedMode = normalizeAgentTeamKernelMode(options.mode ?? env.PI_AGENTTEAM_KERNEL)", 'core/kernel.ts')
   assertIncludes(kernel, "const packagedPreviewRequested = requestedMode === 'go-packaged-preview'", 'core/kernel.ts')
   assertIncludes(kernel, 'const packagedHelperPath = packagedPreviewRequested && !explicitHelperPath && !packagedResolverFailure', 'core/kernel.ts')
-  assertIncludes(kernel, 'const packagedManifestPath = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'core/kernel.ts')
-  assertIncludes(kernel, 'const packagedManifestRequested = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'core/kernel.ts')
-  assertIncludes(kernel, "const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested", 'core/kernel.ts')
+  assertIncludes(kernel, 'const packagedManifestPath = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure', 'core/kernel.ts')
+  assertIncludes(kernel, 'defaultAgentTeamKernelEmbeddedHelperManifestPath()', 'core/kernel.ts')
+  assertIncludes(kernel, 'const packagedManifestRequested = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath', 'core/kernel.ts')
+  assertIncludes(kernel, "const cutoverRequested = defaultCutoverRequested || requestedMode === 'go-cutover' || packagedPreviewRequested", 'core/kernel.ts')
   assertIncludes(kernel, 'const startupFallback = cutoverRequested ? undefined : initialFallback', 'core/kernel.ts')
-  assertIncludes(kernel, 'if (cutoverRequested) return cutoverUnavailableSnapshot(capturedAt)', 'core/kernel.ts')
+  assertIncludes(kernel, 'if (cutoverRequested || !fallback) return cutoverUnavailableSnapshot(capturedAt)', 'core/kernel.ts')
   assertIncludes(kernel, 'compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint)', 'core/kernel.ts')
   assertIncludes(kernel, 'if (cutoverRequested) return fallback(compactInput)', 'core/kernel.ts')
   assert.equal(/AGENTTEAM_KERNEL_CUTOVER_MODULE\s*=\s*'compactReadModelFingerprint'/.test(kernel), false, 'compactReadModelFingerprint must not become cutover module')
-  assert.equal(/node_modules|package\.json|process\.cwd\(\)|require\.resolve|import\.meta\.resolve/i.test(kernel), false, 'kernel must not discover installed package layout by default')
-  assert.equal(/npm\s+(?:publish|version|pack)|gh\s+release|cosign|slsa|curl\b|wget\b|node-gyp|prebuild|postinstall|preinstall|default Go is enabled|default resolver is enabled/i.test(`${kernel}\n${resolver}`), false, 'kernel/resolver must not expose package/release/signing/default controls')
+  assertIncludes(kernel, 'defaultAgentTeamKernelEmbeddedHelperRoot()', 'core/kernel.ts')
+  assert.equal(/node_modules|package\.json|process\.cwd\(\)|require\.resolve|import\.meta\.resolve/i.test(kernel), false, 'kernel must not discover unapproved installed package layout by default')
+  assert.equal(/npm\s+(?:publish|version|pack)|gh\s+release|cosign|slsa|curl\b|wget\b|node-gyp|prebuild|postinstall|preinstall/i.test(`${kernel}\n${resolver}`), false, 'kernel/resolver must not expose package/release/signing controls')
   assert.equal(/PI_AGENTTEAM_KERNEL|PI_AGENTTEAM_KERNEL_HELPER|AGENTTEAM_GO_KERNEL_HELPER|process\.env/i.test(resolver), false, 'packaged resolver must not read mode env or enable default discovery')
   assertIncludes(resolver, "export const AGENTTEAM_PACKAGED_RESOLVER_MODULE = 'tmuxSnapshotParse'", 'core/kernelPackagedResolver.ts')
   assertIncludes(readModel, 'export function compactPanelReadModelFingerprint', 'core/readModelFingerprint.ts')
@@ -206,9 +208,9 @@ function assertDynamicRuntimeModes(root, env) {
   const loaded = loadKernel(root, env)
   try {
     const kernel = loaded.kernel
-    assert.equal(kernel.normalizeAgentTeamKernelMode(undefined), 'disabled')
-    assert.equal(kernel.normalizeAgentTeamKernelMode(''), 'disabled')
-    for (const mode of ['disabled', 'typescript', 'go', 'auto', 'go-cutover', 'go-packaged-preview']) {
+    assert.equal(kernel.normalizeAgentTeamKernelMode(undefined), 'default')
+    assert.equal(kernel.normalizeAgentTeamKernelMode(''), 'default')
+    for (const mode of ['default', 'disabled', 'typescript', 'go', 'auto', 'go-cutover', 'go-packaged-preview']) {
       assert.equal(kernel.isKnownAgentTeamKernelMode(mode), true, `${mode} remains known`)
     }
     assert.equal(kernel.AGENTTEAM_KERNEL_CUTOVER_MODULE, MODULE)
@@ -221,22 +223,28 @@ function assertDynamicRuntimeModes(root, env) {
     }
     const defaultAdapter = kernel.createAgentTeamKernelAdapter({ env: packagedEnv })
     const defaultMetadata = defaultAdapter.metadata().kernel
-    assert.equal(defaultMetadata.requestedMode, 'disabled')
-    assert.equal(defaultMetadata.mode, 'typescript')
-    assert.equal(defaultMetadata.enabled, false)
+    assert.equal(defaultMetadata.requestedMode, 'default')
+    assert.equal(defaultMetadata.mode, 'go')
+    assert.equal(defaultMetadata.enabled, true)
     assert.equal(defaultMetadata.calls, 0)
     assert.equal(defaultMetadata.fallbacks, 0)
-    assert.equal(Object.prototype.hasOwnProperty.call(defaultMetadata, 'cutoverStatus'), false, 'default must not enter cutover')
-    let fallbackCalls = 0
-    const defaultSnapshot = defaultAdapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700009000000, (stdout, capturedAt) => {
-      fallbackCalls += 1
-      return { capturedAt, panes: [{ paneId: '%ts', target: 'ts:@1', label: 'TypeScript fallback', currentCommand: 'pi' }], byPaneId: { '%ts': { paneId: '%ts', target: 'ts:@1', label: 'TypeScript fallback', currentCommand: 'pi' } }, ok: true }
+    assert.equal(defaultMetadata.cutoverStatus, 'active', 'default must enter active cutover')
+    const defaultSnapshot = defaultAdapter.parseTmuxPaneSnapshot('%go\tgo:@1\tEmbedded helper\tpi', 1700009000000, () => {
+      throw new Error('default must not use TypeScript parser fallback')
     })
-    assert.equal(fallbackCalls, 1, 'default should use TypeScript parser fallback')
-    assert.equal(defaultSnapshot.panes[0].paneId, '%ts')
-    assert.equal(defaultAdapter.metadata().kernel.calls, 0, 'default must not call packaged helper')
+    assert.equal(defaultSnapshot.panes[0].paneId, '%go')
+    assert.equal(defaultAdapter.metadata().kernel.calls, 2, 'default must call embedded helper health and parser')
 
-    for (const mode of ['disabled', 'typescript', 'go', 'auto']) {
+    for (const mode of ['go']) {
+      const adapter = kernel.createAgentTeamKernelAdapter({ mode, env: packagedEnv })
+      const metadata = adapter.metadata().kernel
+      assert.equal(metadata.mode, 'go', `${mode} must use approved embedded helper without packaged env`)
+      assert.equal(metadata.enabled, true, `${mode} must enable Go from embedded helper`)
+      assert.equal(metadata.calls, 0, `${mode} must not call helper before parser invocation`)
+      assert.equal(metadata.cutoverStatus, 'active', `${mode} must enter active cutover`)
+    }
+
+    for (const mode of ['disabled', 'typescript', 'auto']) {
       const adapter = kernel.createAgentTeamKernelAdapter({ mode, env: packagedEnv })
       const metadata = adapter.metadata().kernel
       assert.equal(metadata.mode, 'typescript', `${mode} must remain TypeScript without explicit helper`)

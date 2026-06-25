@@ -243,6 +243,7 @@ function assertRepoArtifactSanity(root) {
   const forbidden = walkFiles(root)
     .map(file => path.relative(root, file).replace(/\\/g, '/'))
     .filter(rel => !rel.startsWith('tests/suites/'))
+    .filter(rel => !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'))
     .filter(rel => /\.(?:exe|dll|so|dylib|tgz)$/i.test(rel) || generatedManifestNames.test(rel))
   assert.deepEqual(forbidden, [], 'repo must not contain checked-in native/tarball/generated manifest artifacts')
 }
@@ -252,7 +253,7 @@ function assertPackageNativeSanity(root) {
   assert.equal(packageJson.version, PACKAGE_VERSION, 'package version must remain 0.6.8')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'optionalDependencies'), false, 'package must not define optionalDependencies')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'agentteamGoHelper'), false, 'package must not define native helper metadata')
-  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item)), false, 'package files must not include native/helper/generated artifacts')
+  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package files must not include native/helper/generated artifacts')
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define ${lifecycle}`)
   }
@@ -268,9 +269,10 @@ function assertPackageNativeSanity(root) {
 
 async function assertKernelDefaults(kernel) {
   const unset = kernel.createAgentTeamKernelAdapter({ env: {} }).metadata().kernel
-  assert.equal(unset.requestedMode, 'disabled', 'unset kernel should remain disabled')
-  assert.equal(unset.mode, 'typescript', 'unset kernel should remain TypeScript')
-  assert.equal(unset.enabled, false, 'unset kernel should not enable Go')
+  assert.equal(unset.requestedMode, 'default', 'unset kernel should normalize to default after v0.6.48')
+  assert.equal(unset.mode, 'go', 'unset kernel should use embedded Go for tmuxSnapshotParse')
+  assert.equal(unset.enabled, true, 'unset kernel should enable parser-only Go')
+  assert.equal(unset.cutoverStatus, 'active', 'unset embedded helper should be active')
   const preview = kernel.createAgentTeamKernelAdapter({ mode: 'go-packaged-preview' }).metadata().kernel
   assert.equal(preview.requestedMode, 'go-packaged-preview', 'preview should be explicit-only')
   assert.equal(preview.requestedKnownKernel, true, 'packaged preview should remain known')

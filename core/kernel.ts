@@ -1,5 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { resolveAgentTeamPackagedHelperManifest } from './kernelPackagedResolver.js'
 import { compactPanelReadModelFingerprint, compactReadModelProjection } from './readModelFingerprint.js'
 
@@ -10,7 +12,7 @@ export const AGENTTEAM_KERNEL_HELPER_VERSION = '0.3.0-read-model-shadow'
 export const AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'compactReadModelFingerprint'] as const
 export const AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED = false
 
-export type AgentTeamKernelKnownMode = 'disabled' | 'typescript' | 'go' | 'auto' | 'go-cutover' | 'go-packaged-preview'
+export type AgentTeamKernelKnownMode = 'default' | 'disabled' | 'typescript' | 'go' | 'auto' | 'go-cutover' | 'go-packaged-preview'
 export type AgentTeamKernelActiveMode = 'typescript' | 'go'
 export type AgentTeamKernelCapability = typeof AGENTTEAM_KERNEL_CAPABILITIES[number]
 export const AGENTTEAM_KERNEL_CUTOVER_MODULE = 'tmuxSnapshotParse' as const
@@ -152,7 +154,7 @@ export type AgentTeamKernelAdapter = {
   metadata(): AgentTeamKernelMetadata
   health(): AgentTeamKernelHealth
   profile(params?: Record<string, unknown>): AgentTeamKernelProfile
-  parseTmuxPaneSnapshot(stdout: string, capturedAt: number, fallback: (stdout: string, capturedAt: number) => AgentTeamKernelTmuxSnapshot): AgentTeamKernelTmuxSnapshot
+  parseTmuxPaneSnapshot(stdout: string, capturedAt: number, fallback?: (stdout: string, capturedAt: number) => AgentTeamKernelTmuxSnapshot): AgentTeamKernelTmuxSnapshot
   compactReadModelFingerprint(input: unknown, fallback?: (input: unknown) => AgentTeamKernelCompactReadModelResult): AgentTeamKernelCompactReadModelResult
 }
 
@@ -169,7 +171,8 @@ export type AgentTeamKernelAdapterOptions = {
   timeoutMs?: number
 }
 
-const KNOWN_MODES = new Set(['disabled', 'typescript', 'go', 'auto', 'go-cutover', 'go-packaged-preview'])
+const KNOWN_MODES = new Set(['default', 'disabled', 'typescript', 'go', 'auto', 'go-cutover', 'go-packaged-preview'])
+const DEFAULT_EMBEDDED_HELPER_MANIFEST_PATH = 'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/manifest.json'
 const KERNEL_DIAGNOSTIC_TEXT_LIMIT = 160
 
 function compactKernelText(value: unknown, fallback = ''): string {
@@ -210,7 +213,8 @@ function toMigrationFallbackKind(kind: AgentTeamKernelHelperFailureKind): AgentT
 
 export function normalizeAgentTeamKernelMode(value?: unknown): string {
   const raw = String(value ?? '').trim().toLowerCase()
-  if (!raw || raw === 'none' || raw === 'off' || raw === 'disabled') return 'disabled'
+  if (!raw || raw === 'default') return 'default'
+  if (raw === 'none' || raw === 'off' || raw === 'disabled') return 'disabled'
   if (raw === 'ts' || raw === 'typescript') return 'typescript'
   const sanitized = raw.replace(/[^a-z0-9_-]/g, '').slice(0, 32)
   return sanitized || 'disabled'
@@ -242,6 +246,14 @@ export function defaultAgentTeamKernelPackagedHelperRoot(env: Record<string, str
   const path = env.PI_AGENTTEAM_KERNEL_PACKAGED_HELPER_ROOT
   const trimmed = path?.trim()
   return trimmed || undefined
+}
+
+export function defaultAgentTeamKernelEmbeddedHelperRoot(): string {
+  return resolve(dirname(fileURLToPath(import.meta.url)), '..')
+}
+
+export function defaultAgentTeamKernelEmbeddedHelperManifestPath(): string {
+  return DEFAULT_EMBEDDED_HELPER_MANIFEST_PATH
 }
 
 function normalizeAgentTeamKernelPackagedHelperStatus(value?: unknown): AgentTeamKernelPackagedHelperStatus {
@@ -332,19 +344,26 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
   const env = options.env ?? process.env
   const requestedMode = normalizeAgentTeamKernelMode(options.mode ?? env.PI_AGENTTEAM_KERNEL)
   const explicitHelperPath = options.helperPath === null ? undefined : (options.helperPath?.trim() || defaultAgentTeamKernelHelperPath(env))
+  const defaultRequested = requestedMode === 'default'
   const packagedPreviewRequested = requestedMode === 'go-packaged-preview'
+  const defaultCutoverRequested = defaultRequested || requestedMode === 'go'
+  const packagedResolverRequested = packagedPreviewRequested || defaultCutoverRequested
   const packagedHelperStatus = normalizeAgentTeamKernelPackagedHelperStatus(options.packagedHelperStatus ?? env.PI_AGENTTEAM_KERNEL_PACKAGED_HELPER_STATUS)
-  const packagedResolverFailure = packagedPreviewRequested && !explicitHelperPath ? packagedPreviewResolverFailure(packagedHelperStatus) : undefined
+  const packagedResolverFailure = packagedResolverRequested && !explicitHelperPath ? packagedPreviewResolverFailure(packagedHelperStatus) : undefined
   const packagedHelperPath = packagedPreviewRequested && !explicitHelperPath && !packagedResolverFailure
     ? (options.packagedHelperPath === null ? undefined : (options.packagedHelperPath?.trim() || defaultAgentTeamKernelPackagedHelperPath(env)))
     : undefined
-  const packagedManifestPath = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure
-    ? (options.packagedHelperManifestPath === null ? undefined : (options.packagedHelperManifestPath?.trim() || defaultAgentTeamKernelPackagedHelperManifestPath(env)))
+  const packagedManifestPath = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure
+    ? (packagedPreviewRequested
+      ? (options.packagedHelperManifestPath === null ? undefined : (options.packagedHelperManifestPath?.trim() || defaultAgentTeamKernelPackagedHelperManifestPath(env)))
+      : defaultAgentTeamKernelEmbeddedHelperManifestPath())
     : undefined
-  const packagedManifestInstallRoot = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure
-    ? (options.packagedHelperInstallRoot === null ? undefined : (options.packagedHelperInstallRoot?.trim() || defaultAgentTeamKernelPackagedHelperRoot(env)))
+  const packagedManifestInstallRoot = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure
+    ? (packagedPreviewRequested
+      ? (options.packagedHelperInstallRoot === null ? undefined : (options.packagedHelperInstallRoot?.trim() || defaultAgentTeamKernelPackagedHelperRoot(env)))
+      : defaultAgentTeamKernelEmbeddedHelperRoot())
     : undefined
-  const packagedManifestRequested = packagedPreviewRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure && Boolean(packagedManifestPath || packagedManifestInstallRoot)
+  const packagedManifestRequested = packagedResolverRequested && !explicitHelperPath && !packagedHelperPath && !packagedResolverFailure && Boolean(packagedManifestPath || packagedManifestInstallRoot)
   const packagedManifestResult = packagedManifestRequested && packagedManifestPath && packagedManifestInstallRoot
     ? resolveAgentTeamPackagedHelperManifest({ installedRoot: packagedManifestInstallRoot, manifestPath: packagedManifestPath })
     : undefined
@@ -355,14 +374,14 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
   const helperPath = explicitHelperPath || packagedHelperPath || packagedManifestHelperPath
   const helperAvailable = Boolean(helperPath && !packagedResolverFailure && !packagedManifestFailure && existsSync(helperPath))
   const requestedKnownKernel = isKnownAgentTeamKernelMode(requestedMode)
-  const cutoverRequested = requestedMode === 'go-cutover' || packagedPreviewRequested
-  const initialUseGo = requestedKnownKernel && (requestedMode === 'go' || requestedMode === 'auto' || cutoverRequested) && helperAvailable
+  const cutoverRequested = defaultCutoverRequested || requestedMode === 'go-cutover' || packagedPreviewRequested
+  const initialUseGo = requestedKnownKernel && (defaultCutoverRequested || requestedMode === 'auto' || cutoverRequested) && helperAvailable
   const timeoutMs = Math.max(100, Math.min(10_000, Math.floor(options.timeoutMs ?? 2_000)))
   const startupFallback = cutoverRequested ? undefined : initialFallback({ requestedMode, helperPath, helperAvailable })
   const startupCutoverFailure = cutoverRequested
     ? packagedResolverFailure ?? packagedManifestFailure ?? (!helperAvailable ? {
       kind: 'missing-helper' as const,
-      detail: helperPath ? `helper not found: ${compactHelperPath(helperPath)}` : (packagedPreviewRequested ? 'packaged helper not configured' : 'PI_AGENTTEAM_KERNEL_HELPER is not set'),
+      detail: helperPath ? `helper not found: ${compactHelperPath(helperPath)}` : (packagedResolverRequested ? 'packaged helper not configured' : 'PI_AGENTTEAM_KERNEL_HELPER is not set'),
     } : undefined)
     : undefined
   const startupCutoverFailureKind: AgentTeamKernelCutoverFailureKind | undefined = startupCutoverFailure?.kind
@@ -758,7 +777,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       if (helperResult !== undefined) {
         recordRuntimeFallback(unsafe?.kind ?? 'helper-incompatible-response', unsafe?.detail ?? 'tmuxSnapshotParse result shape')
       }
-      if (cutoverRequested) return cutoverUnavailableSnapshot(capturedAt)
+      if (cutoverRequested || !fallback) return cutoverUnavailableSnapshot(capturedAt)
       return fallback(stdout, capturedAt)
     },
     compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint) {

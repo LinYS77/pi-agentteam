@@ -182,10 +182,11 @@ module.exports = {
     assert.equal(kernel.isKnownAgentTeamKernelMode('go-packaged-preview'), true)
 
     const defaultAdapter = kernel.createAgentTeamKernelAdapter({ env: {} })
-    assert.equal(defaultAdapter.metadata().kernel.requestedMode, 'disabled')
-    assert.equal(defaultAdapter.metadata().kernel.mode, 'typescript')
-    assert.equal(defaultAdapter.metadata().kernel.enabled, false)
+    assert.equal(defaultAdapter.metadata().kernel.requestedMode, 'default')
+    assert.equal(defaultAdapter.metadata().kernel.mode, 'go')
+    assert.equal(defaultAdapter.metadata().kernel.enabled, true)
     assert.equal(defaultAdapter.metadata().kernel.calls, 0)
+    assert.equal(defaultAdapter.metadata().kernel.cutoverStatus, 'active')
 
     const missingPackaged = kernel.createAgentTeamKernelAdapter({ mode: 'go-packaged-preview', env: { PATH: process.env.PATH } })
     const missingSnapshot = missingPackaged.parseTmuxPaneSnapshot(`%p\t${SENTINELS.repoPath}\t${SENTINELS.mailbox}\tpi`, 1700005000001, throwingTmuxFallback)
@@ -228,18 +229,27 @@ fs.writeFileSync(process.env.SHOULD_NOT_RUN_FILE, 'called')
 if (request.method === 'health') respond(baseHealth)
 else respond(validSnapshot('%unexpected'))
 `), packagedPath => {
-      for (const mode of [undefined, 'disabled', 'typescript', 'go', 'auto', 'go-cutover']) {
-        const marker = path.join(path.dirname(packagedPath), `called-${mode || 'default'}`)
+      for (const mode of ['disabled', 'typescript', 'auto', 'go-cutover']) {
+        const marker = path.join(path.dirname(packagedPath), `called-${mode}`)
         const adapter = kernel.createAgentTeamKernelAdapter({ mode, packagedHelperPath: packagedPath, env: { SHOULD_NOT_RUN_FILE: marker, PATH: process.env.PATH } })
         const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700005000004, mode === 'go-cutover' ? throwingTmuxFallback : tmuxFallback)
         if (mode === 'go-cutover') {
           assert.equal(snapshot.ok, false, 'current go-cutover should not use packaged discovery and should fail closed without explicit helper')
           assert.equal(snapshot.cutoverFailureKind, 'missing-helper')
         } else {
-          assert.equal(snapshot.ok, true, `${mode || 'default'} should keep TypeScript behavior`)
+          assert.equal(snapshot.ok, true, `${mode} should keep TypeScript behavior when callback is supplied`)
           assert.equal(snapshot.panes[0].paneId, '%ts')
         }
-        assert.equal(fs.existsSync(marker), false, `${mode || 'default'} must not run packaged helper discovery`)
+        assert.equal(fs.existsSync(marker), false, `${mode} must not run packaged helper discovery`)
+      }
+
+      for (const mode of [undefined, 'go']) {
+        const marker = path.join(path.dirname(packagedPath), `called-${mode || 'default'}`)
+        const adapter = kernel.createAgentTeamKernelAdapter({ mode, packagedHelperPath: packagedPath, env: { SHOULD_NOT_RUN_FILE: marker, PATH: process.env.PATH } })
+        const snapshot = adapter.parseTmuxPaneSnapshot('%ts\tts:@1\tTypeScript fallback\tpi', 1700005000004, throwingTmuxFallback)
+        assert.equal(snapshot.ok, true, `${mode || 'default'} should use approved embedded helper while ignoring arbitrary packagedHelperPath`)
+        assert.equal(snapshot.panes[0].paneId, '%ts')
+        assert.equal(fs.existsSync(marker), false, `${mode || 'default'} must not run arbitrary packaged helper path`)
       }
     })
 

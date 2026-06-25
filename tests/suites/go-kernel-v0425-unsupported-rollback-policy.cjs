@@ -117,6 +117,7 @@ function assertRepoArtifactSanity(root) {
   const forbidden = walkFiles(root)
     .map(file => path.relative(root, file).replace(/\\/g, '/'))
     .filter(rel => !rel.startsWith('tests/suites/'))
+    .filter(rel => !rel.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'))
     .filter(rel => /\.(?:exe|dll|so|dylib|tgz)$/i.test(rel) || generatedManifestNames.test(rel))
   assert.deepEqual(forbidden, [], 'repo must not contain checked-in native/tarball/generated manifest/package artifacts')
 }
@@ -126,7 +127,7 @@ function assertPackageNativeSanity(root) {
   assert.equal(packageJson.version, PACKAGE_VERSION, 'package version must remain 0.6.8')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'optionalDependencies'), false, 'package must not define optionalDependencies')
   assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'agentteamGoHelper'), false, 'package must not define native helper metadata')
-  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item)), false, 'package files must not include native/helper/generated artifacts')
+  assert.equal((packageJson.files || []).some(item => /(?:helper|native|manifest|artifact|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item) && !item.startsWith('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/')), false, 'package files must not include native/helper/generated artifacts')
   for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define ${lifecycle}`)
   }
@@ -142,7 +143,8 @@ function assertPackageNativeSanity(root) {
 
 function assertKernelDefaultsSource(root) {
   const source = fs.readFileSync(path.join(root, 'core/kernel.ts'), 'utf8')
-  assert.ok(source.includes("if (!raw || raw === 'none' || raw === 'off' || raw === 'disabled') return 'disabled'"), 'unset kernel default should remain disabled')
+  assert.ok(source.includes("if (!raw || raw === 'default') return 'default'"), 'unset kernel default should normalize to default after v0.6.48')
+  assert.ok(source.includes("if (raw === 'none' || raw === 'off' || raw === 'disabled') return 'disabled'"), 'explicit disabled aliases should remain rollback controls')
   assert.ok(source.includes('const requestedMode = normalizeAgentTeamKernelMode(options.mode ?? env.PI_AGENTTEAM_KERNEL)'), 'metadata should derive requested mode from explicit mode/env only')
   assert.ok(source.includes("const activeMode: AgentTeamKernelActiveMode = usesGo() ? 'go' : 'typescript'"), 'unset/preview metadata should keep TypeScript mode when Go is unavailable')
   assert.ok(source.includes("enabled: activeMode === 'go'"), 'unset/preview metadata should keep Go disabled unless Go is active')

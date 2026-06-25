@@ -11,6 +11,19 @@ const EXPECTED_PEERS = {
   '@earendil-works/pi-tui': '*',
   typebox: '*',
 }
+const APPROVED_EMBEDDED_NATIVE_PREFIX = 'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/'
+const APPROVED_EMBEDDED_NATIVE_FILES = [
+  'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/agentteam-tmuxSnapshotParse',
+  'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/manifest.json',
+  'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/SHA256SUMS',
+  'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/provenance.json',
+  'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/LICENSE',
+  'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/license.json',
+  'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/attestation.intoto.jsonl',
+]
+function isApprovedEmbeddedNative(rel) {
+  return APPROVED_EMBEDDED_NATIVE_FILES.includes(rel) || rel.startsWith(APPROVED_EMBEDDED_NATIVE_PREFIX)
+}
 const EXPECTED_PACKAGE_FILES = [
   'index.ts',
   'types.ts',
@@ -54,6 +67,7 @@ const EXPECTED_PACKAGE_FILES = [
   'teamPanel/',
   'tmux/',
   'tools/',
+  ...APPROVED_EMBEDDED_NATIVE_FILES,
   '!tools/messageDelivery.ts',
   '!tools/messagePolicy.ts',
   '!tools/messageRouting.ts',
@@ -259,7 +273,7 @@ function assertPackageManifest(root) {
     assert.equal(path.isAbsolute(entry), false, `package files entry must be relative: ${entry}`)
     assert.equal(entry.includes('..'), false, `package files entry must not traverse: ${entry}`)
     assert.equal(entry.includes('\\'), false, `package files entry must use posix separators: ${entry}`)
-    assert.equal(FORBIDDEN_PACKAGE_ENTRY.test(normalizePackageEntry(entry)), false, `package files entry must not expose native/generated/release/platform surface: ${entry}`)
+    assert.equal(FORBIDDEN_PACKAGE_ENTRY.test(normalizePackageEntry(entry)) && !isApprovedEmbeddedNative(normalizePackageEntry(entry)), false, `package files entry must not expose unapproved native/generated/release/platform surface: ${entry}`)
     if (!entry.startsWith('!')) assert.equal(exists(root, entry.replace(/\/$/, '')), true, `package files entry must exist: ${entry}`)
   }
 }
@@ -292,7 +306,7 @@ function assertPackageFilesAllowlist(root) {
   const packageJson = JSON.parse(read(root, 'package.json'))
   const expanded = expandPackageFiles(root, packageJson.files)
   for (const rel of REQUIRED_PACKAGE_SURFACE) assert.ok(expanded.includes(rel), `expanded package surface should include required TS/pi facade file: ${rel}`)
-  for (const rel of expanded) assert.equal(FORBIDDEN_INCLUDED_SURFACE.test(rel), false, `expanded package surface must not include native/generated/release/platform artifact: ${rel}`)
+  for (const rel of expanded) assert.equal(FORBIDDEN_INCLUDED_SURFACE.test(rel) && !isApprovedEmbeddedNative(rel), false, `expanded package surface must not include unapproved native/generated/release/platform artifact: ${rel}`)
   for (const excluded of ['commands.ts', 'tools.ts', 'state.ts', 'tmux.ts', 'runtime.ts', 'runtimeBridge.ts', 'runtimeDelivery.ts', 'runtimePanes.ts', 'runtimeRules.ts', 'runtimeService.ts', 'runtimeStorage.ts', 'runtimeWake.ts', 'runtime/teamSideEffects.ts', 'core/taskNoteModel.ts', 'state/taskNotes.ts', 'tools/messageDelivery.ts', 'tools/messagePolicy.ts', 'tools/messageRouting.ts', 'tools/taskCommands.ts', 'tools/taskPolicy.ts', 'tools/taskActionability.ts']) {
     assert.equal(expanded.includes(excluded), false, `expanded package surface must respect explicit exclusion: ${excluded}`)
   }
@@ -313,8 +327,8 @@ function assertRepoArtifactGuard(root) {
   const forbiddenRecords = []
   for (const file of walkFiles(root)) {
     const rel = toRel(root, file)
-    if (FORBIDDEN_REPO_ARTIFACT.test(rel)) forbiddenArtifacts.push(rel)
-    const reviewHelper = rel.startsWith('docs/') || rel.startsWith('tests/') || rel.startsWith('scripts/') || rel.startsWith('.github/workflows/')
+    if (FORBIDDEN_REPO_ARTIFACT.test(rel) && !isApprovedEmbeddedNative(rel)) forbiddenArtifacts.push(rel)
+    const reviewHelper = rel.startsWith('docs/') || rel.startsWith('tests/') || rel.startsWith('scripts/') || rel.startsWith('.github/workflows/') || isApprovedEmbeddedNative(rel)
     if (!reviewHelper && FORBIDDEN_REPO_RECORD.test(rel)) forbiddenRecords.push(rel)
   }
   assert.deepEqual(forbiddenArtifacts.sort(), [], 'repo must not contain checked-in native/archive/signing artifacts')
