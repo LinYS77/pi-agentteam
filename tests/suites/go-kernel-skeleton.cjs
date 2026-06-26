@@ -151,6 +151,11 @@ module.exports = {
           const rel = path.relative(env.helpers.extRoot, full).replace(/\\/g, '/')
           const text = fs.readFileSync(full, 'utf8')
           if (rel === 'tmux/snapshot.ts') continue
+          if (rel === 'tmux/core.ts') {
+            assert.equal(text.includes("import { createAgentTeamKernelAdapter } from '../core/kernel.js'"), true, `${rel} must keep only the approved worker lifecycle list facade seam`)
+            assert.equal((text.match(/core\/kernel\.js/g) || []).length, 1, `${rel} must not add more Go kernel imports`)
+            continue
+          }
           assert.equal(text.includes('core/kernel.js'), false, `${rel} must not import Go kernel skeleton`)
           assert.equal(text.includes('../core/kernel.js'), false, `${rel} must not import Go kernel skeleton`)
           assert.equal(text.includes('../../core/kernel.js'), false, `${rel} must not import Go kernel skeleton`)

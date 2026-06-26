@@ -1,3 +1,4 @@
+import { createAgentTeamKernelAdapter } from '../core/kernel.js'
 import { runTmuxNoThrow, runTmuxNoThrowAsync } from './client.js'
 export {
   captureTmuxSnapshot,
@@ -154,24 +155,6 @@ export function targetForPaneId(paneId: string): string | null {
 }
 
 export function listAgentTeamPanes(): AgentTeamPaneInfo[] {
-  const result = runTmuxNoThrow([
-    'list-panes',
-    '-a',
-    '-F',
-    '#{pane_id}\t#{session_name}:#{window_id}\t#{@agentteam-name}\t#{pane_current_command}',
-  ])
-  if (!result.ok || !result.stdout) return []
-  return result.stdout
-    .split('\n')
-    .filter(Boolean)
-    .map(line => {
-      const [paneId, target, label, currentCommand] = line.split('\t')
-      return {
-        paneId: paneId ?? '',
-        target: target ?? '',
-        label: label ?? '',
-        currentCommand: currentCommand ?? '',
-      }
-    })
-    .filter(item => item.paneId && item.label)
+  const result = createAgentTeamKernelAdapter().listAgentTeamPanes()
+  return result.ok ? result.panes : []
 }
