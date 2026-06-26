@@ -81,14 +81,11 @@ export function paneExists(paneId: string): boolean {
 
 export function resolvePaneBinding(paneId: string): PaneBinding | null {
   if (!paneId) return null
-  const paneResult = runTmuxNoThrow(['display-message', '-p', '-t', paneId, '#{pane_id}'])
-  const targetResult = runTmuxNoThrow(['display-message', '-p', '-t', paneId, '#{session_name}:#{window_id}'])
-  if (!paneResult.ok || !paneResult.stdout || !targetResult.ok || !targetResult.stdout) {
-    return null
-  }
+  const result = createAgentTeamKernelAdapter().inspectWorkerPane(paneId)
+  if (!result.ok || !result.target) return null
   return {
-    paneId: paneResult.stdout,
-    target: targetResult.stdout,
+    paneId: result.paneId || paneId,
+    target: result.target,
   }
 }
 

@@ -8,7 +8,7 @@ const ACTIVE_OPERATIONS = Object.freeze(['inspectPane', 'listAgentTeamPanes'])
 const ACTIVE_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
 const FACADE_NAME = 'inspectPane'
 const KERNEL_ADAPTER_DELEGATION = 'createAgentTeamKernelAdapter().inspectWorkerPane(paneId)'
-const SUCCESS_MAPPING = Object.freeze(['paneId', 'exists', 'currentCommand', 'inMode', 'mode', 'copyMode'])
+const SUCCESS_MAPPING = Object.freeze(['paneId', 'exists', 'target', 'currentCommand', 'inMode', 'mode', 'copyMode'])
 const FAILURE_MAPPING = Object.freeze(['paneId', 'exists', 'error'])
 const PRESERVED_BOUNDARIES = Object.freeze([
   'inspectPane facade delegates to Go workerLifecycle adapter',
@@ -17,7 +17,7 @@ const PRESERVED_BOUNDARIES = Object.freeze([
   'targetForPaneId remains TypeScript display-message-owned',
   'captureCurrentPaneBinding remains TypeScript display-message-owned',
   'paneExists is cut over by v0.6.57, not this slice',
-  'resolvePaneBinding remains TypeScript display-message-owned',
+  'resolvePaneBinding is cut over by v0.6.58, not this slice',
   'window helpers remain TypeScript tmux-owned',
   'wake/create/label/kill lifecycle remains TypeScript-owned',
   'state repository remains TypeScript-owned',
@@ -47,7 +47,7 @@ const RELEASE_PACKAGE_GUARDS = Object.freeze([
   'no go.mod or go.sum',
   'no lifecycle hooks or postinstall downloads',
   'no native artifact rename',
-  'no native helper rebuild required',
+  'native helper rebuild handled only by later target-field contract slice',
 ])
 const goInspectPaneFacadeCutover = Object.freeze({
   schemaVersion: GO_INSPECT_PANE_FACADE_CUTOVER_SCHEMA_VERSION,

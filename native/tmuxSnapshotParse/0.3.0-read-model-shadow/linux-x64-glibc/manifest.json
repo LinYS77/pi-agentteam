@@ -23,8 +23,8 @@
   "artifact": {
     "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/agentteam-tmuxSnapshotParse",
     "filename": "agentteam-tmuxSnapshotParse",
-    "size": 3416167,
-    "sha256": "b684c3d5471d21778407e1d5f93b48f9811199ccf7557bed0ee102426b4aac14",
+    "size": 3416239,
+    "sha256": "4459e22f05f3d540b5f470c982fd479e9269ed7bbd09573be9097f8a4880a83d",
     "executable": true,
     "mode": "0755"
   },
@@ -39,7 +39,7 @@
   },
   "source": {
     "path": "kernel/go/agentteam-kernel",
-    "revision": "c831750127dacdcf0f4fdbea07368e52760468fa"
+    "revision": "476a4ff21c8294e2355e0f6f1c03fe00cd25a4ea"
   },
   "build": {
     "command": [
@@ -56,7 +56,7 @@
     "cwd": "kernel/go/agentteam-kernel",
     "toolchain": "go version go1.25.10 linux/amd64",
     "runIdentity": "local-reviewer-run",
-    "generatedAt": "2026-06-26T04:09:57.334Z"
+    "generatedAt": "2026-06-26T11:49:14.450Z"
   },
   "smoke": {
     "health": true,
@@ -87,7 +87,7 @@
     "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/attestation.intoto.jsonl",
     "kind": "placeholder-only",
     "signed": false,
-    "sha256": "d19c1a8f0ed5c389dec72865023fc456384d5dfb53a9c0bc68a079cac26234ec"
+    "sha256": "e9ae67278f2df768759bf3e89c18cb83a0faeb2fdbd8f98a3f82def4537057ff"
   },
   "license": {
     "name": "MIT",

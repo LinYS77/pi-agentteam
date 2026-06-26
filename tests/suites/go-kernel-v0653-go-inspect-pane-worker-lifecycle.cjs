@@ -223,6 +223,8 @@ function assertSourceAndMetadata(root) {
   assert.match(goSource, /case "workerLifecycle"/)
   assert.match(goSource, /case "inspectPane"/)
   assert.match(goSource, /case "listAgentTeamPanes"/)
+  const inspectFormat = goSource.match(/const workerLifecycleInspectPaneFormat = "([^"]+)"/)?.[1] || ''
+  assertIncludes(inspectFormat, '#{session_name}:#{window_id}', 'workerLifecycleInspectPaneFormat compact target')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", workerLifecycleInspectPaneFormat\)/)
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/)
   assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message"/.test(goSource), false)

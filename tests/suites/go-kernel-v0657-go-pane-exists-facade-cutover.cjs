@@ -189,7 +189,8 @@ function assertFacadeSource(root) {
   assert.equal(listBody.includes('runTmuxNoThrow(['), false, 'listAgentTeamPanes must remain cut over to Go')
   assert.equal(targetBody.includes('display-message'), true, 'targetForPaneId must remain TypeScript display-message path')
   assert.equal(captureBody.includes('display-message'), true, 'captureCurrentPaneBinding must remain TypeScript display-message path')
-  assert.equal(resolveBody.includes('display-message'), true, 'resolvePaneBinding must remain TypeScript display-message path')
+  assertIncludes(resolveBody, 'createAgentTeamKernelAdapter().inspectWorkerPane(paneId)', 'resolvePaneBinding later v0.6.58 cutover')
+  assert.equal(resolveBody.includes('display-message'), false, 'resolvePaneBinding display-message path is removed by later v0.6.58 slice')
   assert.equal(resolveAsyncBody.includes('display-message'), true, 'resolvePaneBindingAsync must remain TypeScript display-message path')
   assert.equal(windowExistsBody.includes('list-panes'), true, 'windowExists must remain TypeScript window helper path')
   assert.equal(firstPaneBody.includes('list-panes'), true, 'firstPaneInWindow must remain TypeScript window helper path')
@@ -205,7 +206,7 @@ function assertFacadeRuntime(env) {
   const original = kernel.createAgentTeamKernelAdapter
   try {
     kernel.createAgentTeamKernelAdapter = () => ({
-      inspectWorkerPane: paneId => ({ ok: true, operation: 'inspectPane', capability: 'workerLifecycle', paneId, requestedPaneId: paneId, exists: true, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }),
+      inspectWorkerPane: paneId => ({ ok: true, operation: 'inspectPane', capability: 'workerLifecycle', paneId, requestedPaneId: paneId, exists: true, target: 'session:@1', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }),
     })
     assert.equal(tmuxCore.paneExists('%present'), true)
     kernel.createAgentTeamKernelAdapter = () => ({

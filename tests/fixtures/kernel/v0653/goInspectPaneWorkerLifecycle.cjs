@@ -30,6 +30,7 @@ const COMPACT_RESULT_FIELDS = Object.freeze([
   'paneId',
   'requestedPaneId',
   'exists',
+  'target',
   'currentCommand',
   'inMode',
   'mode',

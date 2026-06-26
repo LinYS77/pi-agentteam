@@ -180,6 +180,7 @@ export type AgentTeamKernelWorkerPaneInspection = {
   paneId: string
   requestedPaneId: string
   exists: boolean
+  target?: string
   currentCommand?: string
   inMode?: boolean
   mode?: string
@@ -767,6 +768,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     const paneId = compactKernelText(result.paneId || requested, requested)
     if (result.ok === true) {
       if (result.exists !== true || !paneId) return undefined
+      const target = typeof result.target === 'string' ? compactKernelText(result.target) : ''
       return {
         ok: true,
         operation: 'inspectPane',
@@ -774,6 +776,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         paneId,
         requestedPaneId: requested,
         exists: true,
+        ...(target ? { target } : {}),
         ...(typeof result.currentCommand === 'string' && result.currentCommand ? { currentCommand: compactKernelText(result.currentCommand) } : {}),
         ...(typeof result.inMode === 'boolean' ? { inMode: result.inMode } : {}),
         ...(typeof result.mode === 'string' && result.mode ? { mode: compactKernelText(result.mode) } : {}),

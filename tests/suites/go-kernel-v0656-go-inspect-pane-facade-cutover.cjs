@@ -131,6 +131,7 @@ function assertFixtureShape(root) {
   assert.equal(goInspectPaneFacadeCutover.facadeName, FACADE_NAME)
   assert.equal(goInspectPaneFacadeCutover.kernelAdapterDelegation, KERNEL_ADAPTER_DELEGATION)
   assert.deepEqual(goInspectPaneFacadeCutover.successMapping, [...SUCCESS_MAPPING])
+  assert.equal(goInspectPaneFacadeCutover.successMapping.includes('target'), true, 'inspect worker result may include compact target after v0.6.58')
   assert.deepEqual(goInspectPaneFacadeCutover.failureMapping, [...FAILURE_MAPPING])
   assert.deepEqual(goInspectPaneFacadeCutover.activeOperations, [...ACTIVE_OPERATIONS])
   assert.deepEqual(goInspectPaneFacadeCutover.activeCapabilities, [...ACTIVE_CAPABILITIES])
@@ -202,7 +203,8 @@ function assertFacadeSource(root) {
   assert.equal(captureBody.includes('display-message'), true, 'captureCurrentPaneBinding must remain TypeScript display-message path')
   assertIncludes(paneExistsBody, 'return Boolean(paneId && inspectPane(paneId).exists)', `${TMUX_CORE} paneExists later cutover`)
   assert.equal(paneExistsBody.includes('display-message'), false, 'paneExists display-message path is removed by later v0.6.57 slice')
-  assert.equal(resolveBody.includes('display-message'), true, 'resolvePaneBinding must remain TypeScript display-message path')
+  assertIncludes(resolveBody, 'createAgentTeamKernelAdapter().inspectWorkerPane(paneId)', 'resolvePaneBinding later v0.6.58 cutover')
+  assert.equal(resolveBody.includes('display-message'), false, 'resolvePaneBinding display-message path is removed by later v0.6.58 slice')
   assert.equal(windowExistsBody.includes('list-panes'), true, 'windowExists must remain TypeScript window helper path')
   assert.equal(firstPaneBody.includes('list-panes'), true, 'firstPaneInWindow must remain TypeScript window helper path')
   assertIncludes(kernelSource, "callHelper<unknown>('workerLifecycle', { operation: 'inspectPane'", KERNEL)
@@ -226,6 +228,7 @@ function assertFacadeRuntime(env) {
         paneId: '%resolved',
         requestedPaneId: paneId,
         exists: true,
+        target: 'session:@1',
         currentCommand: 'pi',
         inMode: true,
         mode: 'copy-mode',

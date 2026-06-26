@@ -53,7 +53,7 @@ type profileResult struct {
 }
 
 const tmuxPaneSnapshotFormat = "#{pane_id}\t#{session_name}:#{window_id}\t#{@agentteam-name}\t#{pane_current_command}"
-const workerLifecycleInspectPaneFormat = "#{pane_id}\t#{pane_current_command}\t#{pane_in_mode}\t#{pane_mode}"
+const workerLifecycleInspectPaneFormat = "#{pane_id}\t#{session_name}:#{window_id}\t#{pane_current_command}\t#{pane_in_mode}\t#{pane_mode}"
 
 type tmuxPaneSnapshotItem struct {
 	PaneID         string `json:"paneId"`
@@ -94,6 +94,7 @@ type workerPaneInspectionResult struct {
 	PaneID            string `json:"paneId"`
 	RequestedPaneID   string `json:"requestedPaneId"`
 	Exists            bool   `json:"exists"`
+	Target            string `json:"target,omitempty"`
 	CurrentCommand    string `json:"currentCommand,omitempty"`
 	InMode            *bool  `json:"inMode,omitempty"`
 	Mode              string `json:"mode,omitempty"`
@@ -144,17 +145,17 @@ func profile(params map[string]any) profileResult {
 	return profileResult{
 		healthResult: health(),
 		Profile: map[string]any{
-			"scope":                                "skeleton-only",
-			"params":                               params,
-			"stateConnected":                       false,
-			"tmuxConnected":                        false,
-			"tmuxSnapshotParseConnected":           true,
-			"tmuxSnapshotCaptureConnected":         true,
-			"compactReadModelFingerprintConnected":        true,
-			"workerLifecycleInspectPaneConnected":         true,
+			"scope":                                      "skeleton-only",
+			"params":                                     params,
+			"stateConnected":                             false,
+			"tmuxConnected":                              false,
+			"tmuxSnapshotParseConnected":                 true,
+			"tmuxSnapshotCaptureConnected":               true,
+			"compactReadModelFingerprintConnected":       true,
+			"workerLifecycleInspectPaneConnected":        true,
 			"workerLifecycleListAgentTeamPanesConnected": true,
-			"panelConnected":                              false,
-			"taskReportPlanRunConnected":           false,
+			"panelConnected":                             false,
+			"taskReportPlanRunConnected":                 false,
 		},
 	}
 }
@@ -357,11 +358,11 @@ func inspectWorkerPane(params map[string]any) workerPaneInspectionResult {
 	}
 	for _, line := range splitLines(strings.TrimSpace(string(output))) {
 		fields := splitTabs(line)
-		if len(fields) < 4 || fields[0] != requestedPaneID {
+		if len(fields) < 5 || fields[0] != requestedPaneID {
 			continue
 		}
-		inMode := tmuxBool(fields[2])
-		mode := strings.TrimSpace(fields[3])
+		inMode := tmuxBool(fields[3])
+		mode := strings.TrimSpace(fields[4])
 		copyModeValue := strings.Contains(strings.ToLower(mode), "copy")
 		return workerPaneInspectionResult{
 			OK:                true,
@@ -370,7 +371,8 @@ func inspectWorkerPane(params map[string]any) workerPaneInspectionResult {
 			PaneID:            fields[0],
 			RequestedPaneID:   requestedPaneID,
 			Exists:            true,
-			CurrentCommand:    strings.TrimSpace(fields[1]),
+			Target:            strings.TrimSpace(fields[1]),
+			CurrentCommand:    strings.TrimSpace(fields[2]),
 			InMode:            inMode,
 			Mode:              mode,
 			CopyMode:          &copyModeValue,
