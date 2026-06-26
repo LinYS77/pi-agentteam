@@ -17,7 +17,7 @@ import (
 const protocolVersion = 1
 const helperVersion = "0.3.0-read-model-shadow"
 
-var capabilities = []string{"health", "profile", "tmuxSnapshotParse", "tmuxSnapshotCapture", "compactReadModelFingerprint"}
+var capabilities = []string{"health", "profile", "tmuxSnapshotParse", "tmuxSnapshotCapture", "compactReadModelFingerprint", "workerLifecycle"}
 
 type rpcRequest struct {
 	JSONRPC string         `json:"jsonrpc"`
@@ -53,6 +53,7 @@ type profileResult struct {
 }
 
 const tmuxPaneSnapshotFormat = "#{pane_id}\t#{session_name}:#{window_id}\t#{@agentteam-name}\t#{pane_current_command}"
+const workerLifecycleInspectPaneFormat = "#{pane_id}\t#{pane_current_command}\t#{pane_in_mode}\t#{pane_mode}"
 
 type tmuxPaneSnapshotItem struct {
 	PaneID         string `json:"paneId"`
@@ -86,6 +87,28 @@ type compactReadModelResult struct {
 	StateFilesWritten bool   `json:"stateFilesWritten"`
 }
 
+type workerPaneInspectionResult struct {
+	OK                bool   `json:"ok"`
+	Operation         string `json:"operation"`
+	Capability        string `json:"capability"`
+	PaneID            string `json:"paneId"`
+	RequestedPaneID   string `json:"requestedPaneId"`
+	Exists            bool   `json:"exists"`
+	CurrentCommand    string `json:"currentCommand,omitempty"`
+	InMode            *bool  `json:"inMode,omitempty"`
+	Mode              string `json:"mode,omitempty"`
+	CopyMode          *bool  `json:"copyMode,omitempty"`
+	Status            string `json:"status,omitempty"`
+	Marker            string `json:"resultMarker,omitempty"`
+	Failure           string `json:"failureKind,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Error             string `json:"error,omitempty"`
+	ReadOnly          bool   `json:"readOnly"`
+	StateFilesRead    bool   `json:"stateFilesRead"`
+	StateFilesWritten bool   `json:"stateFilesWritten"`
+	TmuxMutation      bool   `json:"tmuxMutation"`
+}
+
 func health() healthResult {
 	return healthResult{
 		OK:                     true,
@@ -111,6 +134,7 @@ func profile(params map[string]any) profileResult {
 			"tmuxSnapshotParseConnected":           true,
 			"tmuxSnapshotCaptureConnected":         true,
 			"compactReadModelFingerprintConnected": true,
+			"workerLifecycleInspectPaneConnected":  true,
 			"panelConnected":                       false,
 			"taskReportPlanRunConnected":           false,
 		},
@@ -264,6 +288,91 @@ func splitTabs(line string) []string {
 	return fields
 }
 
+func tmuxBool(raw string) *bool {
+	trimmed := strings.TrimSpace(strings.ToLower(raw))
+	if trimmed == "" {
+		return nil
+	}
+	value := trimmed == "1" || trimmed == "true" || trimmed == "yes"
+	return &value
+}
+
+func unavailableWorkerPaneInspection(requestedPaneID string, kind string) workerPaneInspectionResult {
+	reason := "Go worker lifecycle inspectPane unavailable (" + kind + ")"
+	return workerPaneInspectionResult{
+		OK:                false,
+		Operation:         "inspectPane",
+		Capability:        "workerLifecycle",
+		PaneID:            requestedPaneID,
+		RequestedPaneID:   requestedPaneID,
+		Exists:            false,
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          true,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      false,
+	}
+}
+
+func inspectWorkerPane(params map[string]any) workerPaneInspectionResult {
+	requestedPaneID := strings.TrimSpace(stringParam(params, "paneId"))
+	if requestedPaneID == "" {
+		return unavailableWorkerPaneInspection(requestedPaneID, "invalid-pane-id")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "list-panes", "-a", "-F", workerLifecycleInspectPaneFormat)
+	cmd.Env = os.Environ()
+	output, err := cmd.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return unavailableWorkerPaneInspection(requestedPaneID, "tmux-command-timeout")
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return unavailableWorkerPaneInspection(requestedPaneID, "tmux-unavailable")
+		}
+		return unavailableWorkerPaneInspection(requestedPaneID, "tmux-command-failed")
+	}
+	for _, line := range splitLines(strings.TrimSpace(string(output))) {
+		fields := splitTabs(line)
+		if len(fields) < 4 || fields[0] != requestedPaneID {
+			continue
+		}
+		inMode := tmuxBool(fields[2])
+		mode := strings.TrimSpace(fields[3])
+		copyModeValue := strings.Contains(strings.ToLower(mode), "copy")
+		return workerPaneInspectionResult{
+			OK:                true,
+			Operation:         "inspectPane",
+			Capability:        "workerLifecycle",
+			PaneID:            fields[0],
+			RequestedPaneID:   requestedPaneID,
+			Exists:            true,
+			CurrentCommand:    strings.TrimSpace(fields[1]),
+			InMode:            inMode,
+			Mode:              mode,
+			CopyMode:          &copyModeValue,
+			ReadOnly:          true,
+			StateFilesRead:    false,
+			StateFilesWritten: false,
+			TmuxMutation:      false,
+		}
+	}
+	return unavailableWorkerPaneInspection(requestedPaneID, "pane-not-found")
+}
+
+func workerLifecycle(params map[string]any) workerPaneInspectionResult {
+	operation := stringParam(params, "operation")
+	if operation != "inspectPane" {
+		return unavailableWorkerPaneInspection(strings.TrimSpace(stringParam(params, "paneId")), "unsupported-operation")
+	}
+	return inspectWorkerPane(params)
+}
+
 func compactReadModelFingerprint(params map[string]any) compactReadModelResult {
 	projection := any(nil)
 	if params != nil {
@@ -339,6 +448,8 @@ func handle(request rpcRequest) rpcResponse {
 		return rpcResponse{JSONRPC: "2.0", ID: request.ID, Result: captureTmuxSnapshot(request.Params)}
 	case "compactReadModelFingerprint":
 		return rpcResponse{JSONRPC: "2.0", ID: request.ID, Result: compactReadModelFingerprint(request.Params)}
+	case "workerLifecycle":
+		return rpcResponse{JSONRPC: "2.0", ID: request.ID, Result: workerLifecycle(request.Params)}
 	default:
 		return rpcResponse{JSONRPC: "2.0", ID: request.ID, Error: &rpcError{Code: -32601, Message: "method not found"}}
 	}

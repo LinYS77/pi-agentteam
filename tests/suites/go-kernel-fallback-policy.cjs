@@ -7,7 +7,7 @@ const BAD_STDOUT_SENTINEL = 'FALLBACK_POLICY_BAD_STDOUT_SHOULD_NOT_LEAK'
 const BAD_STDERR_SENTINEL = 'FALLBACK_POLICY_BAD_STDERR_SHOULD_NOT_LEAK'
 const FULL_PATH_SENTINEL = 'fallback-policy-secret-helper-path'
 const FULL_TEXT_SENTINEL = 'FALLBACK_POLICY_FULL_TEXT_SHOULD_NOT_LEAK'
-const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
+const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle']
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 
 function writeHelper(name, source) {

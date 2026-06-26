@@ -70,6 +70,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.tmuxSnapshotParseConnected, true)
   assert.equal(result.profile.tmuxSnapshotCaptureConnected, true)
   assert.equal(result.profile.compactReadModelFingerprintConnected, true)
+  assert.equal(result.profile.workerLifecycleInspectPaneConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)
 }
@@ -134,6 +135,22 @@ function assertMethodResult(response, request, fingerprintModule) {
     assertReadModelResult(response.result, expectedFingerprint, expectedProjection)
     return
   }
+  if (request.method === 'workerLifecycle') {
+    assert.equal(response.result.operation, 'inspectPane')
+    assert.equal(response.result.capability, 'workerLifecycle')
+    assert.equal(response.result.readOnly, true)
+    assert.equal(response.result.stateFilesRead, false)
+    assert.equal(response.result.stateFilesWritten, false)
+    assert.equal(response.result.tmuxMutation, false)
+    if (response.result.ok === false) {
+      assert.equal(response.result.exists, false)
+      assert.equal(response.result.status, 'unknown')
+      assert.equal(response.result.resultMarker, 'stale')
+      assert.ok(['pane-not-found', 'unsupported-operation', 'tmux-command-timeout', 'tmux-command-failed', 'tmux-unavailable'].includes(response.result.failureKind))
+      assert.equal(/stdout|stderr|stack|MAILBOX_BODY|REPORT_BODY|worker transcript|rawState/i.test(JSON.stringify(response.result)), false)
+    }
+    return
+  }
   throw new Error(`unexpected method ${request.method}`)
 }
 
@@ -155,7 +172,7 @@ const baseHealth = {
   implementation: 'go',
   protocolVersion: 1,
   helperVersion: '0.3.0-read-model-shadow',
-  capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'],
+  capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'],
   businessPathsConnected: false,
 }
 function respond(result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n') }
@@ -279,6 +296,7 @@ module.exports = {
     assert.deepEqual(kernel.createKernelJsonRpcRequest('tmuxSnapshotParse', { stdout: 'x', capturedAt: 1 }, 'tmux-ts'), fixtures.request('tmuxSnapshotParse', { stdout: 'x', capturedAt: 1 }, 'tmux-ts'))
     assert.deepEqual(kernel.createKernelJsonRpcRequest('tmuxSnapshotCapture', { capturedAt: 2 }, 'tmux-capture-ts'), fixtures.request('tmuxSnapshotCapture', { capturedAt: 2 }, 'tmux-capture-ts'))
     assert.deepEqual(kernel.createKernelJsonRpcRequest('compactReadModelFingerprint', { input: { mode: 'attached' } }, 'read-ts'), fixtures.request('compactReadModelFingerprint', { input: { mode: 'attached' } }, 'read-ts'))
+    assert.deepEqual(kernel.createKernelJsonRpcRequest('workerLifecycle', { operation: 'inspectPane', paneId: '%x' }, 'worker-ts'), fixtures.request('workerLifecycle', { operation: 'inspectPane', paneId: '%x' }, 'worker-ts'))
 
     const directHelperRan = runDirectHelperContract(env, fingerprint)
     assert.equal(typeof directHelperRan, 'boolean')

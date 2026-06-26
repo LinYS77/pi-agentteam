@@ -38,7 +38,7 @@ function transpileCoreForDirect(root) {
   const distRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-v0629-preview-direct-dist-'))
   const coreRoot = path.join(distRoot, 'core')
   fs.mkdirSync(coreRoot, { recursive: true })
-  for (const rel of ['core/readModelFingerprint.ts', 'core/kernelPackagedResolver.ts', 'core/kernel.ts']) {
+  for (const rel of ['core/readModelFingerprint.ts', 'core/kernelContract.ts', 'core/kernelPackagedResolver.ts', 'core/kernel.ts']) {
     const sourcePath = path.join(root, rel)
     const sourceText = fs.readFileSync(sourcePath, 'utf8')
     const out = ts.transpileModule(sourceText, {
@@ -180,7 +180,7 @@ function helperSource(paneId, options = {}) {
     protocolVersion: 1,
     adapterVersion: HELPER_VERSION,
     helperVersion: HELPER_VERSION,
-    capabilities: ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint'],
+    capabilities: ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'],
     businessPathsConnected: false,
   }
   return `#!/usr/bin/env node
@@ -191,9 +191,10 @@ const request = input ? JSON.parse(input) : {}
 const health = ${JSON.stringify(health)}
 function respond(result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n') }
 if (request.method === 'health') respond(health)
-else if (request.method === 'profile') respond({ ...health, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, tmuxSnapshotCaptureConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
+else if (request.method === 'profile') respond({ ...health, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, tmuxSnapshotCaptureConnected: true, compactReadModelFingerprintConnected: true, workerLifecycleInspectPaneConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
 else if (request.method === 'tmuxSnapshotParse') respond({ ok: true, capturedAt: request.params.capturedAt, panes: [{ paneId: '${paneId}', target: 'preview:@1', label: '${options.label || 'preview'}', currentCommand: 'pi' }], byPaneId: { '${paneId}': { paneId: '${paneId}', target: 'preview:@1', label: '${options.label || 'preview'}', currentCommand: 'pi' } } })
 else if (request.method === 'compactReadModelFingerprint') respond({ ok: true, projection: request.params.input, fingerprint: 'helper-should-not-run-for-read-model', inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })
+else if (request.method === 'workerLifecycle') respond({ ok: false, operation: 'inspectPane', capability: 'workerLifecycle', paneId: request.params.paneId || '', requestedPaneId: request.params.paneId || '', exists: false, status: 'unknown', resultMarker: 'stale', failureKind: 'pane-not-found', reason: 'Go worker lifecycle inspectPane unavailable (pane-not-found)', error: 'Go worker lifecycle inspectPane unavailable (pane-not-found)', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false })
 else respond({ ok: true })
 `
 }

@@ -4,7 +4,7 @@ export const AGENTTEAM_KERNEL_PACKAGE_VERSION = '0.6.8' as const
 export const AGENTTEAM_KERNEL_PROTOCOL_VERSION = 1 as const
 export const AGENTTEAM_KERNEL_ADAPTER_VERSION = '0.3.0-read-model-shadow' as const
 export const AGENTTEAM_KERNEL_HELPER_VERSION = '0.3.0-read-model-shadow' as const
-export const AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'] as const
+export const AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'] as const
 export const AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED = false as const
 
 export const AGENTTEAM_KERNEL_CURRENT_NATIVE_MODULE = 'tmuxSnapshotParse' as const
@@ -57,7 +57,7 @@ export const AGENTTEAM_KERNEL_ARTIFACT_NAMING_DECISION = Object.freeze({
 })
 
 export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CAPABILITY = 'workerLifecycle' as const
-export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT_STATUS = 'design-only-not-runtime-capability' as const
+export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT_STATUS = 'runtime-inspect-pane-only' as const
 export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_JSONRPC_METHOD = 'workerLifecycle' as const
 export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_OPERATIONS = [
   {
@@ -102,7 +102,7 @@ export const AGENTTEAM_KERNEL_WORKER_LIFECYCLE_HELPER_CONNECTION_DECISION = Obje
   status: 'per-call-helper-initially-accepted' as const,
   longLivedHelperStatus: 'deferred-until-state-panel-or-high-frequency-paths' as const,
   appliesToCapability: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CAPABILITY,
-  runtimeCapabilityActive: false,
+  runtimeCapabilityActive: true,
   prerequisitesForLongLivedHelper: [
     'bounded request queue and backpressure policy',
     'timeout and cancellation propagation per request',
@@ -116,9 +116,11 @@ export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT = Object.freeze({
   status: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT_STATUS,
   capability: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CAPABILITY,
   jsonRpcMethod: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_JSONRPC_METHOD,
-  activeRuntimeCapability: false,
+  activeRuntimeCapability: true,
   operations: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_OPERATIONS,
   helperConnectionDecision: AGENTTEAM_KERNEL_WORKER_LIFECYCLE_HELPER_CONNECTION_DECISION,
+  activeOperations: ['inspectPane'] as const,
+  unsupportedOperationsFailClosed: true,
   facadeAuthority: 'TypeScript/pi facade and leader/task governance stay authoritative; Go may only be called through an explicit TS adapter seam.',
 })
 

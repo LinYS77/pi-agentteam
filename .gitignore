@@ -82,6 +82,7 @@ docs/perf/*
 !docs/perf/v0.6.50-go-tmux-snapshot-capture-cutover.md
 !docs/perf/v0.6.51-contract-constants-artifact-naming-gate.md
 !docs/perf/v0.6.52-worker-lifecycle-contract-gate.md
+!docs/perf/v0.6.53-go-inspect-pane-worker-lifecycle.md
 
 # Dependencies
 node_modules/

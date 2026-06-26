@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const DOC = 'docs/perf/v0.4.21-go-packaged-preview-resolver.md'
 const PLAN = 'docs/agentteam方案书.md'
-const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
+const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle']
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const SENTINELS = {
   stdout: 'PACKAGED_PREVIEW_STDOUT_SHOULD_NOT_LEAK',

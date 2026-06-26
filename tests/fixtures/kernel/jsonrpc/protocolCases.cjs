@@ -1,6 +1,6 @@
 const PROTOCOL_VERSION = 1
 const HELPER_VERSION = '0.3.0-read-model-shadow'
-const CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
+const CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle']
 
 const tmuxStdout = [
   '%pane-a\tsession:@1\tagentteam leader\tpi',
@@ -99,6 +99,10 @@ function validMethodCases() {
       name: 'compact read-model fingerprint',
       request: request('compactReadModelFingerprint', { input: compactReadModelInput(), extra: 'ignored' }, 'read-model-string-id'),
     },
+    {
+      name: 'worker lifecycle inspectPane missing pane',
+      request: request('workerLifecycle', { operation: 'inspectPane', paneId: '%missing-fixture-pane' }, 'worker-lifecycle-string-id'),
+    },
   ]
 }
 
@@ -131,6 +135,10 @@ function paramsCases() {
     {
       name: 'compact read-model valid compact payload',
       request: request('compactReadModelFingerprint', { input: compactReadModelInput() }, 'read-model-valid-payload'),
+    },
+    {
+      name: 'worker lifecycle unsupported operation fails closed',
+      request: request('workerLifecycle', { operation: 'killPane', paneId: '%unsupported-fixture-pane' }, 'worker-lifecycle-unsupported'),
     },
   ]
 }
@@ -196,6 +204,7 @@ function multipleRequestBatch() {
     request('tmuxSnapshotParse', { stdout: '%batch\ts:@1\tbatch label\tpi\n', capturedAt: 99 }, 'batch-tmux'),
     request('tmuxSnapshotCapture', { capturedAt: 100 }, 'batch-tmux-capture'),
     request('compactReadModelFingerprint', { input: compactReadModelInput() }, 'batch-read-model'),
+    request('workerLifecycle', { operation: 'inspectPane', paneId: '%batch-missing-pane' }, 'batch-worker-lifecycle'),
     { jsonrpc: '2.0', id: 'batch-unknown', method: 'unknownMethod' },
   ]
 }

@@ -211,7 +211,7 @@ process.stdout.write('{not json ${BAD_STDOUT_SENTINEL}\\n')
       assert.equal(metadata.kernel.calls, cases.length + 1, 'first adapter call should include health preflight, then one call per fixture')
       assert.equal(metadata.kernel.fallbacks, 0)
       assert.equal(metadata.kernel.businessPathsConnected, false)
-      assert.deepEqual(metadata.kernel.capabilities, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'])
+      assert.deepEqual(metadata.kernel.capabilities, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
     } finally {
       fs.rmSync(helperPath, { force: true })
     }

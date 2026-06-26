@@ -83,11 +83,14 @@ function assertGoHelperBoundaries(root) {
   assert.match(source, /func parseTmuxSnapshot\(params map\[string\]any\)/, 'Go helper should parse supplied tmuxSnapshotParse params')
   assert.match(source, /stdout := stringParam\(params, "stdout"\)/, 'Go helper should parse snapshot stdout')
   assert.match(source, /case "tmuxSnapshotCapture"/, 'post-v0.6.49 Go helper may own narrow tmux snapshot capture')
-  assert.match(source, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux command must be limited to snapshot capture')
+  assert.match(source, /case "workerLifecycle"/, 'post-v0.6.53 Go helper may own narrow workerLifecycle inspectPane')
+  assert.match(source, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux command must include snapshot capture')
+  assert.match(source, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", workerLifecycleInspectPaneFormat\)/, 'Go worker lifecycle command must be read-only inspectPane')
+  assert.match(source, /operation\s*!=\s*"inspectPane"/, 'Go workerLifecycle must reject non-inspectPane operations')
   assertNoMatches(GO_HELPER, source, [
     ['broad tmux subprocess command', /display-message|send-keys|kill-pane|split-window|new-window/],
     ['shell execution API', /\bexec\.Command\s*\(|\b(?:sh|bash|zsh|fish)\b/],
-    ['worker spawn/lifecycle authority', /worker\s*spawn|spawnWorker|WorkerSpawn|workerLifecycle|paneLost|forceReconcile|lightReconcile/],
+    ['worker spawn/mutating lifecycle authority', /worker\s*spawn|spawnWorker|WorkerSpawn|paneLost|forceReconcile|lightReconcile/],
     ['network/listener authority', /"net"|"net\/http"|\b(?:Listen|ListenAndServe|Accept|Dial|Serve)\s*\(/],
     ['repository file reads/writes', /\bos\.(?:Open|OpenFile|ReadFile|WriteFile|Create|CreateTemp|Remove|RemoveAll|Rename|Mkdir|MkdirAll)\s*\(/],
     ['agentteam home/state files', /PI_AGENTTEAM_HOME|team\.json|inboxes|outbox|reports|taskReports|(?:planRunWrite|PlanRunWrite|planRuns|activePlanRunId)|sidecar|cache(?:\.json|s)|(?:index\.json|indexes|indices)|package\.json/],

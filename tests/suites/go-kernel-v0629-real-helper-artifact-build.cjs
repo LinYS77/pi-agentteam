@@ -12,7 +12,7 @@ const PACKAGE_VERSION = '0.6.8'
 const MODULE = 'tmuxSnapshotParse'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const PROTOCOL_VERSION = 1
-const CAPABILITIES = ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
+const CAPABILITIES = ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle']
 const FIXED_GENERATED_AT = '2026-06-12T00:00:00.000Z'
 const FIXED_REVISION = 'fedcba9876543210fedcba9876543210fedcba98'
 const RUN_IDENTITY = 'v0629-real-helper-artifact-suite'
@@ -201,7 +201,7 @@ function validateProvenanceLicenseAttestation(fixture, manifest) {
   if (!provenance.source || provenance.source.path !== 'kernel/go/agentteam-kernel' || provenance.source.revision !== FIXED_REVISION) return compactFailure('provenance-missing', 'regenerate source provenance metadata', 'source')
   if (!provenance.build || provenance.build.generatedAt !== FIXED_GENERATED_AT || provenance.build.runIdentity !== RUN_IDENTITY || provenance.build.env?.GO111MODULE !== 'off' || !String(provenance.build.toolchain || '').startsWith('go version ')) return compactFailure('provenance-missing', 'regenerate build provenance metadata', 'build')
   if (!Array.isArray(provenance.build.command) || provenance.build.command.join(' ') !== `go build -trimpath -o ${manifest.artifact.path} .`) return compactFailure('provenance-missing', 'regenerate build command provenance', 'command')
-  if (!provenance.smoke || provenance.smoke.health !== true || provenance.smoke.tmuxSnapshotParse?.ok !== true) return compactFailure('provenance-missing', 'regenerate smoke provenance', 'smoke')
+  if (!provenance.smoke || provenance.smoke.health !== true || provenance.smoke.tmuxSnapshotParse?.ok !== true || !Array.isArray(provenance.smoke.workerLifecycleInspectPane?.acceptedFailureKinds)) return compactFailure('provenance-missing', 'regenerate smoke provenance', 'smoke')
 
   const licenseMetadataResult = safeParseJsonFile(licenseMetadataPath, 'license-missing', 'regenerate license metadata', 'license-json')
   if (!licenseMetadataResult.ok) return licenseMetadataResult.failure
@@ -442,6 +442,7 @@ module.exports = {
       assert.equal(fixture.summary.resultMarker, 'local-helper-artifact-built')
       assert.equal(fixture.summary.smoke.health, true)
       assert.equal(fixture.summary.smoke.tmuxSnapshotParse, true)
+      assert.equal(fixture.summary.smoke.workerLifecycleInspectPane, true)
       for (const relPath of [fixture.summary.artifact, ...Object.values(fixture.summary.files)]) assertSafeRelPath(relPath, 'summary path')
       assertNoMetadataLeaks([fixture.summary, fixture.manifest], [root, outputRoot, process.cwd()])
 

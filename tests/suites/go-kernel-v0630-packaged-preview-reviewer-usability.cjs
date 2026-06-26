@@ -110,7 +110,7 @@ if (args[0] === 'version') {
 }
 if (args[0] !== 'build') process.exit(2)
 const output = args[args.indexOf('-o') + 1]
-const health = ${JSON.stringify({ ok: true, implementation: 'go', protocolVersion: 1, helperVersion: HELPER_VERSION, capabilities: ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint'], businessPathsConnected: false })}
+const health = ${JSON.stringify({ ok: true, implementation: 'go', protocolVersion: 1, helperVersion: HELPER_VERSION, capabilities: ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'], businessPathsConnected: false })}
 const helperSource = [
   '#!/usr/bin/env node',
   "const fs = require('node:fs')",
@@ -120,9 +120,10 @@ const helperSource = [
   'const health = ' + JSON.stringify(health),
   "function respond(result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\\\n') }",
   "if (request.method === 'health') respond(health)",
-  "else if (request.method === 'profile') respond({ ...health, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, tmuxSnapshotCaptureConnected: true, compactReadModelFingerprintConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })",
+  "else if (request.method === 'profile') respond({ ...health, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, tmuxSnapshotCaptureConnected: true, compactReadModelFingerprintConnected: true, workerLifecycleInspectPaneConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })",
   "else if (request.method === 'tmuxSnapshotParse') respond({ ok: true, capturedAt: Number((request.params || {}).capturedAt || 0), panes: [{ paneId: '%1', target: 'review:@1', label: 'reviewer', currentCommand: 'pi' }], byPaneId: { '%1': { paneId: '%1', target: 'review:@1', label: 'reviewer', currentCommand: 'pi' } } })",
   "else if (request.method === 'compactReadModelFingerprint') respond({ ok: true, projection: request.params && request.params.input, fingerprint: 'helper-should-not-run', inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })",
+  "else if (request.method === 'workerLifecycle') respond({ ok: false, operation: 'inspectPane', capability: 'workerLifecycle', paneId: (request.params || {}).paneId || '', requestedPaneId: (request.params || {}).paneId || '', exists: false, status: 'unknown', resultMarker: 'stale', failureKind: 'pane-not-found', reason: 'Go worker lifecycle inspectPane unavailable (pane-not-found)', error: 'Go worker lifecycle inspectPane unavailable (pane-not-found)', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false })",
   "else process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, error: { code: -32601, message: 'method not found' } }) + '\\\\n')",
 ].join('\\n') + '\\n'
 fs.mkdirSync(path.dirname(output), { recursive: true })
@@ -209,7 +210,7 @@ function writeHelper(root, source) {
 }
 
 function helperSource(paneId) {
-  const health = { ok: true, implementation: 'go', protocolVersion: 1, helperVersion: HELPER_VERSION, capabilities: ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint'], businessPathsConnected: false }
+  const health = { ok: true, implementation: 'go', protocolVersion: 1, helperVersion: HELPER_VERSION, capabilities: ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'], businessPathsConnected: false }
   return `#!/usr/bin/env node
 const fs = require('node:fs')
 if (process.env.SHOULD_NOT_RUN_FILE) fs.writeFileSync(process.env.SHOULD_NOT_RUN_FILE, 'called')

@@ -6,7 +6,7 @@
   "module": "tmuxSnapshotParse",
   "source": {
     "path": "kernel/go/agentteam-kernel",
-    "revision": "v0650-go-tmux-snapshot-capture"
+    "revision": "v0653-go-inspect-pane-worker-lifecycle"
   },
   "build": {
     "command": [
@@ -22,8 +22,8 @@
     },
     "cwd": "kernel/go/agentteam-kernel",
     "toolchain": "go version go1.25.10 linux/amd64",
-    "runIdentity": "v0650-go-tmux-snapshot-capture",
-    "generatedAt": "2026-06-25T00:00:00.000Z"
+    "runIdentity": "v0653-go-inspect-pane-worker-lifecycle",
+    "generatedAt": "2026-06-26T00:00:00.000Z"
   },
   "smoke": {
     "health": true,
@@ -32,9 +32,10 @@
       "paneCount": 1,
       "capturedAt": 1700000000000
     },
-    "tmuxSnapshotCapture": {
+    "workerLifecycleInspectPane": {
       "ok": false,
       "acceptedFailureKinds": [
+        "pane-not-found",
         "tmux-command-failed",
         "tmux-unavailable",
         "tmux-command-timeout"

@@ -62,6 +62,7 @@ const REQUIRED_ROADMAP = [
   'no native path/binary rename、no runtime migration、no package/release action',
   '**v0.6.51 contract constants and artifact naming gate**',
 ]
+const CURRENT_REQUIRED_CAPABILITIES = [...REQUIRED_CAPABILITIES, 'workerLifecycle']
 const RELEASE_OVERCLAIMS = [
   'npm publish completed',
   'npm version completed',
@@ -141,7 +142,7 @@ function assertRuntimeContractModule(env) {
   assert.equal(contract.AGENTTEAM_KERNEL_PROTOCOL_VERSION, PROTOCOL_VERSION)
   assert.equal(contract.AGENTTEAM_KERNEL_ADAPTER_VERSION, ADAPTER_VERSION)
   assert.equal(contract.AGENTTEAM_KERNEL_HELPER_VERSION, HELPER_VERSION)
-  assert.deepEqual(contract.AGENTTEAM_KERNEL_CAPABILITIES, [...REQUIRED_CAPABILITIES])
+  assert.deepEqual(contract.AGENTTEAM_KERNEL_CAPABILITIES, CURRENT_REQUIRED_CAPABILITIES)
   assert.equal(contract.AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED, false)
   assert.equal(contract.AGENTTEAM_KERNEL_CURRENT_NATIVE_MODULE, CURRENT_NATIVE_MODULE)
   assert.equal(contract.AGENTTEAM_KERNEL_TMUX_SNAPSHOT_CAPTURE_MODULE, TMUX_SNAPSHOT_CAPTURE_MODULE)
@@ -206,7 +207,7 @@ function assertPackageManifestGoBuilderDriftGuards(root) {
   assert.equal(manifest.module, CURRENT_NATIVE_MODULE)
   assert.equal(manifest.helperVersion, HELPER_VERSION)
   assert.equal(manifest.protocolVersion, PROTOCOL_VERSION)
-  assert.deepEqual(manifest.capabilities, [...REQUIRED_CAPABILITIES])
+  assert.deepEqual(manifest.capabilities, CURRENT_REQUIRED_CAPABILITIES)
   assert.equal(manifest.businessPathsConnected, false)
   assert.equal(manifest.target, CURRENT_NATIVE_TARGET)
   assert.equal(manifest.artifact.path, `${CURRENT_NATIVE_ROOT}/${CURRENT_NATIVE_BINARY}`)
@@ -217,7 +218,7 @@ function assertPackageManifestGoBuilderDriftGuards(root) {
   const goSource = read(root, GO_SOURCE)
   assert.equal(Number(goSource.match(/const\s+protocolVersion\s*=\s*(\d+)/)?.[1]), PROTOCOL_VERSION)
   assert.equal(goSource.match(/const\s+helperVersion\s*=\s*"([^"]+)"/)?.[1], HELPER_VERSION)
-  assert.deepEqual(parseGoCapabilities(goSource), [...REQUIRED_CAPABILITIES])
+  assert.deepEqual(parseGoCapabilities(goSource), CURRENT_REQUIRED_CAPABILITIES)
   assert.match(goSource, /case "tmuxSnapshotParse"/, 'Go helper should still expose current parser module')
   assert.match(goSource, /case "tmuxSnapshotCapture"/, 'Go helper should still expose capture module')
 
@@ -246,9 +247,10 @@ function assertNoRuntimeMigration(root) {
   const goSource = read(root, GO_SOURCE)
   assertIncludes(kernel, "callHelper<unknown>('tmuxSnapshotParse', { stdout, capturedAt })", KERNEL)
   assertIncludes(kernel, "callHelper<unknown>('tmuxSnapshotCapture', { capturedAt })", KERNEL)
-  for (const forbidden of ['workerLifecycle', 'stateRepository', 'teamPanelViewModel', 'packageReleaseVerify']) {
+  for (const forbidden of ['stateRepository', 'teamPanelViewModel', 'packageReleaseVerify']) {
     assert.equal(goSource.includes(forbidden), false, `${GO_SOURCE} must not migrate ${forbidden}`)
   }
+  assert.equal(/operation\s*!=\s*"inspectPane"/.test(goSource), true, `${GO_SOURCE} workerLifecycle must be scoped to inspectPane only after v0.6.53`)
   assert.equal(/case\s+"taskReportPlanRun"/.test(goSource), false, `${GO_SOURCE} must not add taskReportPlanRun RPC handling`)
   for (const forbidden of ['agentteamKernel/<helperVersion>', 'agentteamControlPlaneCore/<helperVersion>']) {
     assert.equal(read(root, 'package.json').includes(forbidden), false, 'package files must not include future artifact paths yet')

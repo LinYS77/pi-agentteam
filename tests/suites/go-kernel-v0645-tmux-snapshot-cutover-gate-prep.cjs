@@ -392,7 +392,7 @@ function assertDistRuntimeCutoverCoverage(env) {
   assert.equal(kernel.normalizeAgentTeamKernelMode(''), 'default')
   assert.equal(kernel.normalizeAgentTeamKernelMode('go-cutover'), 'go-cutover')
   assert.equal(kernel.normalizeAgentTeamKernelMode('go-packaged-preview'), 'go-packaged-preview')
-  assert.deepEqual(kernel.AGENTTEAM_KERNEL_CAPABILITIES, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'])
+  assert.deepEqual(kernel.AGENTTEAM_KERNEL_CAPABILITIES, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
   assert.equal(kernel.AGENTTEAM_KERNEL_CUTOVER_MODULE, 'tmuxSnapshotParse')
   assert.deepEqual(kernel.AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS, [...FAILURE_CLASSES])
 

@@ -39,10 +39,7 @@ const BROAD_GO_LIFECYCLE_COMMANDS = [
   'select-pane',
   'respawn-pane',
 ]
-const FORBIDDEN_RUNTIME_TERMS = [
-  'callHelper<unknown>(\'workerLifecycle\'',
-  'createKernelJsonRpcRequest(\'workerLifecycle\'',
-]
+const CURRENT_RUNTIME_CAPABILITIES = [...ACTIVE_RUNTIME_CAPABILITIES, FUTURE_CAPABILITY]
 const REQUIRED_DOC = [
   '# v0.6.52 Worker Lifecycle Contract Gate',
   'Result: v0.6.52 defines the future Go worker lifecycle JSON-RPC boundary and helper connection model as a non-runtime gate.',
@@ -93,8 +90,8 @@ const RELEASE_OVERCLAIMS = [
   'taskReportPlanRunMigrated: true',
   'teamPanelViewModelMigrated: true',
   'releasePackageVerificationMigrated: true',
-  'runtimeCapabilityActive: true',
-  'goHandlerActive: true',
+  'stateRepositoryMigrated: true',
+  'goHandlerActive: true for mutating operations',
   'nativeArtifactRenamed: true',
   'packageReleaseApproved: true',
 ]
@@ -160,17 +157,18 @@ function assertFixtureShape(root) {
 function assertContractModule(env) {
   if (typeof env.helpers.requireDist !== 'function') return
   const contract = env.helpers.requireDist('core/kernelContract.js')
-  assert.deepEqual(contract.AGENTTEAM_KERNEL_CAPABILITIES, [...ACTIVE_RUNTIME_CAPABILITIES])
-  assert.equal(contract.AGENTTEAM_KERNEL_CAPABILITIES.includes(FUTURE_CAPABILITY), false, 'workerLifecycle must not be active runtime capability')
+  assert.deepEqual(contract.AGENTTEAM_KERNEL_CAPABILITIES, CURRENT_RUNTIME_CAPABILITIES)
+  assert.equal(contract.AGENTTEAM_KERNEL_CAPABILITIES.includes(FUTURE_CAPABILITY), true, 'v0.6.53 activates workerLifecycle for inspectPane only')
   assert.equal(contract.AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CAPABILITY, FUTURE_CAPABILITY)
-  assert.equal(contract.AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT_STATUS, CONTRACT_STATUS)
+  assert.equal(contract.AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT_STATUS, 'runtime-inspect-pane-only')
   assert.equal(contract.AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_JSONRPC_METHOD, FUTURE_JSONRPC_METHOD)
   assert.deepEqual(contract.AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_OPERATIONS, JSON.parse(JSON.stringify(FUTURE_WORKER_LIFECYCLE_OPERATIONS)))
   assert.equal(contract.AGENTTEAM_KERNEL_WORKER_LIFECYCLE_HELPER_CONNECTION_DECISION.status, HELPER_CONNECTION_MODEL.status)
   assert.equal(contract.AGENTTEAM_KERNEL_WORKER_LIFECYCLE_HELPER_CONNECTION_DECISION.longLivedHelperStatus, HELPER_CONNECTION_MODEL.longLivedHelperStatus)
   assert.deepEqual(contract.AGENTTEAM_KERNEL_WORKER_LIFECYCLE_HELPER_CONNECTION_DECISION.prerequisitesForLongLivedHelper, [...HELPER_CONNECTION_MODEL.prerequisitesForLongLivedHelper])
-  assert.equal(contract.AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT.activeRuntimeCapability, false)
-  assert.equal(contract.AGENTTEAM_KERNEL_CONTRACT.futureWorkerLifecycleContract.status, CONTRACT_STATUS)
+  assert.equal(contract.AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT.activeRuntimeCapability, true)
+  assert.deepEqual(contract.AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT.activeOperations, ['inspectPane'])
+  assert.equal(contract.AGENTTEAM_KERNEL_CONTRACT.futureWorkerLifecycleContract.status, 'runtime-inspect-pane-only')
 }
 
 function assertRuntimeAndGoUnchanged(root) {
@@ -189,18 +187,19 @@ function assertRuntimeAndGoUnchanged(root) {
   }
   for (const rel of ROOT_FORBIDDEN_FILES) assert.equal(exists(root, rel), false, `${rel} must not exist`)
 
-  assert.deepEqual(manifest.capabilities, [...ACTIVE_RUNTIME_CAPABILITIES])
-  assert.equal(manifest.capabilities.includes(FUTURE_CAPABILITY), false, 'manifest must not advertise workerLifecycle')
+  assert.deepEqual(manifest.capabilities, CURRENT_RUNTIME_CAPABILITIES)
+  assert.equal(manifest.capabilities.includes(FUTURE_CAPABILITY), true, 'v0.6.53 manifest advertises workerLifecycle for inspectPane only')
   assert.equal(manifest.module, 'tmuxSnapshotParse')
   assert.equal(manifest.artifact.filename, 'agentteam-tmuxSnapshotParse')
 
-  assert.deepEqual(parseGoCapabilities(goSource), [...ACTIVE_RUNTIME_CAPABILITIES])
-  assert.equal(parseGoCapabilities(goSource).includes(FUTURE_CAPABILITY), false, 'Go health must not advertise workerLifecycle')
-  assert.equal(/case\s+"workerLifecycle"/.test(goSource), false, 'Go must not add workerLifecycle handler')
+  assert.deepEqual(parseGoCapabilities(goSource), CURRENT_RUNTIME_CAPABILITIES)
+  assert.equal(parseGoCapabilities(goSource).includes(FUTURE_CAPABILITY), true, 'v0.6.53 Go health advertises workerLifecycle for inspectPane only')
+  assert.match(goSource, /case\s+"workerLifecycle"/, 'v0.6.53 adds workerLifecycle inspectPane handler')
+  assert.equal(/operation\s*!=\s*"inspectPane"/.test(goSource), true, 'workerLifecycle must reject unsupported operations')
   for (const command of BROAD_GO_LIFECYCLE_COMMANDS) assert.equal(goSource.includes(command), false, `${GO_SOURCE} must not add broad tmux lifecycle command ${command}`)
   assertIncludes(goSource, ALLOWED_GO_TMUX_COMMAND, GO_SOURCE)
 
-  for (const forbidden of FORBIDDEN_RUNTIME_TERMS) assert.equal(kernel.includes(forbidden), false, `${KERNEL} must not call future workerLifecycle helper`)
+  assertIncludes(kernel, "callHelper<unknown>('workerLifecycle', { operation: 'inspectPane'", KERNEL)
   assertIncludes(kernel, "callHelper<unknown>('tmuxSnapshotParse', { stdout, capturedAt })", KERNEL)
   assertIncludes(kernel, "callHelper<unknown>('tmuxSnapshotCapture', { capturedAt })", KERNEL)
 }
@@ -208,11 +207,11 @@ function assertRuntimeAndGoUnchanged(root) {
 function assertContractSource(root) {
   const source = read(root, CONTRACT)
   assertIncludes(source, `AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CAPABILITY = '${FUTURE_CAPABILITY}'`, CONTRACT)
-  assertIncludes(source, `AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT_STATUS = '${CONTRACT_STATUS}'`, CONTRACT)
+  assertIncludes(source, "AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT_STATUS = 'runtime-inspect-pane-only'", CONTRACT)
   assertIncludes(source, `AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_JSONRPC_METHOD = '${FUTURE_JSONRPC_METHOD}'`, CONTRACT)
   assertIncludes(source, 'AGENTTEAM_KERNEL_WORKER_LIFECYCLE_HELPER_CONNECTION_DECISION', CONTRACT)
   assertIncludes(source, 'futureWorkerLifecycleContract: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT', CONTRACT)
-  assert.equal(/AGENTTEAM_KERNEL_CAPABILITIES\s*=\s*\[[^\]]*workerLifecycle/s.test(source), false, `${CONTRACT} must not add workerLifecycle to active capabilities`)
+  assert.equal(/AGENTTEAM_KERNEL_CAPABILITIES\s*=\s*\[[^\]]*workerLifecycle/s.test(source), true, `${CONTRACT} should add workerLifecycle only after v0.6.53 inspectPane activation`)
 }
 
 function assertDocs(root) {

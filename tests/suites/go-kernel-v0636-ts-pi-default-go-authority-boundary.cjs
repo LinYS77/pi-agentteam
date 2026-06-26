@@ -35,9 +35,9 @@ const REQUIRED_DOC = [
   '`package.json#pi.extensions` remains exactly `["./index.ts"]`.',
   '`index.ts` remains the default extension factory and registers commands, tools, renderers, and hooks through TypeScript imports.',
   '`index.ts` remains narrow and does not become a broad public barrel or native/default/release API surface.',
-  'Go authority remains bounded to the helper/kernel seam behind the TypeScript adapter for `tmuxSnapshotParse`.',
-  'Go must not own pi extension lifecycle, commands, tools, UI, renderers, hooks, tmux capture or execution, worker lifecycle, task/report/PlanRun governance, package/release authority, state/mailbox/report full-text access, or `compactReadModelFingerprint` cutover.',
-  '`kernel/go/agentteam-kernel/main.go` remains a stdio JSON-RPC helper and must not include pi registration, tmux execution or shell ownership, state/mailbox/task/report/package/release ownership, hosted workflow control, token use, package publishing, or native/default control-plane APIs.',
+  'Go authority remains bounded to the helper/kernel seam behind the TypeScript adapter for `tmuxSnapshotParse` plus the v0.6.53 read-only `workerLifecycle.inspectPane` slice.',
+  'Go must not own pi extension lifecycle, commands, tools, UI, renderers, hooks, mutating tmux execution, mutating worker lifecycle, task/report/PlanRun governance, package/release authority, state/mailbox/report full-text access, or `compactReadModelFingerprint` cutover.',
+  '`kernel/go/agentteam-kernel/main.go` remains a stdio JSON-RPC helper and must not include pi registration, mutating tmux execution or shell ownership, state/mailbox/task/report/package/release ownership, hosted workflow control, token use, package publishing, or native/default control-plane APIs.',
   '`core/kernel.ts` and `core/kernelPackagedResolver.ts` must not import pi APIs or expose product UI/control-plane registration.',
   '`api/commands.ts`, `api/tools.ts`, command files, tool files, and readiness files must not expose native/default/release controls.',
   'Runtime/default boundaries remain unchanged: default/unset stays TypeScript/non-native, `go-cutover` is explicit, `go-packaged-preview` is explicit-only, and no default resolver discovery is added.',
@@ -202,18 +202,23 @@ function assertTypeScriptControlPlane(root) {
 function assertGoAuthorityBounded(root) {
   const goSource = read(root, 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, 'package main', 'kernel/go/agentteam-kernel/main.go')
-  assertIncludes(goSource, 'var capabilities = []string{"health", "profile", "tmuxSnapshotParse", "tmuxSnapshotCapture", "compactReadModelFingerprint"}', 'kernel/go/agentteam-kernel/main.go')
+  assertIncludes(goSource, 'var capabilities = []string{"health", "profile", "tmuxSnapshotParse", "tmuxSnapshotCapture", "compactReadModelFingerprint", "workerLifecycle"}', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, 'case "tmuxSnapshotParse":', 'kernel/go/agentteam-kernel/main.go')
+  assertIncludes(goSource, 'case "workerLifecycle":', 'kernel/go/agentteam-kernel/main.go')
+  assertIncludes(goSource, 'operation != "inspectPane"', 'kernel/go/agentteam-kernel/main.go')
+  assertIncludes(goSource, 'workerLifecycleInspectPaneFormat', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, 'BusinessPathsConnected: false', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, '"scope":                                "skeleton-only",', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, '"stateConnected":                       false,', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, '"tmuxConnected":                        false,', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, '"panelConnected":                       false,', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, '"taskReportPlanRunConnected":           false,', 'kernel/go/agentteam-kernel/main.go')
+  assert.match(goSource, /"workerLifecycleInspectPaneConnected":\s+true,/, 'kernel/go/agentteam-kernel/main.go should expose inspectPane profile connectivity')
   assertIncludes(goSource, 'FullTextIncluded:  false,', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, 'StateFilesRead:    false,', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, 'StateFilesWritten: false,', 'kernel/go/agentteam-kernel/main.go')
   assert.equal(GO_FORBIDDEN_TERMS.test(goSource), false, 'Go helper must not own pi/control-plane/package/release/full-text authority')
+  assert.equal(/send-keys|kill-pane|split-window|new-window|display-message|capture-pane/.test(goSource), false, 'Go workerLifecycle must not add mutating tmux lifecycle commands')
   assert.equal(/os\.Stdin|os\.Stdout/.test(goSource), true, 'Go helper should remain stdio JSON-RPC')
 }
 

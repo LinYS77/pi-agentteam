@@ -22,7 +22,7 @@ const REQUIRED_PACKAGE_FILES = [
   MANIFEST_FILENAME,
   HELPER_FILENAME,
 ]
-const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint']
+const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle']
 const SENTINELS = {
   stdout: 'ARTIFACT_PROTOTYPE_STDOUT_SHOULD_NOT_LEAK',
   stderr: 'ARTIFACT_PROTOTYPE_STDERR_SHOULD_NOT_LEAK',

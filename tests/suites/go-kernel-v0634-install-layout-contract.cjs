@@ -145,7 +145,7 @@ function assertPackagedResolverContractConstants(root) {
     "AGENTTEAM_KERNEL_CURRENT_NATIVE_MODULE = 'tmuxSnapshotParse'",
     'AGENTTEAM_KERNEL_PROTOCOL_VERSION = 1',
     "AGENTTEAM_KERNEL_HELPER_VERSION = '0.3.0-read-model-shadow'",
-    "AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'] as const",
+    "AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'] as const",
     'AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED = false',
   ]) assertIncludes(contract, expected, 'kernel contract constants')
   for (const expected of [
