@@ -56,6 +56,72 @@ export const AGENTTEAM_KERNEL_ARTIFACT_NAMING_DECISION = Object.freeze({
   rationale: 'v0.6.51 guards the existing embedded tmuxSnapshotParse artifact path while documenting broader future kernel/control-plane naming options.',
 })
 
+export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CAPABILITY = 'workerLifecycle' as const
+export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT_STATUS = 'design-only-not-runtime-capability' as const
+export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_JSONRPC_METHOD = 'workerLifecycle' as const
+export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_OPERATIONS = [
+  {
+    operation: 'inspectPane',
+    phase: 'read-only-first',
+    mutatesTmux: false,
+    authority: 'typescript-governed-explicit-adapter-call',
+  },
+  {
+    operation: 'listAgentTeamPanes',
+    phase: 'read-only-first',
+    mutatesTmux: false,
+    authority: 'typescript-governed-explicit-adapter-call',
+  },
+  {
+    operation: 'wakePane',
+    phase: 'later-mutating',
+    mutatesTmux: true,
+    authority: 'typescript-governed-explicit-adapter-call',
+  },
+  {
+    operation: 'syncPaneLabels',
+    phase: 'later-mutating',
+    mutatesTmux: true,
+    authority: 'typescript-governed-explicit-adapter-call',
+  },
+  {
+    operation: 'createTeammatePane',
+    phase: 'later-high-risk',
+    mutatesTmux: true,
+    authority: 'typescript-governed-explicit-adapter-call',
+  },
+  {
+    operation: 'killPane',
+    phase: 'last-highest-risk',
+    mutatesTmux: true,
+    authority: 'typescript-governed-explicit-adapter-call',
+  },
+] as const
+
+export const AGENTTEAM_KERNEL_WORKER_LIFECYCLE_HELPER_CONNECTION_DECISION = Object.freeze({
+  status: 'per-call-helper-initially-accepted' as const,
+  longLivedHelperStatus: 'deferred-until-state-panel-or-high-frequency-paths' as const,
+  appliesToCapability: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CAPABILITY,
+  runtimeCapabilityActive: false,
+  prerequisitesForLongLivedHelper: [
+    'bounded request queue and backpressure policy',
+    'timeout and cancellation propagation per request',
+    'crash detection and restart budget',
+    'health preflight and version/capability renegotiation',
+    'no raw stdout/stderr/cwd/stack leakage in diagnostics',
+  ] as const,
+})
+
+export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT = Object.freeze({
+  status: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT_STATUS,
+  capability: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CAPABILITY,
+  jsonRpcMethod: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_JSONRPC_METHOD,
+  activeRuntimeCapability: false,
+  operations: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_OPERATIONS,
+  helperConnectionDecision: AGENTTEAM_KERNEL_WORKER_LIFECYCLE_HELPER_CONNECTION_DECISION,
+  facadeAuthority: 'TypeScript/pi facade and leader/task governance stay authoritative; Go may only be called through an explicit TS adapter seam.',
+})
+
 export const AGENTTEAM_KERNEL_CONTRACT = Object.freeze({
   schemaVersion: AGENTTEAM_KERNEL_CONTRACT_SCHEMA_VERSION,
   packageName: AGENTTEAM_KERNEL_PACKAGE_NAME,
@@ -73,4 +139,5 @@ export const AGENTTEAM_KERNEL_CONTRACT = Object.freeze({
   embeddedHelperManifestPath: AGENTTEAM_KERNEL_EMBEDDED_HELPER_MANIFEST_PATH,
   approvedEmbeddedNativeFiles: AGENTTEAM_KERNEL_APPROVED_EMBEDDED_NATIVE_FILES,
   artifactNamingDecision: AGENTTEAM_KERNEL_ARTIFACT_NAMING_DECISION,
+  futureWorkerLifecycleContract: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT,
 })
