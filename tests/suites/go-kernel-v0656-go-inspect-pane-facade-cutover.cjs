@@ -41,7 +41,8 @@ const REQUIRED_DOC = [
   'Successful adapter results map to `{ paneId, exists:true, currentCommand, inMode, mode, copyMode }`.',
   'Failed adapter results map to `{ paneId, exists:false, error }`.',
   'Kernel-level diagnostics remain compact on the adapter result and do not leak raw stdout, stderr, cwd, stack traces, state archives, mailbox bodies, report bodies, or worker transcripts.',
-  '`targetForPaneId()`, `captureCurrentPaneBinding()`, `paneExists()`, and `resolvePaneBinding()` remain TypeScript `display-message` paths.',
+  '`paneExists()` remains outside the v0.6.56 inspect facade slice and is cut over separately by v0.6.57.',
+  '`targetForPaneId()`, `captureCurrentPaneBinding()`, and `resolvePaneBinding()` remain TypeScript `display-message` paths.',
   '`listAgentTeamPanes()` remains delegated to `createAgentTeamKernelAdapter().listAgentTeamPanes()`.',
   'No Go source or native helper rebuild is required for this facade-only cutover.',
   '`package.json` remains `0.6.8`.',
@@ -54,6 +55,7 @@ const REQUIRED_ROADMAP = [
   'tmux/core.ts inspectPane(paneId) delegates to createAgentTeamKernelAdapter().inspectWorkerPane(paneId)',
   'the TypeScript display-message fallback for inspectPane is removed',
   'targetForPaneId and captureCurrentPaneBinding remain TypeScript display-message-owned',
+  'paneExists is cut over separately by v0.6.57',
   '**v0.6.56 Go inspectPane facade cutover**',
 ]
 const RELEASE_OVERCLAIMS = [
@@ -136,6 +138,7 @@ function assertFixtureShape(root) {
   assert.equal(goInspectPaneFacadeCutover.typescriptDisplayMessageFallbackRemoved, true)
   assert.equal(goInspectPaneFacadeCutover.failClosedExistsFalseOnHelperFailure, true)
   assert.equal(goInspectPaneFacadeCutover.compactInspectionFieldsOnly, true)
+  assert.equal(goInspectPaneFacadeCutover.paneExistsFacadeMigratedByLaterSlice, true)
   assert.equal(goInspectPaneFacadeCutover.listAgentTeamPanesFacadeStillMigrated, true)
   assert.equal(goInspectPaneFacadeCutover.targetForPaneIdMigrated, false)
   assert.equal(goInspectPaneFacadeCutover.captureCurrentPaneBindingMigrated, false)
@@ -197,7 +200,8 @@ function assertFacadeSource(root) {
   assert.equal(listBody.includes('runTmuxNoThrow(['), false, 'listAgentTeamPanes facade must remain cut over to Go')
   assert.equal(targetBody.includes('display-message'), true, 'targetForPaneId must remain TypeScript display-message path')
   assert.equal(captureBody.includes('display-message'), true, 'captureCurrentPaneBinding must remain TypeScript display-message path')
-  assert.equal(paneExistsBody.includes('display-message'), true, 'paneExists must remain TypeScript display-message path')
+  assertIncludes(paneExistsBody, 'return Boolean(paneId && inspectPane(paneId).exists)', `${TMUX_CORE} paneExists later cutover`)
+  assert.equal(paneExistsBody.includes('display-message'), false, 'paneExists display-message path is removed by later v0.6.57 slice')
   assert.equal(resolveBody.includes('display-message'), true, 'resolvePaneBinding must remain TypeScript display-message path')
   assert.equal(windowExistsBody.includes('list-panes'), true, 'windowExists must remain TypeScript window helper path')
   assert.equal(firstPaneBody.includes('list-panes'), true, 'firstPaneInWindow must remain TypeScript window helper path')

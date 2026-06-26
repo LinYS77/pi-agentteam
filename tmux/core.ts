@@ -76,8 +76,7 @@ export function inspectPane(paneId: string): PaneInspection {
 }
 
 export function paneExists(paneId: string): boolean {
-  if (!paneId) return false
-  return runTmuxNoThrow(['display-message', '-p', '-t', paneId, '#{pane_id}']).ok
+  return Boolean(paneId && inspectPane(paneId).exists)
 }
 
 export function resolvePaneBinding(paneId: string): PaneBinding | null {

@@ -154,6 +154,7 @@ module.exports = {
           if (rel === 'tmux/core.ts') {
             assert.equal(text.includes("import { createAgentTeamKernelAdapter } from '../core/kernel.js'"), true, `${rel} must keep only approved worker lifecycle facade seams`)
             assert.equal(text.includes('createAgentTeamKernelAdapter().inspectWorkerPane(paneId)'), true, `${rel} must keep the approved inspectPane facade seam`)
+            assert.equal(text.includes('return Boolean(paneId && inspectPane(paneId).exists)'), true, `${rel} must keep the approved paneExists facade seam`)
             assert.equal(text.includes('createAgentTeamKernelAdapter().listAgentTeamPanes()'), true, `${rel} must keep the approved listAgentTeamPanes facade seam`)
             assert.equal((text.match(/core\/kernel\.js/g) || []).length, 1, `${rel} must not add more Go kernel imports`)
             continue

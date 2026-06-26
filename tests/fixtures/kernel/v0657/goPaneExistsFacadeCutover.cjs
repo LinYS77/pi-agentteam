@@ -1,23 +1,22 @@
-const GO_INSPECT_PANE_FACADE_CUTOVER_SCHEMA_VERSION = 1
-const GO_INSPECT_PANE_FACADE_CUTOVER_THEME = 'v0.6.56 Go inspectPane facade cutover'
+const GO_PANE_EXISTS_FACADE_CUTOVER_SCHEMA_VERSION = 1
+const GO_PANE_EXISTS_FACADE_CUTOVER_THEME = 'v0.6.57 Go paneExists facade cutover'
 const PACKAGE_VERSION = '0.6.8'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const PROTOCOL_VERSION = 1
 const CAPABILITY = 'workerLifecycle'
 const ACTIVE_OPERATIONS = Object.freeze(['inspectPane', 'listAgentTeamPanes'])
 const ACTIVE_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
-const FACADE_NAME = 'inspectPane'
-const KERNEL_ADAPTER_DELEGATION = 'createAgentTeamKernelAdapter().inspectWorkerPane(paneId)'
-const SUCCESS_MAPPING = Object.freeze(['paneId', 'exists', 'currentCommand', 'inMode', 'mode', 'copyMode'])
-const FAILURE_MAPPING = Object.freeze(['paneId', 'exists', 'error'])
+const FACADE_NAME = 'paneExists'
+const GO_BACKED_INSPECT_PATH = 'Boolean(paneId && inspectPane(paneId).exists)'
 const PRESERVED_BOUNDARIES = Object.freeze([
-  'inspectPane facade delegates to Go workerLifecycle adapter',
-  'TypeScript display-message fallback removed for inspectPane facade',
+  'paneExists facade delegates to the Go-backed inspectPane facade',
+  'TypeScript display-message fallback removed for paneExists facade',
+  'inspectPane facade remains Go-owned',
   'listAgentTeamPanes facade remains Go-owned',
   'targetForPaneId remains TypeScript display-message-owned',
   'captureCurrentPaneBinding remains TypeScript display-message-owned',
-  'paneExists is cut over by v0.6.57, not this slice',
   'resolvePaneBinding remains TypeScript display-message-owned',
+  'resolvePaneBindingAsync remains TypeScript display-message-owned',
   'window helpers remain TypeScript tmux-owned',
   'wake/create/label/kill lifecycle remains TypeScript-owned',
   'state repository remains TypeScript-owned',
@@ -49,9 +48,9 @@ const RELEASE_PACKAGE_GUARDS = Object.freeze([
   'no native artifact rename',
   'no native helper rebuild required',
 ])
-const goInspectPaneFacadeCutover = Object.freeze({
-  schemaVersion: GO_INSPECT_PANE_FACADE_CUTOVER_SCHEMA_VERSION,
-  theme: GO_INSPECT_PANE_FACADE_CUTOVER_THEME,
+const goPaneExistsFacadeCutover = Object.freeze({
+  schemaVersion: GO_PANE_EXISTS_FACADE_CUTOVER_SCHEMA_VERSION,
+  theme: GO_PANE_EXISTS_FACADE_CUTOVER_THEME,
   packageVersion: PACKAGE_VERSION,
   helperVersion: HELPER_VERSION,
   protocolVersion: PROTOCOL_VERSION,
@@ -59,17 +58,17 @@ const goInspectPaneFacadeCutover = Object.freeze({
   activeOperations: ACTIVE_OPERATIONS,
   activeCapabilities: ACTIVE_CAPABILITIES,
   facadeName: FACADE_NAME,
-  kernelAdapterDelegation: KERNEL_ADAPTER_DELEGATION,
-  successMapping: SUCCESS_MAPPING,
-  failureMapping: FAILURE_MAPPING,
+  goBackedInspectPath: GO_BACKED_INSPECT_PATH,
   facadeCutoverMigrated: true,
   typescriptDisplayMessageFallbackRemoved: true,
-  failClosedExistsFalseOnHelperFailure: true,
-  compactInspectionFieldsOnly: true,
-  paneExistsFacadeMigratedByLaterSlice: true,
+  failClosedFalseOnHelperFailure: true,
+  publicFacadeReturnsBooleanOnly: true,
+  inspectPaneFacadeStillMigrated: true,
   listAgentTeamPanesFacadeStillMigrated: true,
   targetForPaneIdMigrated: false,
   captureCurrentPaneBindingMigrated: false,
+  resolvePaneBindingMigrated: false,
+  resolvePaneBindingAsyncMigrated: false,
   windowHelpersMigrated: false,
   createTeammatePaneMigrated: false,
   wakePaneMigrated: false,
@@ -96,16 +95,14 @@ module.exports = {
   ACTIVE_OPERATIONS,
   CAPABILITY,
   FACADE_NAME,
-  FAILURE_MAPPING,
   FORBIDDEN_GO_TMUX_COMMANDS,
-  GO_INSPECT_PANE_FACADE_CUTOVER_SCHEMA_VERSION,
-  GO_INSPECT_PANE_FACADE_CUTOVER_THEME,
+  GO_BACKED_INSPECT_PATH,
+  GO_PANE_EXISTS_FACADE_CUTOVER_SCHEMA_VERSION,
+  GO_PANE_EXISTS_FACADE_CUTOVER_THEME,
   HELPER_VERSION,
-  KERNEL_ADAPTER_DELEGATION,
   PACKAGE_VERSION,
   PRESERVED_BOUNDARIES,
   PROTOCOL_VERSION,
   RELEASE_PACKAGE_GUARDS,
-  SUCCESS_MAPPING,
-  goInspectPaneFacadeCutover,
+  goPaneExistsFacadeCutover,
 }
