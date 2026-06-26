@@ -201,7 +201,7 @@ function validateProvenanceLicenseAttestation(fixture, manifest) {
   if (!provenance.source || provenance.source.path !== 'kernel/go/agentteam-kernel' || provenance.source.revision !== FIXED_REVISION) return compactFailure('provenance-missing', 'regenerate source provenance metadata', 'source')
   if (!provenance.build || provenance.build.generatedAt !== FIXED_GENERATED_AT || provenance.build.runIdentity !== RUN_IDENTITY || provenance.build.env?.GO111MODULE !== 'off' || !String(provenance.build.toolchain || '').startsWith('go version ')) return compactFailure('provenance-missing', 'regenerate build provenance metadata', 'build')
   if (!Array.isArray(provenance.build.command) || provenance.build.command.join(' ') !== `go build -trimpath -o ${manifest.artifact.path} .`) return compactFailure('provenance-missing', 'regenerate build command provenance', 'command')
-  if (!provenance.smoke || provenance.smoke.health !== true || provenance.smoke.tmuxSnapshotParse?.ok !== true || !Array.isArray(provenance.smoke.workerLifecycleInspectPane?.acceptedFailureKinds)) return compactFailure('provenance-missing', 'regenerate smoke provenance', 'smoke')
+  if (!provenance.smoke || provenance.smoke.health !== true || provenance.smoke.tmuxSnapshotParse?.ok !== true || !Array.isArray(provenance.smoke.workerLifecycleInspectPane?.acceptedFailureKinds) || !Array.isArray(provenance.smoke.workerLifecycleListAgentTeamPanes?.acceptedFailureKinds)) return compactFailure('provenance-missing', 'regenerate smoke provenance', 'smoke')
 
   const licenseMetadataResult = safeParseJsonFile(licenseMetadataPath, 'license-missing', 'regenerate license metadata', 'license-json')
   if (!licenseMetadataResult.ok) return licenseMetadataResult.failure
@@ -443,6 +443,7 @@ module.exports = {
       assert.equal(fixture.summary.smoke.health, true)
       assert.equal(fixture.summary.smoke.tmuxSnapshotParse, true)
       assert.equal(fixture.summary.smoke.workerLifecycleInspectPane, true)
+      assert.equal(fixture.summary.smoke.workerLifecycleListAgentTeamPanes, true)
       for (const relPath of [fixture.summary.artifact, ...Object.values(fixture.summary.files)]) assertSafeRelPath(relPath, 'summary path')
       assertNoMetadataLeaks([fixture.summary, fixture.manifest], [root, outputRoot, process.cwd()])
 

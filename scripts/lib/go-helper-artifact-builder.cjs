@@ -280,6 +280,29 @@ function runWorkerLifecycleInspectPaneSmoke(helperPath, env, timeoutMs) {
   return { ok: result.ok === true, acceptedFailureKinds }
 }
 
+function runWorkerLifecycleListAgentTeamPanesSmoke(helperPath, env, timeoutMs) {
+  const result = runJsonRpc(helperPath, {
+    jsonrpc: '2.0',
+    id: 'workerLifecycleListAgentTeamPanes',
+    method: 'workerLifecycle',
+    params: {
+      operation: 'listAgentTeamPanes',
+    },
+  }, env, timeoutMs, 'workerLifecycle')
+  if (result.operation !== 'listAgentTeamPanes' || result.capability !== 'workerLifecycle' || result.readOnly !== true || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== false) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle listAgentTeamPanes smoke result', 'workerLifecycle')
+  }
+  const acceptedFailureKinds = ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout']
+  if (result.ok === true) {
+    if (!Array.isArray(result.panes) || !result.byPaneId || typeof result.byPaneId !== 'object') {
+      fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle listAgentTeamPanes pane list', 'workerLifecycle')
+    }
+  } else if (!acceptedFailureKinds.includes(result.failureKind)) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle listAgentTeamPanes failure', 'workerLifecycle')
+  }
+  return { ok: result.ok === true, acceptedFailureKinds }
+}
+
 function assertHealthMatchesSource(health, sourceMetadata) {
   if (health.implementation !== 'go') fail('go-health-failed', 'reject non-Go helper health response', 'implementation')
   if (health.helperVersion !== sourceMetadata.helperVersion) fail('metadata-invalid', 'reject helper version skew before writing metadata', 'helper-version')
@@ -399,6 +422,7 @@ function writeMetadata(input) {
     runIdentity,
     parserSmoke,
     workerLifecycleSmoke,
+    workerLifecycleListSmoke,
   } = input
   const artifactDir = path.dirname(helperPath)
   const helperStat = fs.statSync(helperPath)
@@ -439,6 +463,7 @@ function writeMetadata(input) {
       health: true,
       tmuxSnapshotParse: parserSmoke,
       workerLifecycleInspectPane: workerLifecycleSmoke,
+      workerLifecycleListAgentTeamPanes: workerLifecycleListSmoke,
     },
     outputRootKind,
   }
@@ -521,6 +546,7 @@ function writeMetadata(input) {
       health: true,
       tmuxSnapshotParse: parserSmoke,
       workerLifecycleInspectPane: workerLifecycleSmoke,
+      workerLifecycleListAgentTeamPanes: workerLifecycleListSmoke,
     },
     attestation: {
       path: attestationRel,
@@ -575,6 +601,7 @@ function writeMetadata(input) {
         health: true,
         tmuxSnapshotParse: true,
         workerLifecycleInspectPane: true,
+        workerLifecycleListAgentTeamPanes: true,
       },
       artifact: helperRel,
       files: {
@@ -618,6 +645,7 @@ function buildGoHelperArtifact(options = {}) {
   assertHealthMatchesSource(health, sourceMetadata)
   const parserSmoke = runTmuxSnapshotParseSmoke(helperPath, env, timeoutMs)
   const workerLifecycleSmoke = runWorkerLifecycleInspectPaneSmoke(helperPath, env, timeoutMs)
+  const workerLifecycleListSmoke = runWorkerLifecycleListAgentTeamPanesSmoke(helperPath, env, timeoutMs)
 
   const metadata = writeMetadata({
     extRoot,
@@ -634,6 +662,7 @@ function buildGoHelperArtifact(options = {}) {
     runIdentity,
     parserSmoke,
     workerLifecycleSmoke,
+    workerLifecycleListSmoke,
   })
   const result = {
     extRoot,

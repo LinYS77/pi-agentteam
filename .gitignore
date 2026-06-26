@@ -83,6 +83,7 @@ docs/perf/*
 !docs/perf/v0.6.51-contract-constants-artifact-naming-gate.md
 !docs/perf/v0.6.52-worker-lifecycle-contract-gate.md
 !docs/perf/v0.6.53-go-inspect-pane-worker-lifecycle.md
+!docs/perf/v0.6.54-go-list-agentteam-panes-worker-lifecycle.md
 
 # Dependencies
 node_modules/

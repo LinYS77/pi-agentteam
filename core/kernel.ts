@@ -129,6 +129,7 @@ export type AgentTeamKernelProfile = AgentTeamKernelHealth & {
     tmuxSnapshotCaptureConnected: boolean
     compactReadModelFingerprintConnected: boolean
     workerLifecycleInspectPaneConnected?: boolean
+    workerLifecycleListAgentTeamPanesConnected?: boolean
     panelConnected: false
     taskReportPlanRunConnected: false
   }
@@ -194,6 +195,23 @@ export type AgentTeamKernelWorkerPaneInspection = {
   tmuxMutation: false
 }
 
+export type AgentTeamKernelWorkerPaneList = {
+  ok: boolean
+  operation: 'listAgentTeamPanes'
+  capability: 'workerLifecycle'
+  panes: AgentTeamKernelTmuxPaneSnapshotItem[]
+  byPaneId: Record<string, AgentTeamKernelTmuxPaneSnapshotItem>
+  status?: 'unknown'
+  resultMarker?: 'stale'
+  failureKind?: AgentTeamKernelWorkerLifecycleFailureKind
+  reason?: string
+  error?: string
+  readOnly: true
+  stateFilesRead: false
+  stateFilesWritten: false
+  tmuxMutation: false
+}
+
 export type AgentTeamKernelAdapter = {
   metadata(): AgentTeamKernelMetadata
   health(): AgentTeamKernelHealth
@@ -201,6 +219,7 @@ export type AgentTeamKernelAdapter = {
   parseTmuxPaneSnapshot(stdout: string, capturedAt: number, fallback?: (stdout: string, capturedAt: number) => AgentTeamKernelTmuxSnapshot): AgentTeamKernelTmuxSnapshot
   captureTmuxSnapshot(capturedAt: number): AgentTeamKernelTmuxSnapshot
   inspectWorkerPane(paneId: string): AgentTeamKernelWorkerPaneInspection
+  listAgentTeamPanes(): AgentTeamKernelWorkerPaneList
   compactReadModelFingerprint(input: unknown, fallback?: (input: unknown) => AgentTeamKernelCompactReadModelResult): AgentTeamKernelCompactReadModelResult
 }
 
@@ -382,6 +401,7 @@ function fallbackProfile(metadata: AgentTeamKernelMetadata, params: Record<strin
       tmuxSnapshotCaptureConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('tmuxSnapshotCapture'),
       compactReadModelFingerprintConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('compactReadModelFingerprint'),
       workerLifecycleInspectPaneConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
+      workerLifecycleListAgentTeamPanesConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       panelConnected: false,
       taskReportPlanRunConnected: false,
     },
@@ -544,7 +564,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     if (profile.scope !== 'skeleton-only') return undefined
     if (profile.stateConnected !== false || profile.tmuxConnected !== false) return undefined
     if (profile.tmuxSnapshotParseConnected !== true || profile.tmuxSnapshotCaptureConnected !== true || profile.compactReadModelFingerprintConnected !== true) return undefined
-    if (profile.workerLifecycleInspectPaneConnected !== true) return undefined
+    if (profile.workerLifecycleInspectPaneConnected !== true || profile.workerLifecycleListAgentTeamPanesConnected !== true) return undefined
     if (profile.panelConnected !== false || profile.taskReportPlanRunConnected !== false) return undefined
     return {
       ...health,
@@ -557,6 +577,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         tmuxSnapshotCaptureConnected: true,
         compactReadModelFingerprintConnected: true,
         workerLifecycleInspectPaneConnected: true,
+        workerLifecycleListAgentTeamPanesConnected: true,
         panelConnected: false,
         taskReportPlanRunConnected: false,
       },
@@ -703,6 +724,40 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     }
   }
 
+  function workerLifecycleUnavailablePaneList(kind: AgentTeamKernelWorkerLifecycleFailureKind, detail?: unknown): AgentTeamKernelWorkerPaneList {
+    const reason = cutoverMessage(kind as AgentTeamKernelCutoverFailureKind, detail)
+    const safeReason = compactKernelText(reason, cutoverMessage('previous-helper-failure'))
+    return {
+      ok: false,
+      operation: 'listAgentTeamPanes',
+      capability: 'workerLifecycle',
+      panes: [],
+      byPaneId: {},
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind: kind,
+      reason: safeReason,
+      error: safeReason,
+      readOnly: true,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: false,
+    }
+  }
+
+  function validateWorkerPaneSnapshotItem(value: unknown): AgentTeamKernelTmuxPaneSnapshotItem | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const pane = value as Partial<AgentTeamKernelTmuxPaneSnapshotItem>
+    const paneId = compactKernelText(pane.paneId)
+    if (!paneId) return undefined
+    return {
+      paneId,
+      target: compactKernelText(pane.target),
+      label: compactKernelText(pane.label),
+      currentCommand: compactKernelText(pane.currentCommand),
+    }
+  }
+
   function validateWorkerPaneInspectionResult(value: unknown, requestedPaneId: string): AgentTeamKernelWorkerPaneInspection | undefined {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
     const result = value as Partial<AgentTeamKernelWorkerPaneInspection>
@@ -741,6 +796,56 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       paneId,
       requestedPaneId: requested,
       exists: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind,
+      reason,
+      error: reason,
+      readOnly: true,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: false,
+    }
+  }
+
+  function validateWorkerPaneListResult(value: unknown): AgentTeamKernelWorkerPaneList | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const result = value as Partial<AgentTeamKernelWorkerPaneList>
+    if (result.operation !== 'listAgentTeamPanes' || result.capability !== 'workerLifecycle') return undefined
+    if (result.readOnly !== true || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== false) return undefined
+    if (result.ok === true) {
+      if (!Array.isArray(result.panes) || !result.byPaneId || typeof result.byPaneId !== 'object' || Array.isArray(result.byPaneId)) return undefined
+      const panes: AgentTeamKernelTmuxPaneSnapshotItem[] = []
+      const byPaneId: Record<string, AgentTeamKernelTmuxPaneSnapshotItem> = {}
+      for (const rawPane of result.panes) {
+        const pane = validateWorkerPaneSnapshotItem(rawPane)
+        if (!pane) return undefined
+        panes.push(pane)
+        byPaneId[pane.paneId] = pane
+      }
+      return {
+        ok: true,
+        operation: 'listAgentTeamPanes',
+        capability: 'workerLifecycle',
+        panes,
+        byPaneId,
+        readOnly: true,
+        stateFilesRead: false,
+        stateFilesWritten: false,
+        tmuxMutation: false,
+      }
+    }
+    if (result.ok !== false) return undefined
+    const failureKind = typeof result.failureKind === 'string' && ['unsupported-operation', 'pane-not-found', 'invalid-pane-id', ...AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS].includes(result.failureKind)
+      ? result.failureKind as AgentTeamKernelWorkerLifecycleFailureKind
+      : 'previous-helper-failure'
+    const reason = compactKernelText(result.reason || result.error || cutoverMessage(failureKind as AgentTeamKernelCutoverFailureKind), cutoverMessage('previous-helper-failure'))
+    return {
+      ok: false,
+      operation: 'listAgentTeamPanes',
+      capability: 'workerLifecycle',
+      panes: [],
+      byPaneId: {},
       status: 'unknown',
       resultMarker: 'stale',
       failureKind,
@@ -945,6 +1050,15 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle inspectPane result shape')
       }
       return workerLifecycleUnavailableInspection(requestedPaneId, cutoverFailureKind ?? 'previous-helper-failure')
+    },
+    listAgentTeamPanes() {
+      const helperResult = callHelper<unknown>('workerLifecycle', { operation: 'listAgentTeamPanes' })
+      const parsed = validateWorkerPaneListResult(helperResult)
+      if (parsed) return parsed
+      if (helperResult !== undefined) {
+        recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle listAgentTeamPanes result shape')
+      }
+      return workerLifecycleUnavailablePaneList(cutoverFailureKind ?? 'previous-helper-failure')
     },
     compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint) {
       const compactInput = sanitizeCompactReadModelInput(input)

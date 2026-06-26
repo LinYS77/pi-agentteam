@@ -71,6 +71,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.tmuxSnapshotCaptureConnected, true)
   assert.equal(result.profile.compactReadModelFingerprintConnected, true)
   assert.equal(result.profile.workerLifecycleInspectPaneConnected, true)
+  assert.equal(result.profile.workerLifecycleListAgentTeamPanesConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)
 }
@@ -136,14 +137,20 @@ function assertMethodResult(response, request, fingerprintModule) {
     return
   }
   if (request.method === 'workerLifecycle') {
-    assert.equal(response.result.operation, 'inspectPane')
+    const requestedOperation = request.params?.operation || 'inspectPane'
+    const expectedOperation = requestedOperation === 'listAgentTeamPanes' ? 'listAgentTeamPanes' : 'inspectPane'
+    assert.equal(response.result.operation, expectedOperation)
     assert.equal(response.result.capability, 'workerLifecycle')
     assert.equal(response.result.readOnly, true)
     assert.equal(response.result.stateFilesRead, false)
     assert.equal(response.result.stateFilesWritten, false)
     assert.equal(response.result.tmuxMutation, false)
+    if (expectedOperation === 'listAgentTeamPanes') {
+      assert.equal(Array.isArray(response.result.panes), true)
+      assert.equal(response.result.byPaneId && typeof response.result.byPaneId === 'object', true)
+    }
     if (response.result.ok === false) {
-      assert.equal(response.result.exists, false)
+      if (expectedOperation === 'inspectPane') assert.equal(response.result.exists, false)
       assert.equal(response.result.status, 'unknown')
       assert.equal(response.result.resultMarker, 'stale')
       assert.ok(['pane-not-found', 'unsupported-operation', 'tmux-command-timeout', 'tmux-command-failed', 'tmux-unavailable'].includes(response.result.failureKind))

@@ -57,7 +57,7 @@ export const AGENTTEAM_KERNEL_ARTIFACT_NAMING_DECISION = Object.freeze({
 })
 
 export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CAPABILITY = 'workerLifecycle' as const
-export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT_STATUS = 'runtime-inspect-pane-only' as const
+export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT_STATUS = 'runtime-read-only-inspect-and-list-agentteam-panes' as const
 export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_JSONRPC_METHOD = 'workerLifecycle' as const
 export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_OPERATIONS = [
   {
@@ -119,7 +119,7 @@ export const AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT = Object.freeze({
   activeRuntimeCapability: true,
   operations: AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_OPERATIONS,
   helperConnectionDecision: AGENTTEAM_KERNEL_WORKER_LIFECYCLE_HELPER_CONNECTION_DECISION,
-  activeOperations: ['inspectPane'] as const,
+  activeOperations: ['inspectPane', 'listAgentTeamPanes'] as const,
   unsupportedOperationsFailClosed: true,
   facadeAuthority: 'TypeScript/pi facade and leader/task governance stay authoritative; Go may only be called through an explicit TS adapter seam.',
 })

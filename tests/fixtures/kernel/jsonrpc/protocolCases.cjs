@@ -103,6 +103,10 @@ function validMethodCases() {
       name: 'worker lifecycle inspectPane missing pane',
       request: request('workerLifecycle', { operation: 'inspectPane', paneId: '%missing-fixture-pane' }, 'worker-lifecycle-string-id'),
     },
+    {
+      name: 'worker lifecycle listAgentTeamPanes',
+      request: request('workerLifecycle', { operation: 'listAgentTeamPanes' }, 'worker-lifecycle-list-string-id'),
+    },
   ]
 }
 
@@ -205,6 +209,7 @@ function multipleRequestBatch() {
     request('tmuxSnapshotCapture', { capturedAt: 100 }, 'batch-tmux-capture'),
     request('compactReadModelFingerprint', { input: compactReadModelInput() }, 'batch-read-model'),
     request('workerLifecycle', { operation: 'inspectPane', paneId: '%batch-missing-pane' }, 'batch-worker-lifecycle'),
+    request('workerLifecycle', { operation: 'listAgentTeamPanes' }, 'batch-worker-lifecycle-list'),
     { jsonrpc: '2.0', id: 'batch-unknown', method: 'unknownMethod' },
   ]
 }

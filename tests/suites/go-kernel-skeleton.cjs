@@ -94,6 +94,7 @@ module.exports = {
     assert.equal(defaultProfile.profile.tmuxSnapshotCaptureConnected, true)
     assert.equal(defaultProfile.profile.compactReadModelFingerprintConnected, true)
     assert.equal(defaultProfile.profile.workerLifecycleInspectPaneConnected, true)
+    assert.equal(defaultProfile.profile.workerLifecycleListAgentTeamPanesConnected, true)
     assert.equal(defaultProfile.profile.panelConnected, false)
     assert.equal(defaultProfile.profile.taskReportPlanRunConnected, false)
 
@@ -164,7 +165,8 @@ module.exports = {
     assert.match(goSource, /case "tmuxSnapshotCapture"/)
     assert.match(goSource, /case "compactReadModelFingerprint"/)
     assert.match(goSource, /case "workerLifecycle"/)
-    assert.match(goSource, /operation\s*!=\s*"inspectPane"/)
+    assert.match(goSource, /case "inspectPane"/)
+    assert.match(goSource, /case "listAgentTeamPanes"/)
     assert.match(goSource, /BusinessPathsConnected: false/)
 
     if (hasGoToolchain()) {
@@ -195,6 +197,7 @@ module.exports = {
       assert.equal(profile.result.profile.tmuxSnapshotCaptureConnected, true)
       assert.equal(profile.result.profile.compactReadModelFingerprintConnected, true)
       assert.equal(profile.result.profile.workerLifecycleInspectPaneConnected, true)
+      assert.equal(profile.result.profile.workerLifecycleListAgentTeamPanesConnected, true)
       assert.equal(profile.result.profile.panelConnected, false)
       assert.equal(profile.result.profile.taskReportPlanRunConnected, false)
 

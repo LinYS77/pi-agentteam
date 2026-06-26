@@ -138,7 +138,7 @@ function compatibilityHelper(overrides = {}) {
   return helperSource(`
 const health = { ...baseHealth, ...${healthOverrides} }
 if (request.method === 'health') respond(health)
-else if (request.method === 'profile') respond({ ...health, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, tmuxSnapshotCaptureConnected: true, compactReadModelFingerprintConnected: true, workerLifecycleInspectPaneConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
+else if (request.method === 'profile') respond({ ...health, profile: { scope: 'skeleton-only', params: request.params || {}, stateConnected: false, tmuxConnected: false, tmuxSnapshotParseConnected: true, tmuxSnapshotCaptureConnected: true, compactReadModelFingerprintConnected: true, workerLifecycleInspectPaneConnected: true, workerLifecycleListAgentTeamPanesConnected: true, panelConnected: false, taskReportPlanRunConnected: false } })
 else if (request.method === 'compactReadModelFingerprint') respond({ ok: true, projection: request.params ? request.params.input : null, fingerprint: JSON.stringify(request.params ? request.params.input : null), inputKind: 'compact-panel-data', readOnly: true, fullTextIncluded: false, stateFilesRead: false, stateFilesWritten: false })
 else if (request.method === 'tmuxSnapshotParse') respond({ capturedAt: request.params ? request.params.capturedAt : 0, panes: [{ paneId: '%go', target: 'go:@1', label: 'go parser', currentCommand: 'pi' }], byPaneId: { '%go': { paneId: '%go', target: 'go:@1', label: 'go parser', currentCommand: 'pi' } }, ok: true })
 else error(-32601, 'unexpected')

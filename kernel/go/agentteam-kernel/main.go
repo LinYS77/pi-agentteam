@@ -109,6 +109,23 @@ type workerPaneInspectionResult struct {
 	TmuxMutation      bool   `json:"tmuxMutation"`
 }
 
+type workerPaneListResult struct {
+	OK                bool                            `json:"ok"`
+	Operation         string                          `json:"operation"`
+	Capability        string                          `json:"capability"`
+	Panes             []tmuxPaneSnapshotItem          `json:"panes"`
+	ByPaneID          map[string]tmuxPaneSnapshotItem `json:"byPaneId"`
+	Status            string                          `json:"status,omitempty"`
+	Marker            string                          `json:"resultMarker,omitempty"`
+	Failure           string                          `json:"failureKind,omitempty"`
+	Reason            string                          `json:"reason,omitempty"`
+	Error             string                          `json:"error,omitempty"`
+	ReadOnly          bool                            `json:"readOnly"`
+	StateFilesRead    bool                            `json:"stateFilesRead"`
+	StateFilesWritten bool                            `json:"stateFilesWritten"`
+	TmuxMutation      bool                            `json:"tmuxMutation"`
+}
+
 func health() healthResult {
 	return healthResult{
 		OK:                     true,
@@ -133,9 +150,10 @@ func profile(params map[string]any) profileResult {
 			"tmuxConnected":                        false,
 			"tmuxSnapshotParseConnected":           true,
 			"tmuxSnapshotCaptureConnected":         true,
-			"compactReadModelFingerprintConnected": true,
-			"workerLifecycleInspectPaneConnected":  true,
-			"panelConnected":                       false,
+			"compactReadModelFingerprintConnected":        true,
+			"workerLifecycleInspectPaneConnected":         true,
+			"workerLifecycleListAgentTeamPanesConnected": true,
+			"panelConnected":                              false,
 			"taskReportPlanRunConnected":           false,
 		},
 	}
@@ -365,12 +383,74 @@ func inspectWorkerPane(params map[string]any) workerPaneInspectionResult {
 	return unavailableWorkerPaneInspection(requestedPaneID, "pane-not-found")
 }
 
-func workerLifecycle(params map[string]any) workerPaneInspectionResult {
+func unavailableWorkerPaneList(kind string) workerPaneListResult {
+	reason := "Go worker lifecycle listAgentTeamPanes unavailable (" + kind + ")"
+	return workerPaneListResult{
+		OK:                false,
+		Operation:         "listAgentTeamPanes",
+		Capability:        "workerLifecycle",
+		Panes:             []tmuxPaneSnapshotItem{},
+		ByPaneID:          map[string]tmuxPaneSnapshotItem{},
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          true,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      false,
+	}
+}
+
+func listAgentTeamPanes() workerPaneListResult {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat)
+	cmd.Env = os.Environ()
+	output, err := cmd.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return unavailableWorkerPaneList("tmux-command-timeout")
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return unavailableWorkerPaneList("tmux-unavailable")
+		}
+		return unavailableWorkerPaneList("tmux-command-failed")
+	}
+	parsed := parseTmuxSnapshot(map[string]any{"stdout": strings.TrimSpace(string(output)), "capturedAt": int64(0)})
+	panes := []tmuxPaneSnapshotItem{}
+	byPaneID := map[string]tmuxPaneSnapshotItem{}
+	for _, pane := range parsed.Panes {
+		if strings.TrimSpace(pane.PaneID) == "" || strings.TrimSpace(pane.Label) == "" {
+			continue
+		}
+		panes = append(panes, pane)
+		byPaneID[pane.PaneID] = pane
+	}
+	return workerPaneListResult{
+		OK:                true,
+		Operation:         "listAgentTeamPanes",
+		Capability:        "workerLifecycle",
+		Panes:             panes,
+		ByPaneID:          byPaneID,
+		ReadOnly:          true,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      false,
+	}
+}
+
+func workerLifecycle(params map[string]any) any {
 	operation := stringParam(params, "operation")
-	if operation != "inspectPane" {
+	switch operation {
+	case "inspectPane":
+		return inspectWorkerPane(params)
+	case "listAgentTeamPanes":
+		return listAgentTeamPanes()
+	default:
 		return unavailableWorkerPaneInspection(strings.TrimSpace(stringParam(params, "paneId")), "unsupported-operation")
 	}
-	return inspectWorkerPane(params)
 }
 
 func compactReadModelFingerprint(params map[string]any) compactReadModelResult {

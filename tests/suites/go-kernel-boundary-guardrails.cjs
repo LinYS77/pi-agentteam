@@ -120,8 +120,9 @@ module.exports = {
     assertNoMatches(GO_HELPER_SOURCE, goSource, GO_FORBIDDEN_RUNTIME_PATTERNS)
     assert.match(goSource, /"os\/exec"/, 'post-v0.6.49 Go helper may import os/exec for narrow tmux snapshot capture')
     assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux command authority must include list-panes snapshot capture')
-    assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", workerLifecycleInspectPaneFormat\)/, 'Go worker lifecycle authority must be limited to read-only list-panes inspectPane')
-    assert.match(goSource, /operation\s*!=\s*"inspectPane"/, 'Go worker lifecycle must reject non-inspectPane operations')
+    assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", workerLifecycleInspectPaneFormat\)/, 'Go worker lifecycle authority must include read-only inspectPane')
+    assert.match(goSource, /case\s+"inspectPane"/, 'Go worker lifecycle must keep inspectPane read-only')
+    assert.match(goSource, /case\s+"listAgentTeamPanes"/, 'Go worker lifecycle must include read-only listAgentTeamPanes')
     assert.match(goSource, /func run\(input io\.Reader, output io\.Writer\)/, 'Go helper should remain stdio reader/writer scoped')
     assert.match(goSource, /run\(os\.Stdin, os\.Stdout\)/, 'Go helper should remain stdio-only')
 

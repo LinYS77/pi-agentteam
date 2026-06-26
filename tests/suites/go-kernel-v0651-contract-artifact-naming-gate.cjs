@@ -250,7 +250,8 @@ function assertNoRuntimeMigration(root) {
   for (const forbidden of ['stateRepository', 'teamPanelViewModel', 'packageReleaseVerify']) {
     assert.equal(goSource.includes(forbidden), false, `${GO_SOURCE} must not migrate ${forbidden}`)
   }
-  assert.equal(/operation\s*!=\s*"inspectPane"/.test(goSource), true, `${GO_SOURCE} workerLifecycle must be scoped to inspectPane only after v0.6.53`)
+  assert.equal(/case\s+"inspectPane"/.test(goSource), true, `${GO_SOURCE} workerLifecycle must keep inspectPane read-only`)
+  assert.equal(/case\s+"listAgentTeamPanes"/.test(goSource), true, `${GO_SOURCE} workerLifecycle may include v0.6.54 read-only listAgentTeamPanes`)
   assert.equal(/case\s+"taskReportPlanRun"/.test(goSource), false, `${GO_SOURCE} must not add taskReportPlanRun RPC handling`)
   for (const forbidden of ['agentteamKernel/<helperVersion>', 'agentteamControlPlaneCore/<helperVersion>']) {
     assert.equal(read(root, 'package.json').includes(forbidden), false, 'package files must not include future artifact paths yet')
