@@ -138,14 +138,25 @@ function assertKernelSourceInvariants(root) {
 
 function assertPackagedResolverContractConstants(root) {
   const resolver = read(root, 'core/kernelPackagedResolver.ts')
+  const contract = read(root, 'core/kernelContract.ts')
   for (const expected of [
-    "export const AGENTTEAM_PACKAGED_RESOLVER_PACKAGE_NAME = 'pi-agentteam'",
-    "export const AGENTTEAM_PACKAGED_RESOLVER_PACKAGE_VERSION = '0.6.8'",
-    "export const AGENTTEAM_PACKAGED_RESOLVER_MODULE = 'tmuxSnapshotParse'",
-    'export const AGENTTEAM_PACKAGED_RESOLVER_PROTOCOL_VERSION = 1',
-    "export const AGENTTEAM_PACKAGED_RESOLVER_HELPER_VERSION = '0.3.0-read-model-shadow'",
-    "export const AGENTTEAM_PACKAGED_RESOLVER_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'] as const",
-    'export const AGENTTEAM_PACKAGED_RESOLVER_BUSINESS_PATHS_CONNECTED = false',
+    "AGENTTEAM_KERNEL_PACKAGE_NAME = 'pi-agentteam'",
+    "AGENTTEAM_KERNEL_PACKAGE_VERSION = '0.6.8'",
+    "AGENTTEAM_KERNEL_CURRENT_NATIVE_MODULE = 'tmuxSnapshotParse'",
+    'AGENTTEAM_KERNEL_PROTOCOL_VERSION = 1',
+    "AGENTTEAM_KERNEL_HELPER_VERSION = '0.3.0-read-model-shadow'",
+    "AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'] as const",
+    'AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED = false',
+  ]) assertIncludes(contract, expected, 'kernel contract constants')
+  for (const expected of [
+    "from './kernelContract.js'",
+    'export const AGENTTEAM_PACKAGED_RESOLVER_PACKAGE_NAME = AGENTTEAM_KERNEL_PACKAGE_NAME',
+    'export const AGENTTEAM_PACKAGED_RESOLVER_PACKAGE_VERSION = AGENTTEAM_KERNEL_PACKAGE_VERSION',
+    'export const AGENTTEAM_PACKAGED_RESOLVER_MODULE = AGENTTEAM_KERNEL_CURRENT_NATIVE_MODULE',
+    'export const AGENTTEAM_PACKAGED_RESOLVER_PROTOCOL_VERSION = AGENTTEAM_KERNEL_PROTOCOL_VERSION',
+    'export const AGENTTEAM_PACKAGED_RESOLVER_HELPER_VERSION = AGENTTEAM_KERNEL_HELPER_VERSION',
+    'export const AGENTTEAM_PACKAGED_RESOLVER_CAPABILITIES = AGENTTEAM_KERNEL_CAPABILITIES',
+    'export const AGENTTEAM_PACKAGED_RESOLVER_BUSINESS_PATHS_CONNECTED = AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED',
     "| 'manifest-missing'",
     "| 'manifest-invalid'",
     "| 'path-unsafe'",

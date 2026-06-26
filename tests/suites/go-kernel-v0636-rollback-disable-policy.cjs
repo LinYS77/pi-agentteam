@@ -258,7 +258,8 @@ function assertCurrentKernelSemantics(root) {
   assert.equal(/default Go is enabled|default resolver is enabled|fallback deletion is approved|package release is approved|install source is approved|signing is approved|cosign is approved|SLSA is approved/i.test(kernel), false, 'kernel must not overclaim default/release/signing status')
 
   const resolver = read(root, 'core/kernelPackagedResolver.ts')
-  assertIncludes(resolver, "export const AGENTTEAM_PACKAGED_RESOLVER_MODULE = 'tmuxSnapshotParse'", 'core/kernelPackagedResolver.ts')
+  assertIncludes(resolver, "from './kernelContract.js'", 'core/kernelPackagedResolver.ts')
+  assertIncludes(resolver, 'export const AGENTTEAM_PACKAGED_RESOLVER_MODULE = AGENTTEAM_KERNEL_CURRENT_NATIVE_MODULE', 'core/kernelPackagedResolver.ts')
   assert.equal(/default-disable|defaultDisable|DEFAULT_DISABLE|PI_AGENTTEAM_DEFAULT_DISABLE|ROLLBACK_DISABLE/i.test(resolver), false, 'packaged resolver must not implement default-disable runtime policy in Slice 4')
 
   const readiness = read(root, 'commands/readiness.ts')

@@ -2,15 +2,24 @@ import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  AGENTTEAM_KERNEL_ADAPTER_VERSION,
+  AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED,
+  AGENTTEAM_KERNEL_CAPABILITIES,
+  AGENTTEAM_KERNEL_EMBEDDED_HELPER_MANIFEST_PATH,
+  AGENTTEAM_KERNEL_HELPER_VERSION,
+  AGENTTEAM_KERNEL_PROTOCOL_VERSION,
+} from './kernelContract.js'
 import { resolveAgentTeamPackagedHelperManifest } from './kernelPackagedResolver.js'
 import { compactPanelReadModelFingerprint, compactReadModelProjection } from './readModelFingerprint.js'
 
-export const AGENTTEAM_KERNEL_PROTOCOL_VERSION = 1
-
-export const AGENTTEAM_KERNEL_ADAPTER_VERSION = '0.3.0-read-model-shadow'
-export const AGENTTEAM_KERNEL_HELPER_VERSION = '0.3.0-read-model-shadow'
-export const AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'] as const
-export const AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED = false
+export {
+  AGENTTEAM_KERNEL_ADAPTER_VERSION,
+  AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED,
+  AGENTTEAM_KERNEL_CAPABILITIES,
+  AGENTTEAM_KERNEL_HELPER_VERSION,
+  AGENTTEAM_KERNEL_PROTOCOL_VERSION,
+} from './kernelContract.js'
 
 export type AgentTeamKernelKnownMode = 'default' | 'disabled' | 'typescript' | 'go' | 'auto' | 'go-cutover' | 'go-packaged-preview'
 export type AgentTeamKernelActiveMode = 'typescript' | 'go'
@@ -179,7 +188,7 @@ export type AgentTeamKernelAdapterOptions = {
 }
 
 const KNOWN_MODES = new Set(['default', 'disabled', 'typescript', 'go', 'auto', 'go-cutover', 'go-packaged-preview'])
-const DEFAULT_EMBEDDED_HELPER_MANIFEST_PATH = 'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/manifest.json'
+const DEFAULT_EMBEDDED_HELPER_MANIFEST_PATH = AGENTTEAM_KERNEL_EMBEDDED_HELPER_MANIFEST_PATH
 const KERNEL_DIAGNOSTIC_TEXT_LIMIT = 160
 
 function compactKernelText(value: unknown, fallback = ''): string {

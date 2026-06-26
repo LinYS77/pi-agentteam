@@ -389,9 +389,12 @@ function assertPackageRuntimeUnchanged(root) {
     assert.equal(fs.existsSync(path.join(root, rel)), false, `${rel} must not exist`)
   }
   const kernelSource = fs.readFileSync(path.join(root, 'core/kernel.ts'), 'utf8')
+  const kernelContractSource = fs.readFileSync(path.join(root, 'core/kernelContract.ts'), 'utf8')
   assert.equal(kernelSource.includes('go-helper-artifact-builder'), false, 'runtime kernel must not import builder')
-  assert.equal(kernelSource.includes('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/manifest.json'), true, 'runtime kernel may discover only the approved embedded tmuxSnapshotParse manifest')
-  assert.equal(/native\/(?!tmuxSnapshotParse\/0\.3\.0-read-model-shadow\/linux-x64-glibc\/manifest\.json)/.test(kernelSource), false, 'runtime kernel must not discover unapproved native manifests')
+  assert.equal(kernelSource.includes("from './kernelContract.js'"), true, 'runtime kernel should source embedded manifest path from the shared contract')
+  assert.equal(kernelContractSource.includes('native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/manifest.json'), true, 'contract may define only the approved embedded tmuxSnapshotParse manifest')
+  const manifestPaths = [...kernelContractSource.matchAll(/native\/[^'"`\s]+manifest\.json/g)].map(match => match[0])
+  assert.deepEqual([...new Set(manifestPaths)], ['native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/manifest.json'], 'contract must not define unapproved native manifests')
 }
 
 function assertNoRepoGeneratedOutputs(root) {

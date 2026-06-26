@@ -262,7 +262,7 @@ function transpileCore(repoRoot, tempRoot) {
   const distRoot = path.join(tempRoot, 'dist')
   fs.mkdirSync(path.join(distRoot, 'core'), { recursive: true })
   fs.writeFileSync(path.join(distRoot, 'package.json'), '{"type":"commonjs"}\n', 'utf8')
-  for (const rel of ['core/readModelFingerprint.ts', 'core/kernelPackagedResolver.ts', 'core/kernel.ts']) {
+  for (const rel of ['core/kernelContract.ts', 'core/readModelFingerprint.ts', 'core/kernelPackagedResolver.ts', 'core/kernel.ts']) {
     const sourcePath = repoPath(repoRoot, rel)
     let out = ts.transpileModule(fs.readFileSync(sourcePath, 'utf8'), {
       compilerOptions: {

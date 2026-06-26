@@ -237,8 +237,9 @@ function assertKernelAdapterBoundaries(root) {
   assert.equal(KERNEL_TS_FORBIDDEN_PI_TERMS.test(kernel), false, 'kernel adapter must not import/expose pi product control-plane')
 
   const resolver = read(root, 'core/kernelPackagedResolver.ts')
-  assertIncludes(resolver, "export const AGENTTEAM_PACKAGED_RESOLVER_MODULE = 'tmuxSnapshotParse'", 'core/kernelPackagedResolver.ts')
-  assertIncludes(resolver, 'export const AGENTTEAM_PACKAGED_RESOLVER_BUSINESS_PATHS_CONNECTED = false', 'core/kernelPackagedResolver.ts')
+  assertIncludes(resolver, "from './kernelContract.js'", 'core/kernelPackagedResolver.ts')
+  assertIncludes(resolver, 'export const AGENTTEAM_PACKAGED_RESOLVER_MODULE = AGENTTEAM_KERNEL_CURRENT_NATIVE_MODULE', 'core/kernelPackagedResolver.ts')
+  assertIncludes(resolver, 'export const AGENTTEAM_PACKAGED_RESOLVER_BUSINESS_PATHS_CONNECTED = AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED', 'core/kernelPackagedResolver.ts')
   assert.equal(/PI_AGENTTEAM_KERNEL|PI_AGENTTEAM_KERNEL_HELPER|AGENTTEAM_GO_KERNEL_HELPER|process\.env/i.test(resolver), false, 'packaged resolver must not read mode env or enable default discovery')
   assert.equal(KERNEL_TS_FORBIDDEN_PI_TERMS.test(resolver), false, 'packaged resolver must not import/expose pi product control-plane')
 }

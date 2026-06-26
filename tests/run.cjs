@@ -455,7 +455,7 @@ function loadModules() {
   }
 }
 
-function loadSuites() {
+function loadSuites(filters = []) {
   const suitesDir = path.join(__dirname, 'suites')
   const preferredOrder = [
     'core-vocabulary.cjs',
@@ -478,10 +478,21 @@ function loadSuites() {
   for (const file of [...existing].sort((a, b) => a.localeCompare(b))) {
     if (!ordered.includes(file)) ordered.push(file)
   }
-  return ordered.map(file => require(path.join(suitesDir, file)))
+  const normalizedFilters = filters.map(filter => String(filter || '').trim()).filter(Boolean)
+  const selected = normalizedFilters.length === 0
+    ? ordered
+    : ordered.filter(file => {
+      const stem = file.replace(/\.cjs$/, '')
+      return normalizedFilters.some(filter => file === filter || file === `${filter}.cjs` || stem === filter || stem.includes(filter))
+    })
+  if (normalizedFilters.length > 0 && selected.length === 0) {
+    throw new Error(`No test suites matched: ${normalizedFilters.join(', ')}`)
+  }
+  return selected.map(file => require(path.join(suitesDir, file)))
 }
 
 async function main() {
+  const suiteFilters = process.argv.slice(2)
   createStubs()
   transpile()
 
@@ -532,7 +543,7 @@ async function main() {
         },
       }
 
-      for (const suite of loadSuites()) {
+      for (const suite of loadSuites(suiteFilters)) {
         log(`▶ suite: ${suite.name}`)
         await suite.run(env)
         log(`✅ ${suite.name} passed`)

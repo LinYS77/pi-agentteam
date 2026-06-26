@@ -171,7 +171,7 @@ function loadKernelModule(extRoot) {
 
   const distRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-v0630-review-preview-core-'))
   fs.mkdirSync(path.join(distRoot, 'core'), { recursive: true })
-  for (const rel of ['core/readModelFingerprint.ts', 'core/kernelPackagedResolver.ts', 'core/kernel.ts']) {
+  for (const rel of ['core/kernelContract.ts', 'core/readModelFingerprint.ts', 'core/kernelPackagedResolver.ts', 'core/kernel.ts']) {
     const sourcePath = path.join(extRoot, rel)
     const out = transpileTypeScriptSource(fs.readFileSync(sourcePath, 'utf8'), sourcePath)
     fs.writeFileSync(path.join(distRoot, rel.replace(/\.ts$/, '.js')), out, 'utf8')

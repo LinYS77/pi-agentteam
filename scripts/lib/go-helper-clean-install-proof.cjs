@@ -14,6 +14,7 @@ const REQUIRED_INSTALLED_FILES = [
   'package.json',
   'index.ts',
   'types.ts',
+  'core/kernelContract.ts',
   'core/kernel.ts',
   'core/kernelPackagedResolver.ts',
   'api/tools.ts',
@@ -424,7 +425,7 @@ function transpileInstalledKernel(installedRoot) {
   const distRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-v0633-installed-code-'))
   fs.writeFileSync(path.join(distRoot, 'package.json'), `${JSON.stringify({ private: true, type: 'commonjs' }, null, 2)}\n`, 'utf8')
   fs.mkdirSync(path.join(distRoot, 'core'), { recursive: true })
-  for (const rel of ['core/readModelFingerprint.ts', 'core/kernelPackagedResolver.ts', 'core/kernel.ts']) {
+  for (const rel of ['core/kernelContract.ts', 'core/readModelFingerprint.ts', 'core/kernelPackagedResolver.ts', 'core/kernel.ts']) {
     const sourcePath = path.join(installedRoot, ...rel.split('/'))
     if (!fs.existsSync(sourcePath)) fail('installed-code-load-failed', 'install package with required TypeScript kernel sources', 'installed-code-source')
     const out = ts.transpileModule(fs.readFileSync(sourcePath, 'utf8'), {

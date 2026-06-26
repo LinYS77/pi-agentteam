@@ -16,6 +16,7 @@ module.exports = {
     const readme = read(root, 'README.md')
     const plan = read(root, 'docs/agentteam方案书.md')
     const packageJson = JSON.parse(read(root, 'package.json'))
+    const kernelContractSource = read(root, 'core/kernelContract.ts')
     const kernelSource = read(root, 'core/kernel.ts')
     const goSource = read(root, 'kernel/go/agentteam-kernel/main.go')
     const kernel = env.helpers.requireDist('core/kernel.js')
@@ -31,7 +32,8 @@ module.exports = {
     assert.equal(kernel.AGENTTEAM_KERNEL_HELPER_VERSION, '0.3.0-read-model-shadow')
     assert.deepEqual(kernel.AGENTTEAM_KERNEL_CAPABILITIES, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint'])
     assert.equal(kernel.AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED, false)
-    assert.match(kernelSource, /AGENTTEAM_KERNEL_PROTOCOL_VERSION = 1/)
+    assert.match(kernelContractSource, /AGENTTEAM_KERNEL_PROTOCOL_VERSION = 1/)
+    assert.match(kernelSource, /from '\.\/kernelContract\.js'/)
     assert.match(goSource, /const protocolVersion = 1/)
     assert.match(goSource, /const helperVersion = "0\.3\.0-read-model-shadow"/)
 

@@ -199,7 +199,8 @@ function assertKernelSourceBoundaries(root) {
   assert.equal(/node_modules|package\.json|process\.cwd\(\)|require\.resolve|import\.meta\.resolve/i.test(kernel), false, 'kernel must not discover unapproved installed package layout by default')
   assert.equal(/npm\s+(?:publish|version|pack)|gh\s+release|cosign|slsa|curl\b|wget\b|node-gyp|prebuild|postinstall|preinstall/i.test(`${kernel}\n${resolver}`), false, 'kernel/resolver must not expose package/release/signing controls')
   assert.equal(/PI_AGENTTEAM_KERNEL|PI_AGENTTEAM_KERNEL_HELPER|AGENTTEAM_GO_KERNEL_HELPER|process\.env/i.test(resolver), false, 'packaged resolver must not read mode env or enable default discovery')
-  assertIncludes(resolver, "export const AGENTTEAM_PACKAGED_RESOLVER_MODULE = 'tmuxSnapshotParse'", 'core/kernelPackagedResolver.ts')
+  assertIncludes(resolver, "from './kernelContract.js'", 'core/kernelPackagedResolver.ts')
+  assertIncludes(resolver, 'export const AGENTTEAM_PACKAGED_RESOLVER_MODULE = AGENTTEAM_KERNEL_CURRENT_NATIVE_MODULE', 'core/kernelPackagedResolver.ts')
   assertIncludes(readModel, 'export function compactPanelReadModelFingerprint', 'core/readModelFingerprint.ts')
   assert.equal(/createAgentTeamKernelAdapter|spawnSync|child_process|tmuxSnapshotParse|PI_AGENTTEAM_KERNEL/i.test(readModel), false, 'read-model fingerprint module must remain TypeScript fallback logic only')
 }
