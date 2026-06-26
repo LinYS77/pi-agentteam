@@ -42,7 +42,8 @@ const REQUIRED_DOC = [
   'When the Go helper is missing, unavailable, incompatible, or returns a failed worker lifecycle result, the public facade returns `[]`.',
   'Kernel-level diagnostics remain compact on the adapter result and do not leak raw stdout, stderr, cwd, stack traces, state archives, mailbox bodies, report bodies, or worker transcripts.',
   '`listAgentTeamPanesFromSnapshot()` remains unchanged and still filters snapshot panes by `item.paneId && item.label`.',
-  'No `inspectPane`, `wakePane`, `syncPaneLabels`, `createTeammatePane`, `killPane`, `clearPaneLabel`, `targetForPaneId`, `captureCurrentPaneBinding`, or `display-message` path is migrated in this slice.',
+  '`inspectPane` remains outside the v0.6.55 list facade slice and is cut over separately by v0.6.56.',
+  'No `wakePane`, `syncPaneLabels`, `createTeammatePane`, `killPane`, `clearPaneLabel`, `targetForPaneId`, `captureCurrentPaneBinding`, or non-inspect `display-message` path is migrated in this slice.',
   'No Go source or native helper rebuild is required for this facade-only cutover.',
   '`package.json` remains `0.6.8`.',
   '`tests/fixtures/kernel/v0655/goListAgentTeamPanesFacadeCutover.cjs`',
@@ -53,7 +54,8 @@ const REQUIRED_ROADMAP = [
   'docs/perf/v0.6.55-go-list-agentteam-panes-facade-cutover.md',
   'tmux/core.ts listAgentTeamPanes() delegates to createAgentTeamKernelAdapter().listAgentTeamPanes()',
   'the TypeScript tmux list-panes fallback for listAgentTeamPanes is removed',
-  'inspectPane and mutating lifecycle remain TypeScript-owned',
+  'inspectPane is cut over separately by v0.6.56',
+  'mutating lifecycle remains TypeScript-owned',
   '**v0.6.55 Go listAgentTeamPanes facade cutover**',
 ]
 const RELEASE_OVERCLAIMS = [
@@ -64,7 +66,8 @@ const RELEASE_OVERCLAIMS = [
   'GitHub release created',
   'release can ship',
   'v0.7 is release-ready',
-  'inspectPaneFacadeMigrated: true',
+  'targetForPaneIdMigrated: true',
+  'captureCurrentPaneBindingMigrated: true',
   'createTeammatePaneMigrated: true',
   'wakePaneMigrated: true',
   'syncPaneLabelsMigrated: true',
@@ -94,10 +97,14 @@ function assertNoReleaseOverclaims(source, label) {
 }
 
 function functionBody(source, name) {
-  const start = source.indexOf(`export function ${name}(`)
+  let start = source.indexOf(`export function ${name}(`)
+  if (start === -1) start = source.indexOf(`export async function ${name}(`)
   assert.notEqual(start, -1, `${name} should exist`)
-  const brace = source.indexOf('{', start)
-  assert.notEqual(brace, -1, `${name} should have a body`)
+  const parameterEnd = source.indexOf(')', start)
+  assert.notEqual(parameterEnd, -1, `${name} should have parameters`)
+  const signatureEnd = source.indexOf('\n', parameterEnd)
+  const brace = source.lastIndexOf('{', signatureEnd === -1 ? source.length : signatureEnd)
+  assert.ok(brace > parameterEnd, `${name} should have a body`)
   let depth = 0
   for (let index = brace; index < source.length; index += 1) {
     const char = source[index]
@@ -131,7 +138,7 @@ function assertFixtureShape(root) {
   assert.equal(goListAgentTeamPanesFacadeCutover.failClosedEmptyArrayOnHelperFailure, true)
   assert.equal(goListAgentTeamPanesFacadeCutover.compactPaneFieldsOnly, true)
   assert.equal(goListAgentTeamPanesFacadeCutover.listAgentTeamPanesFromSnapshotUnchanged, true)
-  assert.equal(goListAgentTeamPanesFacadeCutover.inspectPaneFacadeMigrated, false)
+  assert.equal(goListAgentTeamPanesFacadeCutover.inspectPaneFacadeMigratedByLaterSlice, true)
   assert.equal(goListAgentTeamPanesFacadeCutover.createTeammatePaneMigrated, false)
   assert.equal(goListAgentTeamPanesFacadeCutover.wakePaneMigrated, false)
   assert.equal(goListAgentTeamPanesFacadeCutover.syncPaneLabelsMigrated, false)
@@ -165,6 +172,8 @@ function assertFacadeSource(root) {
   const goSource = read(root, GO_SOURCE)
   const listBody = functionBody(coreSource, 'listAgentTeamPanes')
   const inspectBody = functionBody(coreSource, 'inspectPane')
+  const targetBody = functionBody(coreSource, 'targetForPaneId')
+  const captureBody = functionBody(coreSource, 'captureCurrentPaneBinding')
   const snapshotListBody = functionBody(snapshotSource, 'listAgentTeamPanesFromSnapshot')
 
   assertIncludes(coreSource, "import { createAgentTeamKernelAdapter } from '../core/kernel.js'", TMUX_CORE)
@@ -175,8 +184,10 @@ function assertFacadeSource(root) {
   assert.equal(listBody.includes('#{@agentteam-name}'), false, 'listAgentTeamPanes facade must not parse tmux labels in TypeScript')
   assert.match(snapshotListBody, /return snapshot\.panes\.filter\(item => item\.paneId && item\.label\)/, 'snapshot helper should keep existing labeled-pane filter')
   assert.equal(snapshotListBody.includes('createAgentTeamKernelAdapter().listAgentTeamPanes()'), false, 'snapshot helper must remain snapshot-local')
-  assert.equal(inspectBody.includes('runTmuxNoThrow(['), true, 'inspectPane facade remains TypeScript-owned in this slice')
-  assert.equal(inspectBody.includes('display-message'), true, 'inspectPane display-message path remains TypeScript-owned in this slice')
+  assertIncludes(inspectBody, 'createAgentTeamKernelAdapter().inspectWorkerPane(paneId)', `${TMUX_CORE} inspectPane later cutover`)
+  assert.equal(inspectBody.includes('display-message'), false, 'inspectPane display-message path is removed by later v0.6.56 slice')
+  assert.equal(targetBody.includes('display-message'), true, 'targetForPaneId remains TypeScript display-message-owned')
+  assert.equal(captureBody.includes('display-message'), true, 'captureCurrentPaneBinding remains TypeScript display-message-owned')
   assertIncludes(kernelSource, "callHelper<unknown>('workerLifecycle', { operation: 'listAgentTeamPanes' })", KERNEL)
   assertIncludes(kernelSource, 'validateWorkerPaneListResult', KERNEL)
   assert.match(goSource, /case "listAgentTeamPanes"/, 'Go worker lifecycle list operation should remain implemented')

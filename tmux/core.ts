@@ -56,41 +56,22 @@ export async function ensureTmuxAvailable(signal?: AbortSignal): Promise<void> {
   }
 }
 
-function parseTmuxBoolean(value?: string): boolean | undefined {
-  if (value === undefined || value === '') return undefined
-  return value === '1' || value.toLowerCase() === 'true' || value.toLowerCase() === 'yes'
-}
-
 export function inspectPane(paneId: string): PaneInspection {
-  if (!paneId) {
-    return { paneId, exists: false, error: 'pane id is empty' }
-  }
-  const result = runTmuxNoThrow([
-    'display-message',
-    '-p',
-    '-t',
-    paneId,
-    '#{pane_id}\t#{pane_current_command}\t#{pane_in_mode}',
-  ])
-  if (!result.ok || !result.stdout) {
+  const result = createAgentTeamKernelAdapter().inspectWorkerPane(paneId)
+  if (!result.ok) {
     return {
       paneId,
       exists: false,
-      error: result.stderr || `tmux pane ${paneId} not found`,
+      error: result.error || result.reason,
     }
   }
-  const [resolvedPaneId, currentCommand, inModeRaw] = result.stdout.split('\t')
-  const modeResult = runTmuxNoThrow(['display-message', '-p', '-t', paneId, '#{pane_mode}'])
-  const inMode = parseTmuxBoolean(inModeRaw)
-  const mode = modeResult.ok ? modeResult.stdout.trim() || undefined : undefined
-  const copyMode = Boolean(mode?.toLowerCase().includes('copy'))
   return {
-    paneId: resolvedPaneId || paneId,
+    paneId: result.paneId || paneId,
     exists: true,
-    currentCommand: currentCommand?.trim() || undefined,
-    inMode,
-    mode,
-    copyMode,
+    currentCommand: result.currentCommand,
+    inMode: result.inMode,
+    mode: result.mode,
+    copyMode: result.copyMode,
   }
 }
 

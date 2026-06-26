@@ -85,6 +85,7 @@ docs/perf/*
 !docs/perf/v0.6.53-go-inspect-pane-worker-lifecycle.md
 !docs/perf/v0.6.54-go-list-agentteam-panes-worker-lifecycle.md
 !docs/perf/v0.6.55-go-list-agentteam-panes-facade-cutover.md
+!docs/perf/v0.6.56-go-inspect-pane-facade-cutover.md
 
 # Dependencies
 node_modules/
