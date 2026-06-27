@@ -184,6 +184,23 @@ type workerAgentTeamWindowTargetResult struct {
 	TmuxMutation      bool   `json:"tmuxMutation"`
 }
 
+type workerSessionExistenceResult struct {
+	OK                bool   `json:"ok"`
+	Operation         string `json:"operation"`
+	Capability        string `json:"capability"`
+	SessionName       string `json:"sessionName"`
+	Exists            bool   `json:"exists"`
+	Status            string `json:"status,omitempty"`
+	Marker            string `json:"resultMarker,omitempty"`
+	Failure           string `json:"failureKind,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Error             string `json:"error,omitempty"`
+	ReadOnly          bool   `json:"readOnly"`
+	StateFilesRead    bool   `json:"stateFilesRead"`
+	StateFilesWritten bool   `json:"stateFilesWritten"`
+	TmuxMutation      bool   `json:"tmuxMutation"`
+}
+
 type tmuxAvailabilityResult struct {
 	OK                bool   `json:"ok"`
 	Capability        string `json:"capability"`
@@ -230,6 +247,7 @@ func profile(params map[string]any) profileResult {
 			"workerLifecycleCaptureCurrentPaneBindingConnected": true,
 			"workerLifecycleListPanesInWindowConnected":         true,
 			"workerLifecycleFindAgentTeamWindowTargetConnected": true,
+			"workerLifecycleSessionExistsConnected":             true,
 			"tmuxAvailabilityConnected":                         true,
 			"panelConnected":                                    false,
 			"taskReportPlanRunConnected":                        false,
@@ -820,6 +838,59 @@ func findAgentTeamWindowTarget(params map[string]any) workerAgentTeamWindowTarge
 	return unavailableAgentTeamWindowTarget(sessionName, "pane-not-found")
 }
 
+func unavailableSessionExistence(sessionName string, kind string) workerSessionExistenceResult {
+	safeSessionName := compactTmuxSessionName(sessionName)
+	reason := "Go worker lifecycle sessionExists unavailable (" + kind + ")"
+	return workerSessionExistenceResult{
+		OK:                false,
+		Operation:         "sessionExists",
+		Capability:        "workerLifecycle",
+		SessionName:       safeSessionName,
+		Exists:            false,
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          true,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      false,
+	}
+}
+
+func sessionExists(params map[string]any) workerSessionExistenceResult {
+	sessionName := compactTmuxSessionName(stringParam(params, "sessionName"))
+	if sessionName == "" {
+		return unavailableSessionExistence("", "invalid-session")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "has-session", "-t", sessionName)
+	cmd.Env = os.Environ()
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return unavailableSessionExistence(sessionName, "tmux-command-timeout")
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return unavailableSessionExistence(sessionName, "tmux-unavailable")
+		}
+		return unavailableSessionExistence(sessionName, "pane-not-found")
+	}
+	return workerSessionExistenceResult{
+		OK:                true,
+		Operation:         "sessionExists",
+		Capability:        "workerLifecycle",
+		SessionName:       sessionName,
+		Exists:            true,
+		ReadOnly:          true,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      false,
+	}
+}
+
 func workerLifecycle(params map[string]any) any {
 	operation := stringParam(params, "operation")
 	switch operation {
@@ -833,6 +904,8 @@ func workerLifecycle(params map[string]any) any {
 		return listPanesInWindow(params)
 	case "findAgentTeamWindowTarget":
 		return findAgentTeamWindowTarget(params)
+	case "sessionExists":
+		return sessionExists(params)
 	default:
 		return unavailableWorkerPaneInspection(strings.TrimSpace(stringParam(params, "paneId")), "unsupported-operation")
 	}

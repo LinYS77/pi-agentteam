@@ -10,10 +10,9 @@ const {
   CAPABILITY,
   FACADE_NAME,
   FORBIDDEN_GO_TMUX_COMMANDS,
-  GO_AGENTTEAM_WINDOW_DISCOVERY_CUTOVER_SCHEMA_VERSION,
-  GO_AGENTTEAM_WINDOW_DISCOVERY_CUTOVER_THEME,
-  GO_WINDOW_DISCOVERY_COMMAND,
-  GO_WINDOW_DISCOVERY_FORMAT,
+  GO_SESSION_EXISTENCE_CUTOVER_SCHEMA_VERSION,
+  GO_SESSION_EXISTENCE_CUTOVER_THEME,
+  GO_SESSION_EXISTS_COMMAND,
   HELPER_VERSION,
   KERNEL_ADAPTER_DELEGATION,
   OPERATION,
@@ -22,13 +21,13 @@ const {
   PROTOCOL_VERSION,
   RELEASE_PACKAGE_GUARDS,
   RUNTIME_FILE,
-  goAgentTeamWindowDiscoveryCutover,
-} = require('../fixtures/kernel/v0665/goAgentTeamWindowDiscoveryCutover.cjs')
+  goSessionExistenceCutover,
+} = require('../fixtures/kernel/v0666/goSessionExistenceCutover.cjs')
 
-const DOC = 'docs/perf/v0.6.65-go-agentteam-window-discovery-cutover.md'
+const DOC = 'docs/perf/v0.6.66-go-session-existence-cutover.md'
 const ROADMAP = 'docs/agentteam方案书.md'
-const FIXTURE = 'tests/fixtures/kernel/v0665/goAgentTeamWindowDiscoveryCutover.cjs'
-const SUITE = 'tests/suites/go-kernel-v0665-go-agentteam-window-discovery-cutover.cjs'
+const FIXTURE = 'tests/fixtures/kernel/v0666/goSessionExistenceCutover.cjs'
+const SUITE = 'tests/suites/go-kernel-v0666-go-session-existence-cutover.cjs'
 const TMUX_WINDOWS = 'tmux/windows.ts'
 const TMUX_PROCESS = 'tmux/process.ts'
 const TMUX_CORE = 'tmux/core.ts'
@@ -44,27 +43,27 @@ const PROVENANCE = `${NATIVE_ROOT}/provenance.json`
 const ATTESTATION = `${NATIVE_ROOT}/attestation.intoto.jsonl`
 const ROOT_FORBIDDEN_FILES = ['package-lock.json', 'npm-shrinkwrap.json', 'go.mod', 'go.sum', 'kernel/go/agentteam-kernel/go.mod', 'kernel/go/agentteam-kernel/go.sum']
 const REQUIRED_DOC = [
-  '# v0.6.65 Go AgentTeam Window Discovery Cutover',
-  'Result: v0.6.65 cuts over `tmux/windows.ts` internal `findAgentTeamWindowTarget(sessionName, signal)` from direct TypeScript `list-windows` parsing to a narrow Go-backed `workerLifecycle.findAgentTeamWindowTarget` operation through the cancellable async kernel adapter seam.',
-  '`tmux/windows.ts` `findAgentTeamWindowTarget(sessionName, signal)` now delegates to `createAgentTeamKernelAdapter().findAgentTeamWindowTargetAsync(sessionName, signal)`.',
-  "The TypeScript `runTmuxNoThrowAsync(['list-windows', '-t', sessionName, '-F', '#{window_id}\\t#{@agentteam-window}'], undefined, signal)` fallback is removed from the discovery helper.",
-  'Go uses exactly `tmux list-windows -t <sessionName> -F workerLifecycleAgentTeamWindowFormat` with compact format `#{window_id}\\t#{@agentteam-window}` for `workerLifecycle.findAgentTeamWindowTarget`.',
-  'A marked agentteam window returns `${sessionName}:${windowId}` as before.',
-  'No marked window, missing session, helper failure, invalid response, empty session name, pre-aborted signal, and in-flight abort fail closed to `null` so TypeScript-owned creation remains in place.',
-  '`new-session`, `new-window`, list-panes during pane setup, display-message current target fallbacks, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned; `has-session` is superseded by the v0.6.66 `sessionExists` cutover.',
+  '# v0.6.66 Go Session Existence Cutover',
+  'Result: v0.6.66 cuts over the `tmux/windows.ts` `ensureSwarmWindow()` session existence check from direct TypeScript `has-session` probing to a narrow Go-backed `workerLifecycle.sessionExists` operation through the cancellable async kernel adapter seam.',
+  '`tmux/windows.ts` `ensureSwarmWindow()` now calls `createAgentTeamKernelAdapter().sessionExistsAsync(SWARM_SESSION, signal)`.',
+  "The TypeScript `runTmuxNoThrowAsync(['has-session', '-t', SWARM_SESSION], undefined, signal).ok` implementation is removed from `ensureSwarmWindow()`.",
+  'Go uses exactly `tmux has-session -t <sessionName>` for `workerLifecycle.sessionExists`.',
+  'A positive helper result skips the existing TypeScript `new-session` branch as before.',
+  'Missing session, helper failure, invalid response, empty session name, pre-aborted signal, and in-flight abort fail closed to `false`, so the existing TypeScript creation path remains in charge.',
+  "`new-session`, `new-window`, post-creation `list-windows -F '#{window_id}\\t#{window_name}'`, pane setup `list-panes`, inside-tmux `display-message` fallbacks, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned.",
   'Because Go source changes, the existing embedded helper is rebuilt in the same approved path with refreshed manifest, checksums, provenance, and placeholder attestation.',
   '`package.json` remains `0.6.8`.',
-  '`tests/fixtures/kernel/v0665/goAgentTeamWindowDiscoveryCutover.cjs`',
-  '`tests/suites/go-kernel-v0665-go-agentteam-window-discovery-cutover.cjs`',
+  '`tests/fixtures/kernel/v0666/goSessionExistenceCutover.cjs`',
+  '`tests/suites/go-kernel-v0666-go-session-existence-cutover.cjs`',
 ]
 const REQUIRED_ROADMAP = [
-  'v0.6.65 Go agentteam window discovery cutover',
-  'docs/perf/v0.6.65-go-agentteam-window-discovery-cutover.md',
-  'tmux/windows.ts findAgentTeamWindowTarget(sessionName, signal) delegates to createAgentTeamKernelAdapter().findAgentTeamWindowTargetAsync(sessionName, signal)',
-  'Go `workerLifecycle.findAgentTeamWindowTarget` uses only `tmux list-windows -t <sessionName> -F workerLifecycleAgentTeamWindowFormat`',
-  'missing session/no marked window/helper failure/empty session/pre-aborted/in-flight aborted signals fail closed to null',
-  'new-session/new-window/marking/labels/pane setup remain TypeScript-owned while has-session is superseded by v0.6.66',
-  '**v0.6.65 Go agentteam window discovery cutover**',
+  'v0.6.66 Go session existence cutover',
+  'docs/perf/v0.6.66-go-session-existence-cutover.md',
+  'tmux/windows.ts ensureSwarmWindow()` checks `createAgentTeamKernelAdapter().sessionExistsAsync(SWARM_SESSION, signal)`',
+  'Go `workerLifecycle.sessionExists` uses only exact `tmux has-session -t <sessionName>`',
+  'missing session/helper failure/invalid response/empty session/pre-aborted/in-flight aborted signals fail closed to false',
+  'new-session/new-window/post-creation list-windows/pane setup/display-message/marking/labels remain TypeScript-owned',
+  '**v0.6.66 Go session existence cutover**',
 ]
 const RELEASE_OVERCLAIMS = [
   'npm publish completed',
@@ -75,8 +74,9 @@ const RELEASE_OVERCLAIMS = [
   'release can ship',
   'v0.7 is release-ready',
   'newSessionMigrated: true',
-  'newSessionMigrated: true',
   'newWindowMigrated: true',
+  'postCreationWindowLookupMigrated: true',
+  'paneSetupMigrated: true',
   'markWindowAsAgentTeamMigrated: true',
   'refreshWindowPaneLabelsMigrated: true',
   'createTeammatePaneMigrated: true',
@@ -153,7 +153,7 @@ function writeHelper(filePath, body) {
 }
 
 async function withTempHelper(source, callback) {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-v0665-helper-'))
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-v0666-helper-'))
   try {
     const helperPath = path.join(tempRoot, 'helper.cjs')
     writeHelper(helperPath, source)
@@ -185,12 +185,15 @@ function writeFakeTmux(binDir) {
   fs.writeFileSync(tmuxPath, [
     '#!/usr/bin/env node',
     "const args = process.argv.slice(2)",
-    "if (args[0] === 'list-windows' && args[1] === '-t') {",
+    "if (args[0] === 'has-session' && args[1] === '-t') {",
+    "  if (args[2] === 'team') process.exit(0)",
+    "  if (args[2] === 'missing') process.exit(1)",
+    "  process.exit(3)",
+    "} else if (args[0] === 'list-windows' && args[1] === '-t') {",
     "  const session = args[2] || ''",
     "  const format = args[4] || ''",
     "  if (format !== '#{window_id}\\t#{@agentteam-window}') process.exit(4)",
-    "  if (session === 'team') process.stdout.write('@1\\t0\\n@7\\t1\\n@8\\t0\\n')",
-    "  else if (session === 'unmarked') process.stdout.write('@1\\t0\\n@2\\t\\n')",
+    "  if (session === 'team') process.stdout.write('@7\\t1\\n')",
     "  else process.exit(5)",
     "} else if (args[0] === 'list-panes' && args[1] === '-a') {",
     "  process.stdout.write('%leader\\tsession:@1\\tleader\\tpi\\n')",
@@ -205,48 +208,48 @@ function writeFakeTmux(binDir) {
 function assertFixtureShape(root) {
   assert.equal(exists(root, FIXTURE), true, `${FIXTURE} should exist`)
   assert.equal(exists(root, SUITE), true, `${SUITE} should exist`)
-  assert.deepEqual(JSON.parse(JSON.stringify(goAgentTeamWindowDiscoveryCutover)), goAgentTeamWindowDiscoveryCutover)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.schemaVersion, GO_AGENTTEAM_WINDOW_DISCOVERY_CUTOVER_SCHEMA_VERSION)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.theme, GO_AGENTTEAM_WINDOW_DISCOVERY_CUTOVER_THEME)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.packageVersion, PACKAGE_VERSION)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.helperVersion, HELPER_VERSION)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.protocolVersion, PROTOCOL_VERSION)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.capability, CAPABILITY)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.operation, OPERATION)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.facadeName, FACADE_NAME)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.runtimeFile, RUNTIME_FILE)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.kernelAdapterDelegation, KERNEL_ADAPTER_DELEGATION)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.goWindowDiscoveryCommand, GO_WINDOW_DISCOVERY_COMMAND)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.goWindowDiscoveryFormat, GO_WINDOW_DISCOVERY_FORMAT)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.asyncAbortPolicy, ASYNC_ABORT_POLICY)
-  assert.deepEqual(goAgentTeamWindowDiscoveryCutover.activeOperations, [...ACTIVE_OPERATIONS])
-  assert.deepEqual(goAgentTeamWindowDiscoveryCutover.activeCapabilities, [...ACTIVE_CAPABILITIES])
-  assert.equal(goAgentTeamWindowDiscoveryCutover.facadeCutoverMigrated, true)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.typescriptListWindowsFallbackRemoved, true)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.ensureSwarmWindowBehaviorPreserved, true)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.failClosedOnHelperFailure, true)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.failClosedOnMissingSession, true)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.failClosedOnNoMarkedWindow, true)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.failClosedOnEmptySessionName, true)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.failClosedOnAbort, true)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.rawOutputLeakageAllowed, false)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.hasSessionMigrated, true)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.newSessionMigrated, false)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.newWindowMigrated, false)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.markWindowAsAgentTeamMigrated, false)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.refreshWindowPaneLabelsMigrated, false)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.createTeammatePaneMigrated, false)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.killPaneMigrated, false)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.stateRepositoryMigrated, false)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.taskReportPlanRunMigrated, false)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.teamPanelViewModelMigrated, false)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.releasePackageVerificationMigrated, false)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.nativeArtifactRenamed, false)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.nativeHelperRebuilt, true)
-  assert.equal(goAgentTeamWindowDiscoveryCutover.goSourceChanged, true)
-  assert.deepEqual(goAgentTeamWindowDiscoveryCutover.preservedBoundaries, [...PRESERVED_BOUNDARIES])
-  assert.deepEqual(goAgentTeamWindowDiscoveryCutover.forbiddenGoTmuxCommands, [...FORBIDDEN_GO_TMUX_COMMANDS])
-  assert.deepEqual(goAgentTeamWindowDiscoveryCutover.releasePackageGuards, [...RELEASE_PACKAGE_GUARDS])
+  assert.deepEqual(JSON.parse(JSON.stringify(goSessionExistenceCutover)), goSessionExistenceCutover)
+  assert.equal(goSessionExistenceCutover.schemaVersion, GO_SESSION_EXISTENCE_CUTOVER_SCHEMA_VERSION)
+  assert.equal(goSessionExistenceCutover.theme, GO_SESSION_EXISTENCE_CUTOVER_THEME)
+  assert.equal(goSessionExistenceCutover.packageVersion, PACKAGE_VERSION)
+  assert.equal(goSessionExistenceCutover.helperVersion, HELPER_VERSION)
+  assert.equal(goSessionExistenceCutover.protocolVersion, PROTOCOL_VERSION)
+  assert.equal(goSessionExistenceCutover.capability, CAPABILITY)
+  assert.equal(goSessionExistenceCutover.operation, OPERATION)
+  assert.equal(goSessionExistenceCutover.facadeName, FACADE_NAME)
+  assert.equal(goSessionExistenceCutover.runtimeFile, RUNTIME_FILE)
+  assert.equal(goSessionExistenceCutover.kernelAdapterDelegation, KERNEL_ADAPTER_DELEGATION)
+  assert.equal(goSessionExistenceCutover.goSessionExistsCommand, GO_SESSION_EXISTS_COMMAND)
+  assert.equal(goSessionExistenceCutover.asyncAbortPolicy, ASYNC_ABORT_POLICY)
+  assert.deepEqual(goSessionExistenceCutover.activeOperations, [...ACTIVE_OPERATIONS])
+  assert.deepEqual(goSessionExistenceCutover.activeCapabilities, [...ACTIVE_CAPABILITIES])
+  assert.equal(goSessionExistenceCutover.facadeCutoverMigrated, true)
+  assert.equal(goSessionExistenceCutover.typescriptHasSessionFallbackRemoved, true)
+  assert.equal(goSessionExistenceCutover.ensureSwarmWindowBehaviorPreserved, true)
+  assert.equal(goSessionExistenceCutover.failClosedOnHelperFailure, true)
+  assert.equal(goSessionExistenceCutover.failClosedOnMissingSession, true)
+  assert.equal(goSessionExistenceCutover.failClosedOnEmptySessionName, true)
+  assert.equal(goSessionExistenceCutover.failClosedOnAbort, true)
+  assert.equal(goSessionExistenceCutover.rawOutputLeakageAllowed, false)
+  assert.equal(goSessionExistenceCutover.hasSessionMigrated, true)
+  assert.equal(goSessionExistenceCutover.newSessionMigrated, false)
+  assert.equal(goSessionExistenceCutover.newWindowMigrated, false)
+  assert.equal(goSessionExistenceCutover.postCreationWindowLookupMigrated, false)
+  assert.equal(goSessionExistenceCutover.paneSetupMigrated, false)
+  assert.equal(goSessionExistenceCutover.markWindowAsAgentTeamMigrated, false)
+  assert.equal(goSessionExistenceCutover.refreshWindowPaneLabelsMigrated, false)
+  assert.equal(goSessionExistenceCutover.createTeammatePaneMigrated, false)
+  assert.equal(goSessionExistenceCutover.killPaneMigrated, false)
+  assert.equal(goSessionExistenceCutover.stateRepositoryMigrated, false)
+  assert.equal(goSessionExistenceCutover.taskReportPlanRunMigrated, false)
+  assert.equal(goSessionExistenceCutover.teamPanelViewModelMigrated, false)
+  assert.equal(goSessionExistenceCutover.releasePackageVerificationMigrated, false)
+  assert.equal(goSessionExistenceCutover.nativeArtifactRenamed, false)
+  assert.equal(goSessionExistenceCutover.nativeHelperRebuilt, true)
+  assert.equal(goSessionExistenceCutover.goSourceChanged, true)
+  assert.deepEqual(goSessionExistenceCutover.preservedBoundaries, [...PRESERVED_BOUNDARIES])
+  assert.deepEqual(goSessionExistenceCutover.forbiddenGoTmuxCommands, [...FORBIDDEN_GO_TMUX_COMMANDS])
+  assert.deepEqual(goSessionExistenceCutover.releasePackageGuards, [...RELEASE_PACKAGE_GUARDS])
 }
 
 function assertDocs(root) {
@@ -268,22 +271,20 @@ function assertFacadeSource(root) {
   const goSource = read(root, GO_SOURCE)
   const builderSource = read(root, BUILDER)
   const verifierSource = read(root, VERIFIER)
-  const discoveryBody = functionBody(windowsSource, FACADE_NAME)
-  const ensureBody = functionBody(windowsSource, 'ensureSwarmWindow')
+  const discoveryBody = functionBody(windowsSource, 'findAgentTeamWindowTarget')
+  const ensureBody = functionBody(windowsSource, FACADE_NAME)
   const waitBody = functionBody(processSource, 'waitForPaneAppStart')
   const ensureTmuxBody = functionBody(coreSource, 'ensureTmuxAvailable')
 
   assertIncludes(windowsSource, "import { createAgentTeamKernelAdapter } from '../core/kernel.js'", TMUX_WINDOWS)
-  assertIncludes(discoveryBody, KERNEL_ADAPTER_DELEGATION, `${TMUX_WINDOWS} discovery delegation`)
-  assertIncludes(discoveryBody, 'if (!sessionName || signal?.aborted) return null', `${TMUX_WINDOWS} empty/preabort fail closed`)
-  assertIncludes(discoveryBody, 'if (!result.ok || !result.target) return null', `${TMUX_WINDOWS} helper failure fail closed`)
-  assert.equal(discoveryBody.includes("runTmuxNoThrowAsync(['list-windows'"), false, 'discovery helper must not retain direct list-windows fallback')
-  assert.equal(discoveryBody.includes('stdout'), false, 'discovery helper must not parse tmux stdout')
-  assert.equal(discoveryBody.includes('@agentteam-window'), false, 'discovery helper must not parse marker in TypeScript')
-  assert.equal(discoveryBody.includes('throw new Error'), false, 'discovery helper must not throw')
+  assertIncludes(ensureBody, KERNEL_ADAPTER_DELEGATION, `${TMUX_WINDOWS} session existence delegation`)
+  assertIncludes(ensureBody, 'const hasSession = sessionResult.ok && sessionResult.exists', `${TMUX_WINDOWS} positive confirmation only`)
+  assert.equal(ensureBody.includes("runTmuxNoThrowAsync(['has-session'"), false, 'ensureSwarmWindow must not retain direct has-session fallback')
+  assert.equal(windowsSource.includes('runTmuxNoThrowAsync'), false, `${TMUX_WINDOWS} should no longer import no-throw tmux for has-session`)
+  assert.equal(ensureBody.includes('stdout'), false, 'ensureSwarmWindow must not parse tmux stdout for session existence')
+  assert.equal(ensureBody.includes('throw new Error') && ensureBody.includes('has-session'), false, 'session existence must not throw')
 
-  assertIncludes(ensureBody, 'createAgentTeamKernelAdapter().sessionExistsAsync(SWARM_SESSION, signal)', 'has-session later v0.6.66 cutover')
-  assert.equal(ensureBody.includes("runTmuxNoThrowAsync(['has-session'"), false, 'has-session direct TS fallback is superseded by v0.6.66')
+  assertIncludes(discoveryBody, 'createAgentTeamKernelAdapter().findAgentTeamWindowTargetAsync(sessionName, signal)', 'v0.6.65 window discovery remains Go-backed')
   assertIncludes(ensureBody, "runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-session remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-window remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['list-windows', '-t', SWARM_SESSION, '-F', '#{window_id}\\t#{window_name}']", 'post-creation window name lookup remains TS-owned')
@@ -295,21 +296,20 @@ function assertFacadeSource(root) {
   assertIncludes(waitBody, 'kernel.inspectWorkerPaneAsync(paneId, signal)', 'v0.6.64 app-start wait remains Go-backed')
   assertIncludes(ensureTmuxBody, 'createAgentTeamKernelAdapter().checkTmuxAvailableAsync(signal)', 'v0.6.63 tmux availability remains Go-backed')
 
-  assertIncludes(kernelSource, 'export type AgentTeamKernelAgentTeamWindowTarget', KERNEL)
-  assertIncludes(kernelSource, 'findAgentTeamWindowTargetAsync(sessionName: string, signal?: AbortSignal): Promise<AgentTeamKernelAgentTeamWindowTarget>', KERNEL)
-  assertIncludes(kernelSource, 'function compactTmuxSessionName', KERNEL)
-  assertIncludes(kernelSource, 'function validateAgentTeamWindowTargetResult', KERNEL)
-  assertIncludes(kernelSource, "callHelperAsync<unknown>('workerLifecycle', { operation: 'findAgentTeamWindowTarget', sessionName: requestedSessionName }, signal)", KERNEL)
+  assertIncludes(kernelSource, 'export type AgentTeamKernelSessionExistence', KERNEL)
+  assertIncludes(kernelSource, 'sessionExistsAsync(sessionName: string, signal?: AbortSignal): Promise<AgentTeamKernelSessionExistence>', KERNEL)
+  assertIncludes(kernelSource, 'function validateSessionExistenceResult', KERNEL)
+  assertIncludes(kernelSource, "callHelperAsync<unknown>('workerLifecycle', { operation: 'sessionExists', sessionName: requestedSessionName }, signal)", KERNEL)
   assertIncludes(kernelSource, "detail: 'aborted'", `${KERNEL} compact abort diagnostic`)
 
   assert.deepEqual(parseGoCapabilities(goSource), [...ACTIVE_CAPABILITIES])
-  assertIncludes(goSource, 'const workerLifecycleAgentTeamWindowFormat = "#{window_id}\\t#{@agentteam-window}"', GO_SOURCE)
-  assertIncludes(goSource, 'type workerAgentTeamWindowTargetResult struct', GO_SOURCE)
-  assertIncludes(goSource, 'func findAgentTeamWindowTarget(params map[string]any) workerAgentTeamWindowTargetResult', GO_SOURCE)
-  assertIncludes(goSource, GO_WINDOW_DISCOVERY_COMMAND, GO_SOURCE)
+  assertIncludes(goSource, 'type workerSessionExistenceResult struct', GO_SOURCE)
+  assertIncludes(goSource, 'func sessionExists(params map[string]any) workerSessionExistenceResult', GO_SOURCE)
+  assertIncludes(goSource, GO_SESSION_EXISTS_COMMAND, GO_SOURCE)
   for (const operation of ACTIVE_OPERATIONS) assert.match(goSource, new RegExp(`case "${operation}"`), `${GO_SOURCE} should include ${operation}`)
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", workerLifecycleInspectPaneFormat\)/, 'inspect command remains global list-panes')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-t", target, "-F", workerLifecycleWindowPaneFormat\)/, 'window pane lookup remains approved list-panes')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-windows", "-t", sessionName, "-F", workerLifecycleAgentTeamWindowFormat\)/, 'window discovery remains approved list-windows')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'display-message remains current-pane only')
   assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, `${GO_SOURCE} must not add target-based display-message`)
   for (const command of FORBIDDEN_GO_TMUX_COMMANDS) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add ${command}`)
@@ -317,30 +317,44 @@ function assertFacadeSource(root) {
     assert.equal(goSource.includes(forbidden), false, `${GO_SOURCE} must not migrate ${forbidden}`)
   }
 
-  assertIncludes(builderSource, 'runWorkerLifecycleFindAgentTeamWindowTargetSmoke', BUILDER)
-  assertIncludes(builderSource, 'workerLifecycleFindAgentTeamWindowTarget', BUILDER)
+  assertIncludes(builderSource, 'runWorkerLifecycleSessionExistsSmoke', BUILDER)
   assertIncludes(builderSource, 'workerLifecycleSessionExists', BUILDER)
-  assertIncludes(verifierSource, 'workerLifecycleFindAgentTeamWindowTarget', VERIFIER)
   assertIncludes(verifierSource, 'workerLifecycleSessionExists', VERIFIER)
 }
 
 async function assertAsyncHelperRuntime(env) {
   if (typeof env.helpers.requireDist !== 'function') return
   const kernel = env.helpers.requireDist('core/kernel.js')
-  await withTempHelper(helperSourceForWorkerLifecycle(`params => ({ ok: true, operation: 'findAgentTeamWindowTarget', capability: 'workerLifecycle', sessionName: params.sessionName, exists: true, target: params.sessionName + ':@9', windowId: '@9', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false })`), async helperPath => {
-    const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath, env: { PATH: process.env.PATH || '', TMUX: '/tmp/v0665', TMUX_PANE: '%pane' } })
-    const result = await adapter.findAgentTeamWindowTargetAsync('pi-agentteam')
+  await withTempHelper(helperSourceForWorkerLifecycle(`params => ({ ok: true, operation: 'sessionExists', capability: 'workerLifecycle', sessionName: params.sessionName, exists: true, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false })`), async helperPath => {
+    const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath, env: { PATH: process.env.PATH || '', TMUX: '/tmp/v0666', TMUX_PANE: '%pane' } })
+    const result = await adapter.sessionExistsAsync('pi-agentteam')
     assert.equal(result.ok, true)
-    assert.equal(result.target, 'pi-agentteam:@9')
+    assert.equal(result.exists, true)
+    assert.equal(result.sessionName, 'pi-agentteam')
     assert.equal(adapter.metadata().kernel.fallbacks, 0)
   })
 
-  await withTempHelper(helperSourceForWorkerLifecycle(`params => ({ ok: true, operation: 'findAgentTeamWindowTarget', capability: 'workerLifecycle', sessionName: params.sessionName, exists: true, target: 'MAILBOX_BODY_SHOULD_NOT_LEAK', windowId: '@1', text: 'REPORT_BODY_SHOULD_NOT_LEAK', readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false })`), async helperPath => {
+  await withTempHelper(helperSourceForWorkerLifecycle(`params => ({ ok: false, operation: 'sessionExists', capability: 'workerLifecycle', sessionName: params.sessionName, exists: false, status: 'unknown', resultMarker: 'stale', failureKind: 'pane-not-found', reason: 'missing', error: 'missing', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false })`), async helperPath => {
     const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
-    const result = await adapter.findAgentTeamWindowTargetAsync('pi-agentteam')
+    const result = await adapter.sessionExistsAsync('pi-agentteam')
+    assert.equal(result.ok, false)
+    assert.equal(result.exists, false)
+    assert.equal(result.failureKind, 'pane-not-found')
+  })
+
+  await withTempHelper(helperSourceForWorkerLifecycle(`params => ({ ok: true, operation: 'sessionExists', capability: 'workerLifecycle', sessionName: params.sessionName, exists: true, text: 'REPORT_BODY_SHOULD_NOT_LEAK', readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false })`), async helperPath => {
+    const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+    const result = await adapter.sessionExistsAsync('pi-agentteam')
     assert.equal(result.ok, false, 'unsafe response should fail closed')
-    assert.equal(JSON.stringify(result).includes('MAILBOX_BODY_SHOULD_NOT_LEAK'), false)
     assert.equal(JSON.stringify(result).includes('REPORT_BODY_SHOULD_NOT_LEAK'), false)
+  })
+
+  await withTempHelper(helperSourceForWorkerLifecycle(`params => ({ ok: true, operation: 'sessionExists', capability: 'workerLifecycle', sessionName: params.sessionName, exists: true, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false })`), async helperPath => {
+    const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath })
+    const result = await adapter.sessionExistsAsync('bad session')
+    assert.equal(result.ok, false)
+    assert.equal(result.exists, false)
+    assert.equal(result.failureKind, 'invalid-session')
   })
 }
 
@@ -354,52 +368,56 @@ const request = input ? JSON.parse(input.split('\\n')[0]) : {}
 function respond(result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n') }
 const health = { ok: true, implementation: 'go', protocolVersion: ${PROTOCOL_VERSION}, adapterVersion: '0.0.0-test', helperVersion: '${HELPER_VERSION}', capabilities: ${JSON.stringify(ACTIVE_CAPABILITIES)}, businessPathsConnected: false }
 if (request.method === 'health') setTimeout(() => respond(health), 200)
-else if (request.method === 'workerLifecycle') setTimeout(() => respond({ ok: true, operation: 'findAgentTeamWindowTarget', capability: 'workerLifecycle', sessionName: request.params.sessionName, exists: true, target: request.params.sessionName + ':@late', windowId: '@late', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }), 500)
+else if (request.method === 'workerLifecycle') setTimeout(() => respond({ ok: true, operation: 'sessionExists', capability: 'workerLifecycle', sessionName: request.params.sessionName, exists: true, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }), 500)
 `, async helperPath => {
     const preAbort = new AbortController()
     preAbort.abort()
     const preAdapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath, timeoutMs: 1000 })
-    const preResult = await preAdapter.findAgentTeamWindowTargetAsync('pi-agentteam', preAbort.signal)
+    const preResult = await preAdapter.sessionExistsAsync('pi-agentteam', preAbort.signal)
     assert.equal(preResult.ok, false)
+    assert.equal(preResult.exists, false)
     assert.equal(preResult.failureKind, 'helper-spawn-error')
 
     const controller = new AbortController()
     const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath, timeoutMs: 1000 })
-    const pending = adapter.findAgentTeamWindowTargetAsync('pi-agentteam', controller.signal)
+    const pending = adapter.sessionExistsAsync('pi-agentteam', controller.signal)
     setTimeout(() => controller.abort(), 50)
     const aborted = await pending
     assert.equal(aborted.ok, false)
+    assert.equal(aborted.exists, false)
     assert.equal(aborted.failureKind, 'helper-spawn-error')
   })
 }
 
 function assertDirectGoBehavior(root) {
   if (!hasGoToolchain()) return
-  const fakeTmuxRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-v0665-fake-tmux-'))
+  const fakeTmuxRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-v0666-fake-tmux-'))
   try {
     writeFakeTmux(fakeTmuxRoot)
-    const env = { PATH: `${fakeTmuxRoot}${path.delimiter}${process.env.PATH || ''}`, TMUX: '/tmp/agentteam-v0665-fake-socket', TMUX_PANE: '%current' }
-    const success = runGoHelper(root, { jsonrpc: '2.0', id: 'window-target', method: 'workerLifecycle', params: { operation: 'findAgentTeamWindowTarget', sessionName: 'team' } }, env)
+    const env = { PATH: `${fakeTmuxRoot}${path.delimiter}${process.env.PATH || ''}`, TMUX: '/tmp/agentteam-v0666-fake-socket', TMUX_PANE: '%current' }
+    const success = runGoHelper(root, { jsonrpc: '2.0', id: 'session-exists', method: 'workerLifecycle', params: { operation: 'sessionExists', sessionName: 'team' } }, env)
     assert.equal(success.status, 0, success.stderr)
     const successResponse = JSON.parse(success.stdout.trim())
     assert.equal(successResponse.result.ok, true)
-    assert.equal(successResponse.result.operation, 'findAgentTeamWindowTarget')
-    assert.equal(successResponse.result.target, 'team:@7')
-    assert.equal(successResponse.result.windowId, '@7')
+    assert.equal(successResponse.result.operation, 'sessionExists')
+    assert.equal(successResponse.result.sessionName, 'team')
+    assert.equal(successResponse.result.exists, true)
     assert.equal(successResponse.result.readOnly, true)
     assert.equal(successResponse.result.tmuxMutation, false)
 
-    const unmarked = runGoHelper(root, { jsonrpc: '2.0', id: 'window-unmarked', method: 'workerLifecycle', params: { operation: 'findAgentTeamWindowTarget', sessionName: 'unmarked' } }, env)
-    const unmarkedResponse = JSON.parse(unmarked.stdout.trim())
-    assert.equal(unmarkedResponse.result.ok, false)
-    assert.equal(unmarkedResponse.result.failureKind, 'pane-not-found')
-
-    const missing = runGoHelper(root, { jsonrpc: '2.0', id: 'window-missing', method: 'workerLifecycle', params: { operation: 'findAgentTeamWindowTarget', sessionName: 'missing' } }, env)
+    const missing = runGoHelper(root, { jsonrpc: '2.0', id: 'session-missing', method: 'workerLifecycle', params: { operation: 'sessionExists', sessionName: 'missing' } }, env)
     const missingResponse = JSON.parse(missing.stdout.trim())
     assert.equal(missingResponse.result.ok, false)
-    assert.equal(missingResponse.result.failureKind, 'tmux-command-failed')
+    assert.equal(missingResponse.result.exists, false)
+    assert.equal(missingResponse.result.failureKind, 'pane-not-found')
 
-    const invalid = runGoHelper(root, { jsonrpc: '2.0', id: 'window-invalid', method: 'workerLifecycle', params: { operation: 'findAgentTeamWindowTarget', sessionName: 'bad session' } }, env)
+    const failed = runGoHelper(root, { jsonrpc: '2.0', id: 'session-failed', method: 'workerLifecycle', params: { operation: 'sessionExists', sessionName: 'failed' } }, env)
+    const failedResponse = JSON.parse(failed.stdout.trim())
+    assert.equal(failedResponse.result.ok, false)
+    assert.equal(failedResponse.result.exists, false)
+    assert.equal(failedResponse.result.failureKind, 'pane-not-found')
+
+    const invalid = runGoHelper(root, { jsonrpc: '2.0', id: 'session-invalid', method: 'workerLifecycle', params: { operation: 'sessionExists', sessionName: 'bad session' } }, env)
     const invalidResponse = JSON.parse(invalid.stdout.trim())
     assert.equal(invalidResponse.result.ok, false)
     assert.equal(invalidResponse.result.failureKind, 'invalid-session')
@@ -429,9 +447,7 @@ function assertPackageAndNativeGuards(root) {
   const checksums = read(root, CHECKSUMS)
   assert.equal(manifest.artifact.filename, 'agentteam-tmuxSnapshotParse')
   assert.deepEqual(manifest.capabilities, [...ACTIVE_CAPABILITIES])
-  assert.deepEqual(provenance.smoke.workerLifecycleFindAgentTeamWindowTarget.acceptedFailureKinds, ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout', 'pane-not-found'])
   assert.deepEqual(provenance.smoke.workerLifecycleSessionExists.acceptedFailureKinds, ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout', 'pane-not-found'])
-  assert.equal(manifest.smoke.workerLifecycleFindAgentTeamWindowTarget.acceptedFailureKinds.includes('tmux-unavailable'), true)
   assert.equal(manifest.smoke.workerLifecycleSessionExists.acceptedFailureKinds.includes('tmux-unavailable'), true)
   assert.equal(checksums.includes(HELPER), true)
   assert.equal(checksums.includes(MANIFEST), true)
@@ -440,7 +456,7 @@ function assertPackageAndNativeGuards(root) {
 }
 
 module.exports = {
-  name: 'Go kernel v0.6.65 Go agentteam window discovery cutover',
+  name: 'Go kernel v0.6.66 Go session existence cutover',
   async run(env) {
     const root = env.helpers.extRoot
     assertFixtureShape(root)

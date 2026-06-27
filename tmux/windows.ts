@@ -1,5 +1,5 @@
 import { createAgentTeamKernelAdapter } from '../core/kernel.js'
-import { runTmuxAsync, runTmuxNoThrowAsync } from './client.js'
+import { runTmuxAsync } from './client.js'
 import {
   ensureTmuxAvailable,
   firstPaneInWindow,
@@ -42,7 +42,8 @@ export async function ensureSwarmWindow(
     }
   }
 
-  const hasSession = (await runTmuxNoThrowAsync(['has-session', '-t', SWARM_SESSION], undefined, signal)).ok
+  const sessionResult = await createAgentTeamKernelAdapter().sessionExistsAsync(SWARM_SESSION, signal)
+  const hasSession = sessionResult.ok && sessionResult.exists
   if (!hasSession) {
     await runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW], undefined, signal)
     await markWindowAsAgentTeam(`${SWARM_SESSION}:${SWARM_WINDOW}`, signal)

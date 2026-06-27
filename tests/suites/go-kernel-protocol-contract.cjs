@@ -75,6 +75,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.workerLifecycleCaptureCurrentPaneBindingConnected, true)
   assert.equal(result.profile.workerLifecycleListPanesInWindowConnected, true)
   assert.equal(result.profile.workerLifecycleFindAgentTeamWindowTargetConnected, true)
+  assert.equal(result.profile.workerLifecycleSessionExistsConnected, true)
   assert.equal(result.profile.tmuxAvailabilityConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)
@@ -165,7 +166,9 @@ function assertMethodResult(response, request, fingerprintModule) {
         ? 'captureCurrentPaneBinding'
         : requestedOperation === 'findAgentTeamWindowTarget'
           ? 'findAgentTeamWindowTarget'
-          : 'inspectPane'
+          : requestedOperation === 'sessionExists'
+            ? 'sessionExists'
+            : 'inspectPane'
     assert.equal(response.result.operation, expectedOperation)
     assert.equal(response.result.capability, 'workerLifecycle')
     assert.equal(response.result.readOnly, true)
@@ -188,8 +191,12 @@ function assertMethodResult(response, request, fingerprintModule) {
         assert.equal(typeof response.result.windowId, 'string')
       }
     }
+    if (expectedOperation === 'sessionExists') {
+      assert.equal(response.result.sessionName, request.params?.sessionName || '')
+      if (response.result.ok === true) assert.equal(response.result.exists, true)
+    }
     if (response.result.ok === false) {
-      if (expectedOperation === 'inspectPane' || expectedOperation === 'findAgentTeamWindowTarget') assert.equal(response.result.exists, false)
+      if (expectedOperation === 'inspectPane' || expectedOperation === 'findAgentTeamWindowTarget' || expectedOperation === 'sessionExists') assert.equal(response.result.exists, false)
       assert.equal(response.result.status, 'unknown')
       assert.equal(response.result.resultMarker, 'stale')
       assert.ok(['pane-not-found', 'unsupported-operation', 'tmux-command-timeout', 'tmux-command-failed', 'tmux-unavailable', 'invalid-session'].includes(response.result.failureKind))

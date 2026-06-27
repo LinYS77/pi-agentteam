@@ -374,6 +374,30 @@ function runWorkerLifecycleFindAgentTeamWindowTargetSmoke(helperPath, env, timeo
   return { ok: result.ok === true, acceptedFailureKinds }
 }
 
+function runWorkerLifecycleSessionExistsSmoke(helperPath, env, timeoutMs) {
+  const result = runJsonRpc(helperPath, {
+    jsonrpc: '2.0',
+    id: 'workerLifecycleSessionExists',
+    method: 'workerLifecycle',
+    params: {
+      operation: 'sessionExists',
+      sessionName: 'agentteam-builder-smoke-missing',
+    },
+  }, env, timeoutMs, 'workerLifecycle')
+  if (result.operation !== 'sessionExists' || result.capability !== 'workerLifecycle' || result.readOnly !== true || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== false) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle sessionExists smoke result', 'workerLifecycle')
+  }
+  const acceptedFailureKinds = ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout', 'pane-not-found']
+  if (result.ok === true) {
+    if (result.sessionName !== 'agentteam-builder-smoke-missing' || result.exists !== true) {
+      fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle sessionExists positive result', 'workerLifecycle')
+    }
+  } else if (result.exists !== false || !acceptedFailureKinds.includes(result.failureKind)) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle sessionExists failure', 'workerLifecycle')
+  }
+  return { ok: result.ok === true, acceptedFailureKinds }
+}
+
 function runTmuxAvailabilitySmoke(helperPath, env, timeoutMs) {
   const result = runJsonRpc(helperPath, {
     jsonrpc: '2.0',
@@ -518,6 +542,7 @@ function writeMetadata(input) {
     workerLifecycleCurrentPaneBindingSmoke,
     workerLifecycleWindowPaneListSmoke,
     workerLifecycleFindAgentTeamWindowTargetSmoke,
+    workerLifecycleSessionExistsSmoke,
     tmuxAvailabilitySmoke,
   } = input
   const artifactDir = path.dirname(helperPath)
@@ -563,6 +588,7 @@ function writeMetadata(input) {
       workerLifecycleCaptureCurrentPaneBinding: workerLifecycleCurrentPaneBindingSmoke,
       workerLifecycleListPanesInWindow: workerLifecycleWindowPaneListSmoke,
       workerLifecycleFindAgentTeamWindowTarget: workerLifecycleFindAgentTeamWindowTargetSmoke,
+      workerLifecycleSessionExists: workerLifecycleSessionExistsSmoke,
       tmuxAvailability: tmuxAvailabilitySmoke,
     },
     outputRootKind,
@@ -650,6 +676,7 @@ function writeMetadata(input) {
       workerLifecycleCaptureCurrentPaneBinding: workerLifecycleCurrentPaneBindingSmoke,
       workerLifecycleListPanesInWindow: workerLifecycleWindowPaneListSmoke,
       workerLifecycleFindAgentTeamWindowTarget: workerLifecycleFindAgentTeamWindowTargetSmoke,
+      workerLifecycleSessionExists: workerLifecycleSessionExistsSmoke,
       tmuxAvailability: tmuxAvailabilitySmoke,
     },
     attestation: {
@@ -709,6 +736,7 @@ function writeMetadata(input) {
         workerLifecycleCaptureCurrentPaneBinding: true,
         workerLifecycleListPanesInWindow: true,
         workerLifecycleFindAgentTeamWindowTarget: true,
+        workerLifecycleSessionExists: true,
         tmuxAvailability: true,
       },
       artifact: helperRel,
@@ -757,6 +785,7 @@ function buildGoHelperArtifact(options = {}) {
   const workerLifecycleCurrentPaneBindingSmoke = runWorkerLifecycleCaptureCurrentPaneBindingSmoke(helperPath, env, timeoutMs)
   const workerLifecycleWindowPaneListSmoke = runWorkerLifecycleListPanesInWindowSmoke(helperPath, env, timeoutMs)
   const workerLifecycleFindAgentTeamWindowTargetSmoke = runWorkerLifecycleFindAgentTeamWindowTargetSmoke(helperPath, env, timeoutMs)
+  const workerLifecycleSessionExistsSmoke = runWorkerLifecycleSessionExistsSmoke(helperPath, env, timeoutMs)
   const tmuxAvailabilitySmoke = runTmuxAvailabilitySmoke(helperPath, env, timeoutMs)
 
   const metadata = writeMetadata({
@@ -778,6 +807,7 @@ function buildGoHelperArtifact(options = {}) {
     workerLifecycleCurrentPaneBindingSmoke,
     workerLifecycleWindowPaneListSmoke,
     workerLifecycleFindAgentTeamWindowTargetSmoke,
+    workerLifecycleSessionExistsSmoke,
     tmuxAvailabilitySmoke,
   })
   const result = {
