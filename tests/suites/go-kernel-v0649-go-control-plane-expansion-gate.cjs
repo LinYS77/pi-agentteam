@@ -225,8 +225,10 @@ function assertRuntimeNotMigratedYet(root) {
   assert.match(snapshotSource, /createAgentTeamKernelAdapter\(\)\.captureTmuxSnapshot/, 'post-v0.6.49 first slice should migrate tmux capture through the kernel adapter')
   assert.match(clientSource, /execFileSync\(TMUX/, 'TypeScript tmux client should remain for non-capture lifecycle operations')
   assert.match(goSource, /case "tmuxSnapshotCapture"/, 'post-v0.6.49 first slice should add Go tmux capture runtime')
-  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux capture must remain limited to list-panes snapshot capture')
-  assert.equal(/createTeammatePane|kill-pane|display-message|send-keys|PI_AGENTTEAM_HOME|team\.json|os\.ReadFile|os\.WriteFile|os\.Create/.test(goSource), false, 'post-v0.6.49 tmux capture slice must not migrate lifecycle/state/task/UI runtime yet')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux capture must retain list-panes snapshot capture')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'later v0.6.60 permits only narrow current-pane binding display-message')
+  assert.equal(/createTeammatePane|kill-pane|send-keys|PI_AGENTTEAM_HOME|team\.json|os\.ReadFile|os\.WriteFile|os\.Create/.test(goSource), false, 'post-v0.6.49 slices must not migrate mutating lifecycle/state/task/UI runtime yet')
+  assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, 'Go must not add target-based display-message')
 }
 
 function assertRepositoryArtifacts(root) {

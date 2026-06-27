@@ -88,7 +88,10 @@ function assertGoHelperBoundaries(root) {
   assert.match(source, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", workerLifecycleInspectPaneFormat\)/, 'Go worker lifecycle command must include read-only inspectPane')
   assert.match(source, /case\s+"inspectPane"/, 'Go workerLifecycle must keep inspectPane read-only')
   assert.match(source, /case\s+"listAgentTeamPanes"/, 'Go workerLifecycle must include read-only listAgentTeamPanes')
-  assertNoMatches(GO_HELPER, source, [
+  assert.match(source, /case\s+"captureCurrentPaneBinding"/, 'Go workerLifecycle must include narrow current-pane binding')
+  assert.match(source, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'Go may use only narrow current-pane binding display-message')
+  const sourceWithoutAllowedDisplayMessage = source.replace(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/g, '')
+  assertNoMatches(GO_HELPER, sourceWithoutAllowedDisplayMessage, [
     ['broad tmux subprocess command', /display-message|send-keys|kill-pane|split-window|new-window/],
     ['shell execution API', /\bexec\.Command\s*\(|\b(?:sh|bash|zsh|fish)\b/],
     ['worker spawn/mutating lifecycle authority', /worker\s*spawn|spawnWorker|WorkerSpawn|paneLost|forceReconcile|lightReconcile/],

@@ -107,6 +107,10 @@ function validMethodCases() {
       name: 'worker lifecycle listAgentTeamPanes',
       request: request('workerLifecycle', { operation: 'listAgentTeamPanes' }, 'worker-lifecycle-list-string-id'),
     },
+    {
+      name: 'worker lifecycle captureCurrentPaneBinding',
+      request: request('workerLifecycle', { operation: 'captureCurrentPaneBinding' }, 'worker-lifecycle-current-binding-string-id'),
+    },
   ]
 }
 
@@ -210,6 +214,7 @@ function multipleRequestBatch() {
     request('compactReadModelFingerprint', { input: compactReadModelInput() }, 'batch-read-model'),
     request('workerLifecycle', { operation: 'inspectPane', paneId: '%batch-missing-pane' }, 'batch-worker-lifecycle'),
     request('workerLifecycle', { operation: 'listAgentTeamPanes' }, 'batch-worker-lifecycle-list'),
+    request('workerLifecycle', { operation: 'captureCurrentPaneBinding' }, 'batch-worker-lifecycle-current-binding'),
     { jsonrpc: '2.0', id: 'batch-unknown', method: 'unknownMethod' },
   ]
 }

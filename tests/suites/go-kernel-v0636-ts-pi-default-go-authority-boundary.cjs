@@ -74,7 +74,7 @@ const FORBIDDEN_DOC_OVERCLAIMS = [
   'second platform support is approved',
 ]
 const FORBIDDEN_CONTROL_TERMS = /\b(?:default Go|default resolver|go-packaged-preview|go-cutover|PI_AGENTTEAM_KERNEL|native helper|native package|package-manager native|normal-user native availability UI|release asset|install source|signing|cosign|SLSA|platform matrix|second platform|download artifact|artifact download|package publish|npm publish|npm version|package native controls|default-disable|defaultDisable|DEFAULT_DISABLE)\b/i
-const GO_FORBIDDEN_TERMS = /\b(?:RegisterCommand|registerCommand|RegisterTool|registerTool|registerMessageRenderer|ExtensionAPI|pi-coding-agent|pi-tui|tmux\s+(?:capture|send|kill|new|split|display)|exec\.Command\s*\(|shell|bash|sh -c|package-lock|npm publish|npm version|gh release|GITHUB_TOKEN|STATE|MAILBOX|REPORT|PLANRUN|PlanRun|TaskReport|mailbox|task report|release asset|install source|cosign|SLSA|default resolver|default Go|PI_AGENTTEAM_KERNEL)\b/i
+const GO_FORBIDDEN_TERMS = /\b(?:RegisterCommand|registerCommand|RegisterTool|registerTool|registerMessageRenderer|ExtensionAPI|pi-coding-agent|pi-tui|tmux\s+(?:capture|send|kill|new|split)|exec\.Command\s*\(|shell|bash|sh -c|package-lock|npm publish|npm version|gh release|GITHUB_TOKEN|STATE|MAILBOX|REPORT|PLANRUN|PlanRun|TaskReport|mailbox|task report|release asset|install source|cosign|SLSA|default resolver|default Go|PI_AGENTTEAM_KERNEL)\b/i
 const KERNEL_TS_FORBIDDEN_PI_TERMS = /@earendil-works\/pi-|registerCommand|registerTool|registerMessageRenderer|pi\.on|new Box\(|new Text\(|openTeamPanel|registerAgentTeamCommands|registerAgentTeamTools|registerAgentTeamRenderers|registerSessionHooks|registerContextHooks|registerAgentHooks|agentteam_create|agentteam_task|agentteam_planrun|agentteam_receive|agentteam_send/i
 const ROOT_FORBIDDEN_FILES = [
   'package-lock.json',
@@ -220,7 +220,9 @@ function assertGoAuthorityBounded(root) {
   assertIncludes(goSource, 'StateFilesRead:    false,', 'kernel/go/agentteam-kernel/main.go')
   assertIncludes(goSource, 'StateFilesWritten: false,', 'kernel/go/agentteam-kernel/main.go')
   assert.equal(GO_FORBIDDEN_TERMS.test(goSource), false, 'Go helper must not own pi/control-plane/package/release/full-text authority')
-  assert.equal(/send-keys|kill-pane|split-window|new-window|display-message|capture-pane/.test(goSource), false, 'Go workerLifecycle must not add mutating tmux lifecycle commands')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'Go workerLifecycle may use only narrow current-pane binding display-message')
+  assert.equal(/send-keys|kill-pane|split-window|new-window|capture-pane/.test(goSource), false, 'Go workerLifecycle must not add mutating tmux lifecycle commands')
+  assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, 'Go workerLifecycle must not add target-based display-message')
   assert.equal(/os\.Stdin|os\.Stdout/.test(goSource), true, 'Go helper should remain stdio JSON-RPC')
 }
 

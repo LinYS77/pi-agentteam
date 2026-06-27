@@ -1,5 +1,5 @@
 import { createAgentTeamKernelAdapter } from '../core/kernel.js'
-import { runTmuxNoThrow, runTmuxNoThrowAsync } from './client.js'
+import { runTmuxNoThrowAsync } from './client.js'
 export {
   captureTmuxSnapshot,
   findPaneInSnapshot,
@@ -115,20 +115,16 @@ export async function firstPaneInWindow(target: string, signal?: AbortSignal): P
 
 export function captureCurrentPaneBinding(): { paneId: string; target: string } | null {
   if (!isInsideTmux()) return null
-  const paneIdResult = runTmuxNoThrow(['display-message', '-p', '#{pane_id}'])
-  const targetResult = runTmuxNoThrow(['display-message', '-p', '#{session_name}:#{window_id}'])
-  if (!paneIdResult.ok || !paneIdResult.stdout || !targetResult.ok || !targetResult.stdout) {
-    return null
-  }
+  const result = createAgentTeamKernelAdapter().captureCurrentPaneBinding()
+  if (!result.ok || !result.paneId || !result.target) return null
   return {
-    paneId: paneIdResult.stdout,
-    target: targetResult.stdout,
+    paneId: result.paneId,
+    target: result.target,
   }
 }
 
 export function targetForPaneId(paneId: string): string | null {
-  const result = runTmuxNoThrow(['display-message', '-p', '-t', paneId, '#{session_name}:#{window_id}'])
-  return result.ok && result.stdout ? result.stdout : null
+  return resolvePaneBinding(paneId)?.target ?? null
 }
 
 export function listAgentTeamPanes(): AgentTeamPaneInfo[] {

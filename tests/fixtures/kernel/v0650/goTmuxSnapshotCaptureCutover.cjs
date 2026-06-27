@@ -34,7 +34,6 @@ const FORBIDDEN_GO_RUNTIME_TERMS = Object.freeze([
   'split-window',
   'new-window',
   'kill-pane',
-  'display-message',
   'PI_AGENTTEAM_HOME',
   'team.json',
   'os.ReadFile',

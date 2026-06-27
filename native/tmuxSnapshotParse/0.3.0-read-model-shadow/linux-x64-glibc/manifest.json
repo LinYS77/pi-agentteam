@@ -23,8 +23,8 @@
   "artifact": {
     "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/agentteam-tmuxSnapshotParse",
     "filename": "agentteam-tmuxSnapshotParse",
-    "size": 3416239,
-    "sha256": "4459e22f05f3d540b5f470c982fd479e9269ed7bbd09573be9097f8a4880a83d",
+    "size": 3425660,
+    "sha256": "22580930212a3b41ed43b851f0ec2128ef7f349b307abeddfa6dc46113b32a37",
     "executable": true,
     "mode": "0755"
   },
@@ -39,7 +39,7 @@
   },
   "source": {
     "path": "kernel/go/agentteam-kernel",
-    "revision": "476a4ff21c8294e2355e0f6f1c03fe00cd25a4ea"
+    "revision": "d59b1cbbfa75b9d5dc9749453cccf03d9d33a673"
   },
   "build": {
     "command": [
@@ -56,7 +56,7 @@
     "cwd": "kernel/go/agentteam-kernel",
     "toolchain": "go version go1.25.10 linux/amd64",
     "runIdentity": "local-reviewer-run",
-    "generatedAt": "2026-06-26T11:49:14.450Z"
+    "generatedAt": "2026-06-26T13:34:09.465Z"
   },
   "smoke": {
     "health": true,
@@ -81,13 +81,22 @@
         "tmux-unavailable",
         "tmux-command-timeout"
       ]
+    },
+    "workerLifecycleCaptureCurrentPaneBinding": {
+      "ok": true,
+      "acceptedFailureKinds": [
+        "tmux-command-failed",
+        "tmux-unavailable",
+        "tmux-command-timeout",
+        "pane-not-found"
+      ]
     }
   },
   "attestation": {
     "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/attestation.intoto.jsonl",
     "kind": "placeholder-only",
     "signed": false,
-    "sha256": "e9ae67278f2df768759bf3e89c18cb83a0faeb2fdbd8f98a3f82def4537057ff"
+    "sha256": "eea70f3b9ed2b53a855c6a4d4b1d79fbee18096cec0b9d5a48e2530ea9fbb058"
   },
   "license": {
     "name": "MIT",

@@ -130,6 +130,7 @@ export type AgentTeamKernelProfile = AgentTeamKernelHealth & {
     compactReadModelFingerprintConnected: boolean
     workerLifecycleInspectPaneConnected?: boolean
     workerLifecycleListAgentTeamPanesConnected?: boolean
+    workerLifecycleCaptureCurrentPaneBindingConnected?: boolean
     panelConnected: false
     taskReportPlanRunConnected: false
   }
@@ -213,6 +214,23 @@ export type AgentTeamKernelWorkerPaneList = {
   tmuxMutation: false
 }
 
+export type AgentTeamKernelCurrentPaneBinding = {
+  ok: boolean
+  operation: 'captureCurrentPaneBinding'
+  capability: 'workerLifecycle'
+  paneId?: string
+  target?: string
+  status?: 'unknown'
+  resultMarker?: 'stale'
+  failureKind?: AgentTeamKernelWorkerLifecycleFailureKind
+  reason?: string
+  error?: string
+  readOnly: true
+  stateFilesRead: false
+  stateFilesWritten: false
+  tmuxMutation: false
+}
+
 export type AgentTeamKernelAdapter = {
   metadata(): AgentTeamKernelMetadata
   health(): AgentTeamKernelHealth
@@ -221,6 +239,7 @@ export type AgentTeamKernelAdapter = {
   captureTmuxSnapshot(capturedAt: number): AgentTeamKernelTmuxSnapshot
   inspectWorkerPane(paneId: string): AgentTeamKernelWorkerPaneInspection
   listAgentTeamPanes(): AgentTeamKernelWorkerPaneList
+  captureCurrentPaneBinding(): AgentTeamKernelCurrentPaneBinding
   compactReadModelFingerprint(input: unknown, fallback?: (input: unknown) => AgentTeamKernelCompactReadModelResult): AgentTeamKernelCompactReadModelResult
 }
 
@@ -403,6 +422,7 @@ function fallbackProfile(metadata: AgentTeamKernelMetadata, params: Record<strin
       compactReadModelFingerprintConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('compactReadModelFingerprint'),
       workerLifecycleInspectPaneConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleListAgentTeamPanesConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
+      workerLifecycleCaptureCurrentPaneBindingConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       panelConnected: false,
       taskReportPlanRunConnected: false,
     },
@@ -566,6 +586,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     if (profile.stateConnected !== false || profile.tmuxConnected !== false) return undefined
     if (profile.tmuxSnapshotParseConnected !== true || profile.tmuxSnapshotCaptureConnected !== true || profile.compactReadModelFingerprintConnected !== true) return undefined
     if (profile.workerLifecycleInspectPaneConnected !== true || profile.workerLifecycleListAgentTeamPanesConnected !== true) return undefined
+    if (profile.workerLifecycleCaptureCurrentPaneBindingConnected !== undefined && profile.workerLifecycleCaptureCurrentPaneBindingConnected !== true) return undefined
     if (profile.panelConnected !== false || profile.taskReportPlanRunConnected !== false) return undefined
     return {
       ...health,
@@ -579,6 +600,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         compactReadModelFingerprintConnected: true,
         workerLifecycleInspectPaneConnected: true,
         workerLifecycleListAgentTeamPanesConnected: true,
+        workerLifecycleCaptureCurrentPaneBindingConnected: profile.workerLifecycleCaptureCurrentPaneBindingConnected === true,
         panelConnected: false,
         taskReportPlanRunConnected: false,
       },
@@ -746,6 +768,27 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     }
   }
 
+  function workerLifecycleUnavailableCurrentPaneBinding(kind: AgentTeamKernelWorkerLifecycleFailureKind, detail?: unknown): AgentTeamKernelCurrentPaneBinding {
+    const reason = kind === 'pane-not-found'
+      ? `Go worker lifecycle captureCurrentPaneBinding unavailable (pane-not-found)`
+      : cutoverMessage(kind as AgentTeamKernelCutoverFailureKind, detail)
+    const safeReason = compactKernelText(reason, cutoverMessage('previous-helper-failure'))
+    return {
+      ok: false,
+      operation: 'captureCurrentPaneBinding',
+      capability: 'workerLifecycle',
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind: kind,
+      reason: safeReason,
+      error: safeReason,
+      readOnly: true,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: false,
+    }
+  }
+
   function validateWorkerPaneSnapshotItem(value: unknown): AgentTeamKernelTmuxPaneSnapshotItem | undefined {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
     const pane = value as Partial<AgentTeamKernelTmuxPaneSnapshotItem>
@@ -861,6 +904,48 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     }
   }
 
+  function validateCurrentPaneBindingResult(value: unknown): AgentTeamKernelCurrentPaneBinding | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const result = value as Partial<AgentTeamKernelCurrentPaneBinding>
+    if (result.operation !== 'captureCurrentPaneBinding' || result.capability !== 'workerLifecycle') return undefined
+    if (result.readOnly !== true || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== false) return undefined
+    if (result.ok === true) {
+      const paneId = compactKernelText(result.paneId)
+      const target = compactKernelText(result.target)
+      if (!paneId || !target) return undefined
+      return {
+        ok: true,
+        operation: 'captureCurrentPaneBinding',
+        capability: 'workerLifecycle',
+        paneId,
+        target,
+        readOnly: true,
+        stateFilesRead: false,
+        stateFilesWritten: false,
+        tmuxMutation: false,
+      }
+    }
+    if (result.ok !== false) return undefined
+    const failureKind = typeof result.failureKind === 'string' && ['unsupported-operation', 'pane-not-found', 'invalid-pane-id', ...AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS].includes(result.failureKind)
+      ? result.failureKind as AgentTeamKernelWorkerLifecycleFailureKind
+      : 'previous-helper-failure'
+    const reason = compactKernelText(result.reason || result.error || cutoverMessage(failureKind as AgentTeamKernelCutoverFailureKind), cutoverMessage('previous-helper-failure'))
+    return {
+      ok: false,
+      operation: 'captureCurrentPaneBinding',
+      capability: 'workerLifecycle',
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind,
+      reason,
+      error: reason,
+      readOnly: true,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: false,
+    }
+  }
+
   function validateCompactReadModelResult(value: unknown): AgentTeamKernelCompactReadModelResult | undefined {
     if (!value || typeof value !== 'object') return undefined
     const result = value as AgentTeamKernelCompactReadModelResult
@@ -917,7 +1002,11 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       encoding: 'utf8',
       timeout: timeoutMs,
       maxBuffer: 1024 * 1024,
-      env: { PATH: env.PATH ?? process.env.PATH ?? '' },
+      env: {
+        PATH: env.PATH ?? process.env.PATH ?? '',
+        ...(env.TMUX ? { TMUX: env.TMUX } : {}),
+        ...(env.TMUX_PANE ? { TMUX_PANE: env.TMUX_PANE } : {}),
+      },
     })
     if (result.error) {
       return { ok: false, ...classifySpawnError(result.error) }
@@ -1062,6 +1151,15 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle listAgentTeamPanes result shape')
       }
       return workerLifecycleUnavailablePaneList(cutoverFailureKind ?? 'previous-helper-failure')
+    },
+    captureCurrentPaneBinding() {
+      const helperResult = callHelper<unknown>('workerLifecycle', { operation: 'captureCurrentPaneBinding' })
+      const parsed = validateCurrentPaneBindingResult(helperResult)
+      if (parsed) return parsed
+      if (helperResult !== undefined) {
+        recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle captureCurrentPaneBinding result shape')
+      }
+      return workerLifecycleUnavailableCurrentPaneBinding(cutoverFailureKind ?? 'previous-helper-failure')
     },
     compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint) {
       const compactInput = sanitizeCompactReadModelInput(input)

@@ -13,7 +13,6 @@ const ALLOWED_GO_TMUX_COMMANDS = Object.freeze([
   'tmux list-panes -a -F workerLifecycleInspectPaneFormat',
 ])
 const FORBIDDEN_GO_TMUX_COMMANDS = Object.freeze([
-  'display-message',
   'send-keys',
   'split-window',
   'new-window',

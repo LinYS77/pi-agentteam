@@ -95,6 +95,7 @@ module.exports = {
     assert.equal(defaultProfile.profile.compactReadModelFingerprintConnected, true)
     assert.equal(defaultProfile.profile.workerLifecycleInspectPaneConnected, true)
     assert.equal(defaultProfile.profile.workerLifecycleListAgentTeamPanesConnected, true)
+    assert.equal(defaultProfile.profile.workerLifecycleCaptureCurrentPaneBindingConnected, true)
     assert.equal(defaultProfile.profile.panelConnected, false)
     assert.equal(defaultProfile.profile.taskReportPlanRunConnected, false)
 
@@ -156,6 +157,7 @@ module.exports = {
             assert.equal(text.includes('createAgentTeamKernelAdapter().inspectWorkerPane(paneId)'), true, `${rel} must keep the approved inspectPane facade seam`)
             assert.equal(text.includes('return Boolean(paneId && inspectPane(paneId).exists)'), true, `${rel} must keep the approved paneExists facade seam`)
             assert.equal(text.includes('createAgentTeamKernelAdapter().listAgentTeamPanes()'), true, `${rel} must keep the approved listAgentTeamPanes facade seam`)
+            assert.equal(text.includes('createAgentTeamKernelAdapter().captureCurrentPaneBinding()'), true, `${rel} must keep the approved captureCurrentPaneBinding facade seam`)
             assert.equal((text.match(/core\/kernel\.js/g) || []).length, 1, `${rel} must not add more Go kernel imports`)
             continue
           }
@@ -175,6 +177,7 @@ module.exports = {
     assert.match(goSource, /case "workerLifecycle"/)
     assert.match(goSource, /case "inspectPane"/)
     assert.match(goSource, /case "listAgentTeamPanes"/)
+    assert.match(goSource, /case "captureCurrentPaneBinding"/)
     assert.match(goSource, /BusinessPathsConnected: false/)
 
     if (hasGoToolchain()) {
@@ -206,6 +209,7 @@ module.exports = {
       assert.equal(profile.result.profile.compactReadModelFingerprintConnected, true)
       assert.equal(profile.result.profile.workerLifecycleInspectPaneConnected, true)
       assert.equal(profile.result.profile.workerLifecycleListAgentTeamPanesConnected, true)
+      assert.equal(profile.result.profile.workerLifecycleCaptureCurrentPaneBindingConnected, true)
       assert.equal(profile.result.profile.panelConnected, false)
       assert.equal(profile.result.profile.taskReportPlanRunConnected, false)
 

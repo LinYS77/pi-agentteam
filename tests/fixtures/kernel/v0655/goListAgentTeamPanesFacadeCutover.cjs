@@ -16,7 +16,7 @@ const PRESERVED_BOUNDARIES = Object.freeze([
   'listAgentTeamPanesFromSnapshot remains unchanged and TypeScript-owned',
   'inspectPane facade is cut over by v0.6.56, not this slice',
   'wake/create/label/kill lifecycle remains TypeScript-owned',
-  'target/current pane binding and non-inspect display-message helpers remain TypeScript-owned',
+  'targetForPaneId is cut over by v0.6.59; current pane binding and non-inspect async/window display-message helpers remain TypeScript-owned',
   'state repository remains TypeScript-owned',
   'task/report/PlanRun governance remains TypeScript-owned',
   'team panel view-model remains TypeScript-owned',
@@ -24,7 +24,6 @@ const PRESERVED_BOUNDARIES = Object.freeze([
   'native artifact path and binary name remain unchanged',
 ])
 const FORBIDDEN_GO_TMUX_COMMANDS = Object.freeze([
-  'display-message',
   'send-keys',
   'split-window',
   'new-window',

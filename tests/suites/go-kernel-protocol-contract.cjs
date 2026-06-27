@@ -72,6 +72,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.compactReadModelFingerprintConnected, true)
   assert.equal(result.profile.workerLifecycleInspectPaneConnected, true)
   assert.equal(result.profile.workerLifecycleListAgentTeamPanesConnected, true)
+  assert.equal(result.profile.workerLifecycleCaptureCurrentPaneBindingConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)
 }
@@ -138,7 +139,11 @@ function assertMethodResult(response, request, fingerprintModule) {
   }
   if (request.method === 'workerLifecycle') {
     const requestedOperation = request.params?.operation || 'inspectPane'
-    const expectedOperation = requestedOperation === 'listAgentTeamPanes' ? 'listAgentTeamPanes' : 'inspectPane'
+    const expectedOperation = requestedOperation === 'listAgentTeamPanes'
+      ? 'listAgentTeamPanes'
+      : requestedOperation === 'captureCurrentPaneBinding'
+        ? 'captureCurrentPaneBinding'
+        : 'inspectPane'
     assert.equal(response.result.operation, expectedOperation)
     assert.equal(response.result.capability, 'workerLifecycle')
     assert.equal(response.result.readOnly, true)
@@ -148,6 +153,10 @@ function assertMethodResult(response, request, fingerprintModule) {
     if (expectedOperation === 'listAgentTeamPanes') {
       assert.equal(Array.isArray(response.result.panes), true)
       assert.equal(response.result.byPaneId && typeof response.result.byPaneId === 'object', true)
+    }
+    if (response.result.ok === true && expectedOperation === 'captureCurrentPaneBinding') {
+      assert.equal(typeof response.result.paneId, 'string')
+      assert.equal(typeof response.result.target, 'string')
     }
     if (response.result.ok === false) {
       if (expectedOperation === 'inspectPane') assert.equal(response.result.exists, false)

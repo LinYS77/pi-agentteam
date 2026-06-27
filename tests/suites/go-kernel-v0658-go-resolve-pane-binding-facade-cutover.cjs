@@ -49,9 +49,9 @@ const REQUIRED_DOC = [
   'Helper failure, invalid pane id, pane-not-found, unsafe response shape, and missing target all fail closed to `null`.',
   'The target field belongs on the universal read-only `inspectPane` operation, not on `listAgentTeamPanes()` lookup behavior.',
   '`listAgentTeamPanes()` remains intentionally filtered to labeled agentteam panes only.',
-  'No `display-message` or mutating tmux command is added to Go.',
+  'No mutating tmux command is added to Go; v0.6.60 later adds only a narrow no-target current-pane `display-message` binding operation.',
   '`resolvePaneBindingAsync()` remains TypeScript `display-message`-owned.',
-  '`targetForPaneId()` and `captureCurrentPaneBinding()` remain TypeScript `display-message`-owned.',
+  '`targetForPaneId()` is cut over by v0.6.59 and `captureCurrentPaneBinding()` is cut over by v0.6.60.',
   'Native artifact path and binary name remain unchanged.',
   'Because Go source changes, the existing embedded helper is rebuilt in the same approved path with refreshed manifest, checksums, provenance, and placeholder attestation.',
   '`package.json` remains `0.6.8`.',
@@ -65,7 +65,7 @@ const REQUIRED_ROADMAP = [
   'workerLifecycle.inspectPane compact result includes target',
   'the TypeScript display-message fallback for resolvePaneBinding is removed',
   'listAgentTeamPanes still filters labeled panes only',
-  'resolvePaneBindingAsync, targetForPaneId, captureCurrentPaneBinding, and window helpers remain TypeScript-owned',
+  'targetForPaneId and captureCurrentPaneBinding are later cut over by v0.6.59-v0.6.60 while resolvePaneBindingAsync and window helpers remain TypeScript-owned',
   '**v0.6.58 Go resolvePaneBinding facade cutover**',
 ]
 const RELEASE_OVERCLAIMS = [
@@ -263,8 +263,11 @@ function assertFacadeSource(root) {
   assertIncludes(listBody, 'const result = createAgentTeamKernelAdapter().listAgentTeamPanes()', `${TMUX_CORE} listAgentTeamPanes`)
   assert.match(snapshotListBody, /return snapshot\.panes\.filter\(item => item\.paneId && item\.label\)/, 'snapshot helper should keep existing labeled-pane filter')
   assert.equal(resolveAsyncBody.includes('display-message'), true, 'resolvePaneBindingAsync must remain TypeScript display-message path')
-  assert.equal(targetBody.includes('display-message'), true, 'targetForPaneId must remain TypeScript display-message path')
-  assert.equal(captureBody.includes('display-message'), true, 'captureCurrentPaneBinding must remain TypeScript display-message path')
+  assertIncludes(targetBody, 'return resolvePaneBinding(paneId)?.target ?? null', 'targetForPaneId later v0.6.59 cutover')
+  assert.equal(targetBody.includes('display-message'), false, 'targetForPaneId display-message path is removed by later v0.6.59 slice')
+  assertIncludes(captureBody, 'if (!isInsideTmux()) return null', 'captureCurrentPaneBinding later v0.6.60 guard')
+  assertIncludes(captureBody, 'createAgentTeamKernelAdapter().captureCurrentPaneBinding()', 'captureCurrentPaneBinding later v0.6.60 cutover')
+  assert.equal(captureBody.includes('display-message'), false, 'captureCurrentPaneBinding display-message path is removed by later v0.6.60 slice')
   assert.equal(windowExistsBody.includes('list-panes'), true, 'windowExists must remain TypeScript window helper path')
   assert.equal(firstPaneBody.includes('list-panes'), true, 'firstPaneInWindow must remain TypeScript window helper path')
 
@@ -281,6 +284,8 @@ function assertFacadeSource(root) {
   assertIncludes(goSource, 'Target:            strings.TrimSpace(fields[1])', GO_SOURCE)
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", workerLifecycleInspectPaneFormat\)/, 'Go should keep read-only list-panes inspect execution')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go should keep read-only list-panes list execution')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'later v0.6.60 permits only current-pane binding display-message')
+  assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, `${GO_SOURCE} must not add target-based display-message`)
   assert.deepEqual(parseGoCapabilities(goSource), [...ACTIVE_CAPABILITIES])
   for (const command of FORBIDDEN_GO_TMUX_COMMANDS) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add ${command}`)
   for (const forbidden of ['os.ReadFile', 'os.WriteFile', 'os.Create', 'PI_AGENTTEAM_HOME', 'agentteam_task', 'agentteam_receive', 'report_done', 'report_blocked', 'renderPanel', 'openTeamPanel', 'npm publish', 'npm version']) {

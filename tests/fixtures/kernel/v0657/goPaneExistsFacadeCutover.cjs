@@ -13,8 +13,8 @@ const PRESERVED_BOUNDARIES = Object.freeze([
   'TypeScript display-message fallback removed for paneExists facade',
   'inspectPane facade remains Go-owned',
   'listAgentTeamPanes facade remains Go-owned',
-  'targetForPaneId remains TypeScript display-message-owned',
-  'captureCurrentPaneBinding remains TypeScript display-message-owned',
+  'targetForPaneId is cut over by v0.6.59, not this slice',
+  'captureCurrentPaneBinding is cut over by v0.6.60, not this slice',
   'resolvePaneBinding is cut over by v0.6.58, not this slice',
   'resolvePaneBindingAsync remains TypeScript display-message-owned',
   'window helpers remain TypeScript tmux-owned',
@@ -26,7 +26,6 @@ const PRESERVED_BOUNDARIES = Object.freeze([
   'native artifact path and binary name remain unchanged',
 ])
 const FORBIDDEN_GO_TMUX_COMMANDS = Object.freeze([
-  'display-message',
   'send-keys',
   'split-window',
   'new-window',

@@ -42,7 +42,7 @@ const REQUIRED_DOC = [
   'Failed adapter results map to `{ paneId, exists:false, error }`.',
   'Kernel-level diagnostics remain compact on the adapter result and do not leak raw stdout, stderr, cwd, stack traces, state archives, mailbox bodies, report bodies, or worker transcripts.',
   '`paneExists()` remains outside the v0.6.56 inspect facade slice and is cut over separately by v0.6.57.',
-  '`targetForPaneId()`, `captureCurrentPaneBinding()`, and `resolvePaneBinding()` remain TypeScript `display-message` paths.',
+  '`resolvePaneBinding()` is cut over separately by v0.6.58, `targetForPaneId()` by v0.6.59, and `captureCurrentPaneBinding()` by v0.6.60.',
   '`listAgentTeamPanes()` remains delegated to `createAgentTeamKernelAdapter().listAgentTeamPanes()`.',
   'No Go source or native helper rebuild is required for this facade-only cutover.',
   '`package.json` remains `0.6.8`.',
@@ -54,7 +54,7 @@ const REQUIRED_ROADMAP = [
   'docs/perf/v0.6.56-go-inspect-pane-facade-cutover.md',
   'tmux/core.ts inspectPane(paneId) delegates to createAgentTeamKernelAdapter().inspectWorkerPane(paneId)',
   'the TypeScript display-message fallback for inspectPane is removed',
-  'targetForPaneId and captureCurrentPaneBinding remain TypeScript display-message-owned',
+  '`resolvePaneBinding()`、`targetForPaneId()`、and `captureCurrentPaneBinding()` are later cut over by v0.6.58-v0.6.60',
   'paneExists is cut over separately by v0.6.57',
   '**v0.6.56 Go inspectPane facade cutover**',
 ]
@@ -199,8 +199,11 @@ function assertFacadeSource(root) {
   assertIncludes(listBody, 'const result = createAgentTeamKernelAdapter().listAgentTeamPanes()', `${TMUX_CORE} listAgentTeamPanes`)
   assertIncludes(listBody, 'return result.ok ? result.panes : []', `${TMUX_CORE} listAgentTeamPanes`)
   assert.equal(listBody.includes('runTmuxNoThrow(['), false, 'listAgentTeamPanes facade must remain cut over to Go')
-  assert.equal(targetBody.includes('display-message'), true, 'targetForPaneId must remain TypeScript display-message path')
-  assert.equal(captureBody.includes('display-message'), true, 'captureCurrentPaneBinding must remain TypeScript display-message path')
+  assertIncludes(targetBody, 'return resolvePaneBinding(paneId)?.target ?? null', 'targetForPaneId later v0.6.59 cutover')
+  assert.equal(targetBody.includes('display-message'), false, 'targetForPaneId display-message path is removed by later v0.6.59 slice')
+  assertIncludes(captureBody, 'if (!isInsideTmux()) return null', 'captureCurrentPaneBinding later v0.6.60 guard')
+  assertIncludes(captureBody, 'createAgentTeamKernelAdapter().captureCurrentPaneBinding()', 'captureCurrentPaneBinding later v0.6.60 cutover')
+  assert.equal(captureBody.includes('display-message'), false, 'captureCurrentPaneBinding display-message path is removed by later v0.6.60 slice')
   assertIncludes(paneExistsBody, 'return Boolean(paneId && inspectPane(paneId).exists)', `${TMUX_CORE} paneExists later cutover`)
   assert.equal(paneExistsBody.includes('display-message'), false, 'paneExists display-message path is removed by later v0.6.57 slice')
   assertIncludes(resolveBody, 'createAgentTeamKernelAdapter().inspectWorkerPane(paneId)', 'resolvePaneBinding later v0.6.58 cutover')
@@ -211,6 +214,8 @@ function assertFacadeSource(root) {
   assertIncludes(kernelSource, 'validateWorkerPaneInspectionResult', KERNEL)
   assert.match(goSource, /case "inspectPane"/, 'Go worker lifecycle inspect operation should remain implemented')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", workerLifecycleInspectPaneFormat\)/, 'Go should own read-only list-panes inspect execution')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'later v0.6.60 permits only current-pane binding display-message')
+  assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, `${GO_SOURCE} must not add target-based display-message`)
   for (const command of FORBIDDEN_GO_TMUX_COMMANDS) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add ${command}`)
 }
 

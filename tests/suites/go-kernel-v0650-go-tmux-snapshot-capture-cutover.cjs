@@ -141,6 +141,8 @@ function assertRuntimeSources(root) {
   assert.match(kernelSource, /callHelper<unknown>\('tmuxSnapshotCapture', \{ capturedAt \}\)/, 'adapter should call helper capture capability')
   assert.match(goSource, /case "tmuxSnapshotCapture"/, 'Go helper should route tmuxSnapshotCapture')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go capture must be exactly list-panes snapshot capture')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'later v0.6.60 permits only narrow current-pane binding display-message')
+  assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, 'Go must not add target-based display-message')
   for (const forbidden of FORBIDDEN_GO_RUNTIME_TERMS) {
     assert.equal(goSource.includes(forbidden), false, `Go source must not contain broad control-plane term ${forbidden}`)
   }

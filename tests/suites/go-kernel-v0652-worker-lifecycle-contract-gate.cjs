@@ -33,7 +33,6 @@ const BROAD_GO_LIFECYCLE_COMMANDS = [
   'split-window',
   'new-window',
   'kill-pane',
-  'display-message',
   'set-option',
   'set-window-option',
   'select-pane',
@@ -197,6 +196,8 @@ function assertRuntimeAndGoUnchanged(root) {
   assert.match(goSource, /case\s+"workerLifecycle"/, 'v0.6.54 keeps workerLifecycle handler read-only')
   assert.match(goSource, /case\s+"inspectPane"/, 'workerLifecycle must keep inspectPane active')
   assert.match(goSource, /case\s+"listAgentTeamPanes"/, 'workerLifecycle must activate listAgentTeamPanes')
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'later v0.6.60 permits only narrow current-pane binding display-message')
+  assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, `${GO_SOURCE} must not add target-based display-message`)
   for (const command of BROAD_GO_LIFECYCLE_COMMANDS) assert.equal(goSource.includes(command), false, `${GO_SOURCE} must not add broad tmux lifecycle command ${command}`)
   assertIncludes(goSource, ALLOWED_GO_TMUX_COMMAND, GO_SOURCE)
 

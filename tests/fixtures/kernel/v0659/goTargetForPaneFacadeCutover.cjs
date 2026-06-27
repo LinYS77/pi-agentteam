@@ -1,24 +1,23 @@
-const GO_INSPECT_PANE_FACADE_CUTOVER_SCHEMA_VERSION = 1
-const GO_INSPECT_PANE_FACADE_CUTOVER_THEME = 'v0.6.56 Go inspectPane facade cutover'
+const GO_TARGET_FOR_PANE_FACADE_CUTOVER_SCHEMA_VERSION = 1
+const GO_TARGET_FOR_PANE_FACADE_CUTOVER_THEME = 'v0.6.59 Go targetForPaneId facade cutover'
 const PACKAGE_VERSION = '0.6.8'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const PROTOCOL_VERSION = 1
 const CAPABILITY = 'workerLifecycle'
 const ACTIVE_OPERATIONS = Object.freeze(['inspectPane', 'listAgentTeamPanes'])
 const ACTIVE_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
-const FACADE_NAME = 'inspectPane'
-const KERNEL_ADAPTER_DELEGATION = 'createAgentTeamKernelAdapter().inspectWorkerPane(paneId)'
-const SUCCESS_MAPPING = Object.freeze(['paneId', 'exists', 'target', 'currentCommand', 'inMode', 'mode', 'copyMode'])
-const FAILURE_MAPPING = Object.freeze(['paneId', 'exists', 'error'])
+const FACADE_NAME = 'targetForPaneId'
+const GO_BACKED_BINDING_PATH = 'resolvePaneBinding(paneId)?.target ?? null'
+const ASYNC_BINDING_DECISION = 'deferred-sync-kernel-adapter-cannot-preserve-abort-signal'
 const PRESERVED_BOUNDARIES = Object.freeze([
-  'inspectPane facade delegates to Go workerLifecycle adapter',
-  'TypeScript display-message fallback removed for inspectPane facade',
-  'listAgentTeamPanes facade remains Go-owned',
-  'targetForPaneId is cut over by v0.6.59, not this slice',
+  'targetForPaneId facade delegates to Go-backed resolvePaneBinding',
+  'TypeScript display-message fallback removed for targetForPaneId facade',
+  'resolvePaneBinding remains Go-backed through workerLifecycle inspect adapter',
+  'resolvePaneBindingAsync remains TypeScript display-message-owned to preserve AbortSignal semantics',
+  'async binding migration is deferred until a cancellable async kernel adapter exists',
   'captureCurrentPaneBinding is cut over by v0.6.60, not this slice',
-  'paneExists is cut over by v0.6.57, not this slice',
-  'resolvePaneBinding is cut over by v0.6.58, not this slice',
   'window helpers remain TypeScript tmux-owned',
+  'listAgentTeamPanes continues to filter labeled panes only',
   'wake/create/label/kill lifecycle remains TypeScript-owned',
   'state repository remains TypeScript-owned',
   'task/report/PlanRun governance remains TypeScript-owned',
@@ -46,11 +45,11 @@ const RELEASE_PACKAGE_GUARDS = Object.freeze([
   'no go.mod or go.sum',
   'no lifecycle hooks or postinstall downloads',
   'no native artifact rename',
-  'native helper rebuild handled only by later target-field contract slice',
+  'no native helper rebuild required',
 ])
-const goInspectPaneFacadeCutover = Object.freeze({
-  schemaVersion: GO_INSPECT_PANE_FACADE_CUTOVER_SCHEMA_VERSION,
-  theme: GO_INSPECT_PANE_FACADE_CUTOVER_THEME,
+const goTargetForPaneFacadeCutover = Object.freeze({
+  schemaVersion: GO_TARGET_FOR_PANE_FACADE_CUTOVER_SCHEMA_VERSION,
+  theme: GO_TARGET_FOR_PANE_FACADE_CUTOVER_THEME,
   packageVersion: PACKAGE_VERSION,
   helperVersion: HELPER_VERSION,
   protocolVersion: PROTOCOL_VERSION,
@@ -58,16 +57,17 @@ const goInspectPaneFacadeCutover = Object.freeze({
   activeOperations: ACTIVE_OPERATIONS,
   activeCapabilities: ACTIVE_CAPABILITIES,
   facadeName: FACADE_NAME,
-  kernelAdapterDelegation: KERNEL_ADAPTER_DELEGATION,
-  successMapping: SUCCESS_MAPPING,
-  failureMapping: FAILURE_MAPPING,
+  goBackedBindingPath: GO_BACKED_BINDING_PATH,
+  asyncBindingDecision: ASYNC_BINDING_DECISION,
   facadeCutoverMigrated: true,
   typescriptDisplayMessageFallbackRemoved: true,
-  failClosedExistsFalseOnHelperFailure: true,
-  compactInspectionFieldsOnly: true,
-  paneExistsFacadeMigratedByLaterSlice: true,
+  failClosedNullOnHelperFailure: true,
+  failClosedNullOnMissingTarget: true,
+  resolvePaneBindingFacadeStillMigrated: true,
+  inspectPaneFacadeStillMigrated: true,
+  paneExistsFacadeStillMigrated: true,
   listAgentTeamPanesFacadeStillMigrated: true,
-  targetForPaneIdMigrated: false,
+  resolvePaneBindingAsyncMigrated: false,
   captureCurrentPaneBindingMigrated: false,
   windowHelpersMigrated: false,
   createTeammatePaneMigrated: false,
@@ -93,18 +93,17 @@ const goInspectPaneFacadeCutover = Object.freeze({
 module.exports = {
   ACTIVE_CAPABILITIES,
   ACTIVE_OPERATIONS,
+  ASYNC_BINDING_DECISION,
   CAPABILITY,
   FACADE_NAME,
-  FAILURE_MAPPING,
   FORBIDDEN_GO_TMUX_COMMANDS,
-  GO_INSPECT_PANE_FACADE_CUTOVER_SCHEMA_VERSION,
-  GO_INSPECT_PANE_FACADE_CUTOVER_THEME,
+  GO_BACKED_BINDING_PATH,
+  GO_TARGET_FOR_PANE_FACADE_CUTOVER_SCHEMA_VERSION,
+  GO_TARGET_FOR_PANE_FACADE_CUTOVER_THEME,
   HELPER_VERSION,
-  KERNEL_ADAPTER_DELEGATION,
   PACKAGE_VERSION,
   PRESERVED_BOUNDARIES,
   PROTOCOL_VERSION,
   RELEASE_PACKAGE_GUARDS,
-  SUCCESS_MAPPING,
-  goInspectPaneFacadeCutover,
+  goTargetForPaneFacadeCutover,
 }

@@ -18,8 +18,8 @@ const PRESERVED_BOUNDARIES = Object.freeze([
   'resolvePaneBinding does not use listAgentTeamPanes because that filters labeled panes only',
   'listAgentTeamPanes continues to filter labeled panes only',
   'resolvePaneBindingAsync remains TypeScript display-message-owned',
-  'targetForPaneId remains TypeScript display-message-owned',
-  'captureCurrentPaneBinding remains TypeScript display-message-owned',
+  'targetForPaneId is cut over by v0.6.59, not this slice',
+  'captureCurrentPaneBinding is cut over by v0.6.60, not this slice',
   'window helpers remain TypeScript tmux-owned',
   'wake/create/label/kill lifecycle remains TypeScript-owned',
   'state repository remains TypeScript-owned',
@@ -29,7 +29,6 @@ const PRESERVED_BOUNDARIES = Object.freeze([
   'native artifact path and binary name remain unchanged',
 ])
 const FORBIDDEN_GO_TMUX_COMMANDS = Object.freeze([
-  'display-message',
   'send-keys',
   'split-window',
   'new-window',

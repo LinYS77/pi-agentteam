@@ -1,24 +1,23 @@
-const GO_INSPECT_PANE_FACADE_CUTOVER_SCHEMA_VERSION = 1
-const GO_INSPECT_PANE_FACADE_CUTOVER_THEME = 'v0.6.56 Go inspectPane facade cutover'
+const GO_CURRENT_PANE_BINDING_FACADE_CUTOVER_SCHEMA_VERSION = 1
+const GO_CURRENT_PANE_BINDING_FACADE_CUTOVER_THEME = 'v0.6.60 Go captureCurrentPaneBinding facade cutover'
 const PACKAGE_VERSION = '0.6.8'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const PROTOCOL_VERSION = 1
 const CAPABILITY = 'workerLifecycle'
-const ACTIVE_OPERATIONS = Object.freeze(['inspectPane', 'listAgentTeamPanes'])
+const ACTIVE_OPERATIONS = Object.freeze(['inspectPane', 'listAgentTeamPanes', 'captureCurrentPaneBinding'])
 const ACTIVE_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
-const FACADE_NAME = 'inspectPane'
-const KERNEL_ADAPTER_DELEGATION = 'createAgentTeamKernelAdapter().inspectWorkerPane(paneId)'
-const SUCCESS_MAPPING = Object.freeze(['paneId', 'exists', 'target', 'currentCommand', 'inMode', 'mode', 'copyMode'])
-const FAILURE_MAPPING = Object.freeze(['paneId', 'exists', 'error'])
+const FACADE_NAME = 'captureCurrentPaneBinding'
+const KERNEL_ADAPTER_DELEGATION = 'createAgentTeamKernelAdapter().captureCurrentPaneBinding()'
+const GO_CURRENT_PANE_FORMAT = '#{pane_id}\t#{session_name}:#{window_id}'
+const GO_CURRENT_PANE_COMMAND = 'exec.CommandContext(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat)'
 const PRESERVED_BOUNDARIES = Object.freeze([
-  'inspectPane facade delegates to Go workerLifecycle adapter',
-  'TypeScript display-message fallback removed for inspectPane facade',
-  'listAgentTeamPanes facade remains Go-owned',
-  'targetForPaneId is cut over by v0.6.59, not this slice',
-  'captureCurrentPaneBinding is cut over by v0.6.60, not this slice',
-  'paneExists is cut over by v0.6.57, not this slice',
-  'resolvePaneBinding is cut over by v0.6.58, not this slice',
+  'captureCurrentPaneBinding keeps the isInsideTmux fail-closed guard before helper invocation',
+  'captureCurrentPaneBinding facade delegates to Go workerLifecycle captureCurrentPaneBinding adapter',
+  'TypeScript display-message fallback removed for captureCurrentPaneBinding facade',
+  'Go display-message use is limited to the no-target current-pane compact binding operation',
+  'resolvePaneBindingAsync remains TypeScript display-message-owned to preserve AbortSignal semantics',
   'window helpers remain TypeScript tmux-owned',
+  'inspectPane, paneExists, resolvePaneBinding, targetForPaneId, and listAgentTeamPanes remain Go-backed',
   'wake/create/label/kill lifecycle remains TypeScript-owned',
   'state repository remains TypeScript-owned',
   'task/report/PlanRun governance remains TypeScript-owned',
@@ -31,6 +30,7 @@ const FORBIDDEN_GO_TMUX_COMMANDS = Object.freeze([
   'split-window',
   'new-window',
   'kill-pane',
+  'capture-pane',
   'set-option',
   'set-window-option',
   'select-pane',
@@ -46,11 +46,11 @@ const RELEASE_PACKAGE_GUARDS = Object.freeze([
   'no go.mod or go.sum',
   'no lifecycle hooks or postinstall downloads',
   'no native artifact rename',
-  'native helper rebuild handled only by later target-field contract slice',
+  'native helper rebuilt only in the existing embedded path because Go source changed',
 ])
-const goInspectPaneFacadeCutover = Object.freeze({
-  schemaVersion: GO_INSPECT_PANE_FACADE_CUTOVER_SCHEMA_VERSION,
-  theme: GO_INSPECT_PANE_FACADE_CUTOVER_THEME,
+const goCurrentPaneBindingFacadeCutover = Object.freeze({
+  schemaVersion: GO_CURRENT_PANE_BINDING_FACADE_CUTOVER_SCHEMA_VERSION,
+  theme: GO_CURRENT_PANE_BINDING_FACADE_CUTOVER_THEME,
   packageVersion: PACKAGE_VERSION,
   helperVersion: HELPER_VERSION,
   protocolVersion: PROTOCOL_VERSION,
@@ -59,16 +59,16 @@ const goInspectPaneFacadeCutover = Object.freeze({
   activeCapabilities: ACTIVE_CAPABILITIES,
   facadeName: FACADE_NAME,
   kernelAdapterDelegation: KERNEL_ADAPTER_DELEGATION,
-  successMapping: SUCCESS_MAPPING,
-  failureMapping: FAILURE_MAPPING,
+  goCurrentPaneFormat: GO_CURRENT_PANE_FORMAT,
+  goCurrentPaneCommand: GO_CURRENT_PANE_COMMAND,
   facadeCutoverMigrated: true,
   typescriptDisplayMessageFallbackRemoved: true,
-  failClosedExistsFalseOnHelperFailure: true,
-  compactInspectionFieldsOnly: true,
-  paneExistsFacadeMigratedByLaterSlice: true,
-  listAgentTeamPanesFacadeStillMigrated: true,
-  targetForPaneIdMigrated: false,
-  captureCurrentPaneBindingMigrated: false,
+  failClosedNullOutsideTmux: true,
+  failClosedNullOnHelperFailure: true,
+  failClosedNullOnMissingPaneIdOrTarget: true,
+  tmuxEnvForwardedToHelper: true,
+  currentPaneDisplayMessageAllowedOnlyForThisOperation: true,
+  resolvePaneBindingAsyncMigrated: false,
   windowHelpersMigrated: false,
   createTeammatePaneMigrated: false,
   wakePaneMigrated: false,
@@ -79,7 +79,7 @@ const goInspectPaneFacadeCutover = Object.freeze({
   teamPanelViewModelMigrated: false,
   releasePackageVerificationMigrated: false,
   nativeArtifactRenamed: false,
-  nativeHelperRebuilt: false,
+  nativeHelperRebuilt: true,
   packageVersionChanged: false,
   packageReleaseApproved: false,
   npmVersionChanged: false,
@@ -95,16 +95,16 @@ module.exports = {
   ACTIVE_OPERATIONS,
   CAPABILITY,
   FACADE_NAME,
-  FAILURE_MAPPING,
   FORBIDDEN_GO_TMUX_COMMANDS,
-  GO_INSPECT_PANE_FACADE_CUTOVER_SCHEMA_VERSION,
-  GO_INSPECT_PANE_FACADE_CUTOVER_THEME,
+  GO_CURRENT_PANE_BINDING_FACADE_CUTOVER_SCHEMA_VERSION,
+  GO_CURRENT_PANE_BINDING_FACADE_CUTOVER_THEME,
+  GO_CURRENT_PANE_COMMAND,
+  GO_CURRENT_PANE_FORMAT,
   HELPER_VERSION,
   KERNEL_ADAPTER_DELEGATION,
   PACKAGE_VERSION,
   PRESERVED_BOUNDARIES,
   PROTOCOL_VERSION,
   RELEASE_PACKAGE_GUARDS,
-  SUCCESS_MAPPING,
-  goInspectPaneFacadeCutover,
+  goCurrentPaneBindingFacadeCutover,
 }
