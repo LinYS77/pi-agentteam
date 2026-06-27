@@ -50,7 +50,7 @@ const REQUIRED_DOC = [
   'Go uses exactly `tmux has-session -t <sessionName>` for `workerLifecycle.sessionExists`.',
   'A positive helper result skips the existing TypeScript `new-session` branch as before.',
   'Missing session, helper failure, invalid response, empty session name, pre-aborted signal, and in-flight abort fail closed to `false`, so the existing TypeScript creation path remains in charge.',
-  "`new-session`, `new-window`, post-creation `list-windows -F '#{window_id}\\t#{window_name}'`, pane setup `list-panes`, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned; inside-tmux current binding `display-message` fallbacks are superseded by the v0.6.67 `captureCurrentPaneBinding()` reuse cutover, and detached target-based leader-pane `display-message` is superseded by the v0.6.68 `resolvePaneBindingAsync()` reuse cutover.",
+  "`new-session`, `new-window`, post-creation `list-windows -F '#{window_id}\\t#{window_name}'`, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned; inside-tmux current binding `display-message` fallbacks are superseded by the v0.6.67 `captureCurrentPaneBinding()` reuse cutover, detached target-based leader-pane `display-message` is superseded by the v0.6.68 `resolvePaneBindingAsync()` reuse cutover, and pane setup `list-panes` is superseded by the v0.6.69 `firstPaneInWindow()` reuse cutover.",
   'Because Go source changes, the existing embedded helper is rebuilt in the same approved path with refreshed manifest, checksums, provenance, and placeholder attestation.',
   '`package.json` remains `0.6.8`.',
   '`tests/fixtures/kernel/v0666/goSessionExistenceCutover.cjs`',
@@ -62,7 +62,8 @@ const REQUIRED_ROADMAP = [
   'tmux/windows.ts ensureSwarmWindow()` checks `createAgentTeamKernelAdapter().sessionExistsAsync(SWARM_SESSION, signal)`',
   'Go `workerLifecycle.sessionExists` uses only exact `tmux has-session -t <sessionName>`',
   'missing session/helper failure/invalid response/empty session/pre-aborted/in-flight aborted signals fail closed to false',
-  'new-session/new-window/post-creation list-windows/pane setup/marking/labels remain TypeScript-owned',
+  'new-session/new-window/post-creation list-windows/marking/labels remain TypeScript-owned',
+  'pane setup list-panes is superseded by v0.6.69',
   'inside-tmux current binding display-message fallbacks are superseded by v0.6.67',
   '**v0.6.66 Go session existence cutover**',
 ]
@@ -289,7 +290,8 @@ function assertFacadeSource(root) {
   assertIncludes(ensureBody, "runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-session remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-window remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['list-windows', '-t', SWARM_SESSION, '-F', '#{window_id}\\t#{window_name}']", 'post-creation window name lookup remains TS-owned')
-  assertIncludes(ensureBody, "runTmuxAsync(['list-panes', '-t', initialTarget, '-F', '#{pane_id}']", 'pane setup list-panes remains TS-owned')
+  assertIncludes(ensureBody, 'firstPaneInWindow(initialTarget, signal)', 'pane setup first-pane lookup is superseded by v0.6.69')
+  assert.equal(ensureBody.includes("runTmuxAsync(['list-panes', '-t', initialTarget, '-F', '#{pane_id}']"), false, 'direct pane setup list-panes is superseded by v0.6.69')
   assertIncludes(ensureBody, 'resolvePaneBindingAsync(leaderPaneId, signal)', 'detached leader target binding is superseded by v0.6.68')
   assert.equal(ensureBody.includes("runTmuxAsync(['display-message', '-p', '-t', leaderPaneId, '#{window_id}']"), false, 'detached target-based fallback is superseded by v0.6.68')
   assert.equal(ensureBody.includes("runTmuxAsync(['display-message', '-p', '#{session_name}:#{window_id}']"), false, 'inside-tmux current target fallback is superseded by v0.6.67')

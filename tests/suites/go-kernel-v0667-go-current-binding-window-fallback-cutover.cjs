@@ -46,7 +46,7 @@ const REQUIRED_DOC = [
   'If no preferred binding, preferred target, or first-pane lookup can provide the needed values and `captureCurrentPaneBinding()` returns `null`, `ensureSwarmWindow()` throws compact `Error(\'Failed to resolve current tmux pane binding\')`.',
   '`tmux/core.ts` `captureCurrentPaneBinding()` remains the v0.6.60 Go-backed facade over `workerLifecycle.captureCurrentPaneBinding`.',
   "The detached setup fallback `runTmuxAsync(['display-message', '-p', '-t', leaderPaneId, '#{window_id}'], undefined, signal)` is superseded by the v0.6.68 `resolvePaneBindingAsync(leaderPaneId, signal)` cutover.",
-  "`new-session`, `new-window`, post-creation `list-windows -F '#{window_id}\\t#{window_name}'`, pane setup `list-panes`, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned.",
+  "`new-session`, `new-window`, post-creation `list-windows -F '#{window_id}\\t#{window_name}'`, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned; pane setup `list-panes` is superseded by the v0.6.69 `firstPaneInWindow()` reuse cutover.",
   'No Go source or native artifact rebuild is required for this slice.',
   '`package.json` remains `0.6.8`.',
   '`tests/fixtures/kernel/v0667/goCurrentBindingWindowFallbackCutover.cjs`',
@@ -221,7 +221,8 @@ function assertFacadeSource(root) {
   assertIncludes(ensureBody, "runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-session remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-window remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['list-windows', '-t', SWARM_SESSION, '-F', '#{window_id}\\t#{window_name}']", 'post-creation window lookup remains TS-owned')
-  assertIncludes(ensureBody, "runTmuxAsync(['list-panes', '-t', initialTarget, '-F', '#{pane_id}']", 'pane setup list-panes remains TS-owned')
+  assertIncludes(ensureBody, 'firstPaneInWindow(initialTarget, signal)', 'pane setup first-pane lookup is superseded by v0.6.69')
+  assert.equal(ensureBody.includes("runTmuxAsync(['list-panes', '-t', initialTarget, '-F', '#{pane_id}']"), false, 'direct pane setup list-panes is superseded by v0.6.69')
   assertIncludes(ensureBody, 'await markWindowAsAgentTeam', 'marking remains TS-owned')
   assertIncludes(ensureBody, 'await refreshWindowPaneLabels', 'label refresh remains TS-owned')
 

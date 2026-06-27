@@ -8,54 +8,55 @@ const {
   CAPABILITY,
   COMPACT_FAILURE_ERROR,
   FACADE_NAME,
+  FIRST_PANE_DELEGATION,
   FORBIDDEN_GO_TMUX_COMMANDS,
-  GO_DETACHED_LEADER_BINDING_CUTOVER_SCHEMA_VERSION,
-  GO_DETACHED_LEADER_BINDING_CUTOVER_THEME,
-  GO_INSPECT_PANE_COMMAND,
+  GO_DETACHED_FIRST_PANE_CUTOVER_SCHEMA_VERSION,
+  GO_DETACHED_FIRST_PANE_CUTOVER_THEME,
+  GO_LIST_PANES_IN_WINDOW_COMMAND,
   HELPER_VERSION,
-  LEADER_BINDING_DELEGATION,
   OPERATION,
   PACKAGE_VERSION,
   PRESERVED_BOUNDARIES,
   PROTOCOL_VERSION,
   RELEASE_PACKAGE_GUARDS,
   RUNTIME_FILE,
-  goDetachedLeaderBindingCutover,
-} = require('../fixtures/kernel/v0668/goDetachedLeaderBindingCutover.cjs')
+  TARGET_BINDING_DELEGATION,
+  goDetachedFirstPaneCutover,
+} = require('../fixtures/kernel/v0669/goDetachedFirstPaneCutover.cjs')
 
-const DOC = 'docs/perf/v0.6.68-go-detached-leader-binding-cutover.md'
+const DOC = 'docs/perf/v0.6.69-go-detached-first-pane-cutover.md'
 const ROADMAP = 'docs/agentteam方案书.md'
-const FIXTURE = 'tests/fixtures/kernel/v0668/goDetachedLeaderBindingCutover.cjs'
-const SUITE = 'tests/suites/go-kernel-v0668-go-detached-leader-binding-cutover.cjs'
+const FIXTURE = 'tests/fixtures/kernel/v0669/goDetachedFirstPaneCutover.cjs'
+const SUITE = 'tests/suites/go-kernel-v0669-go-detached-first-pane-cutover.cjs'
 const TMUX_WINDOWS = 'tmux/windows.ts'
 const TMUX_CORE = 'tmux/core.ts'
 const GO_SOURCE = 'kernel/go/agentteam-kernel/main.go'
 const NATIVE_ROOT = 'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc'
 const ROOT_FORBIDDEN_FILES = ['package-lock.json', 'npm-shrinkwrap.json', 'go.mod', 'go.sum', 'kernel/go/agentteam-kernel/go.mod', 'kernel/go/agentteam-kernel/go.sum']
-const TARGET_BASED_TS_CALL = "runTmuxAsync(['display-message', '-p', '-t', leaderPaneId, '#{window_id}']"
+const PANE_SETUP_TS_CALL = "runTmuxAsync(['list-panes', '-t', initialTarget, '-F', '#{pane_id}']"
 const REQUIRED_DOC = [
-  '# v0.6.68 Go Detached Leader Binding Cutover',
-  'Result: v0.6.68 cuts over the `tmux/windows.ts` detached `ensureSwarmWindow()` leader target fallback from direct TypeScript target-based `display-message` to the existing Go-backed `resolvePaneBindingAsync(leaderPaneId, signal)` path.',
-  '`tmux/windows.ts` keeps `const binding = await resolvePaneBindingAsync(leaderPaneId, signal)` and uses `binding?.target` as the sole detached leader target source after pane setup.',
-  "The direct TypeScript `runTmuxAsync(['display-message', '-p', '-t', leaderPaneId, '#{window_id}'], undefined, signal)` fallback is removed from the detached branch.",
-  'If `resolvePaneBindingAsync(leaderPaneId, signal)` cannot provide a target, `ensureSwarmWindow()` throws compact `Error(\'Failed to resolve agentteam leader pane binding\')`.',
-  'Successful detached behavior still returns `{ session, window, target, leaderPaneId }` from the Go-backed binding target.',
-  "Pane setup `runTmuxAsync(['list-panes', '-t', initialTarget, '-F', '#{pane_id}'], undefined, signal)` is superseded by the v0.6.69 `firstPaneInWindow(initialTarget, signal)` cutover.",
+  '# v0.6.69 Go Detached First Pane Cutover',
+  'Result: v0.6.69 cuts over the `tmux/windows.ts` detached `ensureSwarmWindow()` leader pane selection from direct TypeScript `list-panes` parsing to existing Go-backed `firstPaneInWindow(initialTarget, signal)`.',
+  '`tmux/windows.ts` now calls `firstPaneInWindow(initialTarget, signal)` as the sole detached leader pane source after `initialTarget` is known.',
+  "The direct TypeScript `runTmuxAsync(['list-panes', '-t', initialTarget, '-F', '#{pane_id}'], undefined, signal)` parsing is removed from the detached branch.",
+  'If `firstPaneInWindow(initialTarget, signal)` cannot provide a pane id, `ensureSwarmWindow()` throws compact `Error(\'Failed to resolve agentteam leader pane\')`.',
+  '`resolvePaneBindingAsync(leaderPaneId, signal)` remains the Go-backed target source after leader pane selection.',
+  'Successful detached behavior still returns `{ session, window, target, leaderPaneId }`.',
   "Post-creation `list-windows -F '#{window_id}\\t#{window_name}'`, `new-session`, `new-window`, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned.",
   'No Go source or native artifact rebuild is required for this slice.',
   '`package.json` remains `0.6.8`.',
-  '`tests/fixtures/kernel/v0668/goDetachedLeaderBindingCutover.cjs`',
-  '`tests/suites/go-kernel-v0668-go-detached-leader-binding-cutover.cjs`',
+  '`tests/fixtures/kernel/v0669/goDetachedFirstPaneCutover.cjs`',
+  '`tests/suites/go-kernel-v0669-go-detached-first-pane-cutover.cjs`',
 ]
 const REQUIRED_ROADMAP = [
-  'v0.6.68 Go detached leader binding cutover',
-  'docs/perf/v0.6.68-go-detached-leader-binding-cutover.md',
-  'tmux/windows.ts detached ensureSwarmWindow()` uses `resolvePaneBindingAsync(leaderPaneId, signal)` as the sole leader target source',
-  'direct TypeScript target-based `display-message -p -t leaderPaneId #{window_id}` fallback is removed',
-  'missing leader binding throws compact `Failed to resolve agentteam leader pane binding`',
-  'pane setup list-panes is superseded by v0.6.69 while post-creation list-windows/new-session/new-window/marking/labels remain TypeScript-owned',
+  'v0.6.69 Go detached first pane cutover',
+  'docs/perf/v0.6.69-go-detached-first-pane-cutover.md',
+  'tmux/windows.ts detached ensureSwarmWindow()` uses `firstPaneInWindow(initialTarget, signal)` as the sole leader pane source',
+  'direct TypeScript `list-panes -t initialTarget -F #{pane_id}` parsing is removed',
+  'missing first pane throws compact `Failed to resolve agentteam leader pane`',
+  'post-creation list-windows/new-session/new-window/marking/labels remain TypeScript-owned',
   'no Go source/native artifact rebuild',
-  '**v0.6.68 Go detached leader binding cutover**',
+  '**v0.6.69 Go detached first pane cutover**',
 ]
 const RELEASE_OVERCLAIMS = [
   'npm publish completed',
@@ -65,7 +66,6 @@ const RELEASE_OVERCLAIMS = [
   'GitHub release created',
   'release can ship',
   'v0.7 is release-ready',
-  'paneSetupMigrated: true',
   'postCreationWindowLookupMigrated: true',
   'newSessionMigrated: true',
   'newWindowMigrated: true',
@@ -130,48 +130,48 @@ function parseGoCapabilities(source) {
 function assertFixtureShape(root) {
   assert.equal(exists(root, FIXTURE), true, `${FIXTURE} should exist`)
   assert.equal(exists(root, SUITE), true, `${SUITE} should exist`)
-  assert.deepEqual(JSON.parse(JSON.stringify(goDetachedLeaderBindingCutover)), goDetachedLeaderBindingCutover)
-  assert.equal(goDetachedLeaderBindingCutover.schemaVersion, GO_DETACHED_LEADER_BINDING_CUTOVER_SCHEMA_VERSION)
-  assert.equal(goDetachedLeaderBindingCutover.theme, GO_DETACHED_LEADER_BINDING_CUTOVER_THEME)
-  assert.equal(goDetachedLeaderBindingCutover.packageVersion, PACKAGE_VERSION)
-  assert.equal(goDetachedLeaderBindingCutover.helperVersion, HELPER_VERSION)
-  assert.equal(goDetachedLeaderBindingCutover.protocolVersion, PROTOCOL_VERSION)
-  assert.equal(goDetachedLeaderBindingCutover.capability, CAPABILITY)
-  assert.equal(goDetachedLeaderBindingCutover.operation, OPERATION)
-  assert.equal(goDetachedLeaderBindingCutover.facadeName, FACADE_NAME)
-  assert.equal(goDetachedLeaderBindingCutover.runtimeFile, RUNTIME_FILE)
-  assert.equal(goDetachedLeaderBindingCutover.leaderBindingDelegation, LEADER_BINDING_DELEGATION)
-  assert.equal(goDetachedLeaderBindingCutover.goInspectPaneCommand, GO_INSPECT_PANE_COMMAND)
-  assert.equal(goDetachedLeaderBindingCutover.compactFailureError, COMPACT_FAILURE_ERROR)
-  assert.deepEqual(goDetachedLeaderBindingCutover.activeOperations, [...ACTIVE_OPERATIONS])
-  assert.deepEqual(goDetachedLeaderBindingCutover.activeCapabilities, [...ACTIVE_CAPABILITIES])
-  assert.equal(goDetachedLeaderBindingCutover.facadeCutoverMigrated, true)
-  assert.equal(goDetachedLeaderBindingCutover.typescriptTargetBasedDisplayMessageFallbackRemoved, true)
-  assert.equal(goDetachedLeaderBindingCutover.resolvePaneBindingAsyncReused, true)
-  assert.equal(goDetachedLeaderBindingCutover.failClosedThrowOnMissingLeaderBinding, true)
-  assert.equal(goDetachedLeaderBindingCutover.returnedShapePreservedOnSuccess, true)
-  assert.equal(goDetachedLeaderBindingCutover.rawOutputLeakageAllowed, false)
-  assert.equal(goDetachedLeaderBindingCutover.insideTmuxCurrentBindingMigratedByPreviousSlice, true)
-  assert.equal(goDetachedLeaderBindingCutover.paneSetupMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.postCreationWindowLookupMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.newSessionMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.newWindowMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.markWindowAsAgentTeamMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.refreshWindowPaneLabelsMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.createTeammatePaneMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.wakePaneMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.syncPaneLabelsMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.killPaneMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.stateRepositoryMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.taskReportPlanRunMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.teamPanelViewModelMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.releasePackageVerificationMigrated, false)
-  assert.equal(goDetachedLeaderBindingCutover.nativeArtifactRenamed, false)
-  assert.equal(goDetachedLeaderBindingCutover.nativeHelperRebuilt, false)
-  assert.equal(goDetachedLeaderBindingCutover.goSourceChanged, false)
-  assert.deepEqual(goDetachedLeaderBindingCutover.preservedBoundaries, [...PRESERVED_BOUNDARIES])
-  assert.deepEqual(goDetachedLeaderBindingCutover.forbiddenGoTmuxCommands, [...FORBIDDEN_GO_TMUX_COMMANDS])
-  assert.deepEqual(goDetachedLeaderBindingCutover.releasePackageGuards, [...RELEASE_PACKAGE_GUARDS])
+  assert.deepEqual(JSON.parse(JSON.stringify(goDetachedFirstPaneCutover)), goDetachedFirstPaneCutover)
+  assert.equal(goDetachedFirstPaneCutover.schemaVersion, GO_DETACHED_FIRST_PANE_CUTOVER_SCHEMA_VERSION)
+  assert.equal(goDetachedFirstPaneCutover.theme, GO_DETACHED_FIRST_PANE_CUTOVER_THEME)
+  assert.equal(goDetachedFirstPaneCutover.packageVersion, PACKAGE_VERSION)
+  assert.equal(goDetachedFirstPaneCutover.helperVersion, HELPER_VERSION)
+  assert.equal(goDetachedFirstPaneCutover.protocolVersion, PROTOCOL_VERSION)
+  assert.equal(goDetachedFirstPaneCutover.capability, CAPABILITY)
+  assert.equal(goDetachedFirstPaneCutover.operation, OPERATION)
+  assert.equal(goDetachedFirstPaneCutover.facadeName, FACADE_NAME)
+  assert.equal(goDetachedFirstPaneCutover.runtimeFile, RUNTIME_FILE)
+  assert.equal(goDetachedFirstPaneCutover.firstPaneDelegation, FIRST_PANE_DELEGATION)
+  assert.equal(goDetachedFirstPaneCutover.targetBindingDelegation, TARGET_BINDING_DELEGATION)
+  assert.equal(goDetachedFirstPaneCutover.goListPanesInWindowCommand, GO_LIST_PANES_IN_WINDOW_COMMAND)
+  assert.equal(goDetachedFirstPaneCutover.compactFailureError, COMPACT_FAILURE_ERROR)
+  assert.deepEqual(goDetachedFirstPaneCutover.activeOperations, [...ACTIVE_OPERATIONS])
+  assert.deepEqual(goDetachedFirstPaneCutover.activeCapabilities, [...ACTIVE_CAPABILITIES])
+  assert.equal(goDetachedFirstPaneCutover.facadeCutoverMigrated, true)
+  assert.equal(goDetachedFirstPaneCutover.typescriptPaneSetupListPanesFallbackRemoved, true)
+  assert.equal(goDetachedFirstPaneCutover.firstPaneInWindowReused, true)
+  assert.equal(goDetachedFirstPaneCutover.resolvePaneBindingAsyncReused, true)
+  assert.equal(goDetachedFirstPaneCutover.failClosedThrowOnMissingFirstPane, true)
+  assert.equal(goDetachedFirstPaneCutover.returnedShapePreservedOnSuccess, true)
+  assert.equal(goDetachedFirstPaneCutover.rawOutputLeakageAllowed, false)
+  assert.equal(goDetachedFirstPaneCutover.postCreationWindowLookupMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.newSessionMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.newWindowMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.markWindowAsAgentTeamMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.refreshWindowPaneLabelsMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.createTeammatePaneMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.wakePaneMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.syncPaneLabelsMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.killPaneMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.stateRepositoryMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.taskReportPlanRunMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.teamPanelViewModelMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.releasePackageVerificationMigrated, false)
+  assert.equal(goDetachedFirstPaneCutover.nativeArtifactRenamed, false)
+  assert.equal(goDetachedFirstPaneCutover.nativeHelperRebuilt, false)
+  assert.equal(goDetachedFirstPaneCutover.goSourceChanged, false)
+  assert.deepEqual(goDetachedFirstPaneCutover.preservedBoundaries, [...PRESERVED_BOUNDARIES])
+  assert.deepEqual(goDetachedFirstPaneCutover.forbiddenGoTmuxCommands, [...FORBIDDEN_GO_TMUX_COMMANDS])
+  assert.deepEqual(goDetachedFirstPaneCutover.releasePackageGuards, [...RELEASE_PACKAGE_GUARDS])
 }
 
 function assertDocs(root) {
@@ -190,35 +190,35 @@ function assertFacadeSource(root) {
   const coreSource = read(root, TMUX_CORE)
   const goSource = read(root, GO_SOURCE)
   const ensureBody = functionBody(windowsSource, FACADE_NAME)
+  const firstPaneBody = functionBody(coreSource, 'firstPaneInWindow')
   const resolveAsyncBody = functionBody(coreSource, 'resolvePaneBindingAsync')
 
-  assertIncludes(ensureBody, 'firstPaneInWindow(initialTarget, signal)', 'pane setup list-panes is superseded by v0.6.69')
-  assert.equal(ensureBody.includes("runTmuxAsync(['list-panes', '-t', initialTarget, '-F', '#{pane_id}']"), false, 'direct pane setup list-panes is superseded by v0.6.69')
-  assertIncludes(ensureBody, LEADER_BINDING_DELEGATION, `${TMUX_WINDOWS} detached leader binding delegation`)
-  assertIncludes(ensureBody, 'const target = binding?.target', `${TMUX_WINDOWS} target source`) 
-  assertIncludes(ensureBody, `throw new Error('${COMPACT_FAILURE_ERROR}')`, `${TMUX_WINDOWS} compact failure`)
-  assert.equal(ensureBody.includes(TARGET_BASED_TS_CALL), false, 'detached target-based display-message fallback must be removed')
-  assert.equal(/runTmuxAsync\(\['display-message', '-p', '-t', leaderPaneId, '#\{window_id\}'\]/.test(ensureBody), false, 'detached target-based display-message fallback must not remain under formatting variation')
-  assert.equal(ensureBody.includes('stdout'), false, 'detached leader binding path must not parse raw stdout')
+  assertIncludes(ensureBody, FIRST_PANE_DELEGATION, `${TMUX_WINDOWS} detached first pane delegation`)
+  assertIncludes(ensureBody, `throw new Error('${COMPACT_FAILURE_ERROR}')`, `${TMUX_WINDOWS} compact first pane failure`)
+  assertIncludes(ensureBody, TARGET_BINDING_DELEGATION, `${TMUX_WINDOWS} detached target binding delegation`)
+  assert.equal(ensureBody.includes(PANE_SETUP_TS_CALL), false, 'detached pane setup list-panes parsing must be removed')
+  assert.equal(/runTmuxAsync\(\['list-panes', '-t', initialTarget, '-F', '#\{pane_id\}'\]/.test(ensureBody), false, 'detached pane setup list-panes parsing must not remain under formatting variation')
+  assert.equal(ensureBody.includes('const panes ='), false, 'detached branch must not parse panes array directly')
+  assert.equal(ensureBody.includes('.split(\'\\n\').filter(Boolean)'), false, 'detached branch must not parse pane stdout')
+  assert.equal(ensureBody.includes('stdout'), false, 'detached first-pane path must not parse raw stdout')
   assertIncludes(ensureBody, "createAgentTeamKernelAdapter().sessionExistsAsync(SWARM_SESSION, signal)", 'session existence remains Go-backed')
   assertIncludes(ensureBody, "runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-session remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-window remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['list-windows', '-t', SWARM_SESSION, '-F', '#{window_id}\\t#{window_name}']", 'post-creation window lookup remains TS-owned')
-  assertIncludes(ensureBody, 'firstPaneInWindow(initialTarget, signal)', 'pane setup first pane lookup is Go-backed by v0.6.69')
   assertIncludes(ensureBody, 'await markWindowAsAgentTeam', 'marking remains TS-owned')
   assertIncludes(ensureBody, 'await refreshWindowPaneLabels', 'label refresh remains TS-owned')
   assertIncludes(ensureBody, 'captureCurrentPaneBinding()', 'v0.6.67 inside-tmux current binding remains Go-backed')
 
+  assertIncludes(firstPaneBody, 'createAgentTeamKernelAdapter().listPanesInWindowAsync(target, signal)', 'firstPaneInWindow remains Go-backed')
+  assertIncludes(firstPaneBody, 'return result.paneIds[0] ?? null', 'firstPaneInWindow returns compact first pane')
+  assert.equal(firstPaneBody.includes('runTmuxNoThrowAsync(['), false, 'firstPaneInWindow direct tmux fallback remains removed')
   assertIncludes(resolveAsyncBody, 'createAgentTeamKernelAdapter().inspectWorkerPaneAsync(paneId, signal)', 'resolvePaneBindingAsync remains Go-backed')
   assertIncludes(resolveAsyncBody, 'target: result.target', 'resolvePaneBindingAsync returns compact target')
-  assert.equal(resolveAsyncBody.includes('display-message'), false, 'resolvePaneBindingAsync must not call display-message directly')
-  assert.equal(resolveAsyncBody.includes('runTmuxNoThrowAsync(['), false, 'resolvePaneBindingAsync direct tmux fallback remains removed')
 
   assert.deepEqual(parseGoCapabilities(goSource), [...ACTIVE_CAPABILITIES])
   for (const operation of ACTIVE_OPERATIONS) assert.match(goSource, new RegExp(`case "${operation}"`), `${GO_SOURCE} should include ${operation}`)
-  assertIncludes(goSource, GO_INSPECT_PANE_COMMAND, GO_SOURCE)
-  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", workerLifecycleInspectPaneFormat\)/, 'Go inspectPane remains target source')
-  assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, `${GO_SOURCE} must not add target-based display-message`)
+  assertIncludes(goSource, GO_LIST_PANES_IN_WINDOW_COMMAND, GO_SOURCE)
+  assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-t", target, "-F", workerLifecycleWindowPaneFormat\)/, 'Go listPanesInWindow remains first-pane source')
   for (const command of FORBIDDEN_GO_TMUX_COMMANDS) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add ${command}`)
 }
 
@@ -244,7 +244,7 @@ function assertNoNativeDiff(root) {
     encoding: 'utf8',
   })
   assert.equal(diff.status, 0, diff.stderr)
-  assert.equal(diff.stdout.trim(), '', 'T020 should not modify Go source or native artifact files')
+  assert.equal(diff.stdout.trim(), '', 'T021 should not modify Go source or native artifact files')
 }
 
 function clearDistModules(env, rels) {
@@ -269,9 +269,9 @@ async function withPatchedDetachedDeps(env, patch, callback) {
     TMUX: process.env.TMUX,
     ensureTmuxAvailable: core.ensureTmuxAvailable,
     isInsideTmux: core.isInsideTmux,
+    firstPaneInWindow: core.firstPaneInWindow,
     resolvePaneBindingAsync: core.resolvePaneBindingAsync,
     windowExists: core.windowExists,
-    firstPaneInWindow: core.firstPaneInWindow,
     captureCurrentPaneBinding: core.captureCurrentPaneBinding,
     createAgentTeamKernelAdapter: kernel.createAgentTeamKernelAdapter,
     markWindowAsAgentTeam: labels.markWindowAsAgentTeam,
@@ -312,9 +312,9 @@ async function withPatchedDetachedDeps(env, patch, callback) {
   } finally {
     core.ensureTmuxAvailable = originals.ensureTmuxAvailable
     core.isInsideTmux = originals.isInsideTmux
+    core.firstPaneInWindow = originals.firstPaneInWindow
     core.resolvePaneBindingAsync = originals.resolvePaneBindingAsync
     core.windowExists = originals.windowExists
-    core.firstPaneInWindow = originals.firstPaneInWindow
     core.captureCurrentPaneBinding = originals.captureCurrentPaneBinding
     kernel.createAgentTeamKernelAdapter = originals.createAgentTeamKernelAdapter
     labels.markWindowAsAgentTeam = originals.markWindowAsAgentTeam
@@ -338,7 +338,7 @@ async function assertDetachedRuntime(env) {
   }, async ({ windows, tmuxCalls, markCalls, refreshCalls }) => {
     const result = await windows.ensureSwarmWindow()
     assert.deepEqual(result, { session: 'detached-session', window: '@7', target: 'detached-session:@7', leaderPaneId: '%leader' })
-    assert.deepEqual(tmuxCalls, [], 'detached branch should not use direct pane setup list-panes after v0.6.69')
+    assert.deepEqual(tmuxCalls, [], 'detached first-pane cutover should not use direct TypeScript tmux calls when discovery succeeds')
     assert.deepEqual(markCalls.map(call => call.target), ['detached-session:@7'])
     assert.deepEqual(refreshCalls.map(call => call.target), ['detached-session:@7'])
   })
@@ -347,8 +347,8 @@ async function assertDetachedRuntime(env) {
     core: {
       ensureTmuxAvailable: async () => {},
       isInsideTmux: () => false,
-      firstPaneInWindow: async target => (target === 'pi-agentteam:@7' ? '%leader' : null),
-      resolvePaneBindingAsync: async () => null,
+      firstPaneInWindow: async () => null,
+      resolvePaneBindingAsync: async () => { throw new Error('resolvePaneBindingAsync should not run without first pane') },
     },
   }, async ({ windows, tmuxCalls }) => {
     await assert.rejects(() => windows.ensureSwarmWindow(), error => {
@@ -356,12 +356,12 @@ async function assertDetachedRuntime(env) {
       assert.equal(error.message, COMPACT_FAILURE_ERROR)
       return true
     })
-    assert.deepEqual(tmuxCalls, [], 'missing binding should not use hidden target-based display-message or pane setup list-panes fallback')
+    assert.deepEqual(tmuxCalls, [], 'missing first pane should not use hidden direct list-panes fallback')
   })
 }
 
 module.exports = {
-  name: 'Go kernel v0.6.68 Go detached leader binding cutover',
+  name: 'Go kernel v0.6.69 Go detached first pane cutover',
   async run(env) {
     const root = env.helpers.extRoot
     assertFixtureShape(root)

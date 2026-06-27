@@ -71,8 +71,8 @@ export async function ensureSwarmWindow(
     await markWindowAsAgentTeam(initialTarget, signal)
   }
 
-  const panes = (await runTmuxAsync(['list-panes', '-t', initialTarget, '-F', '#{pane_id}'], undefined, signal)).split('\n').filter(Boolean)
-  const leaderPaneId = panes[0]!
+  const leaderPaneId = await firstPaneInWindow(initialTarget, signal)
+  if (!leaderPaneId) throw new Error('Failed to resolve agentteam leader pane')
   const binding = await resolvePaneBindingAsync(leaderPaneId, signal)
   const target = binding?.target
   if (!target) throw new Error('Failed to resolve agentteam leader pane binding')
