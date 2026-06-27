@@ -350,6 +350,30 @@ function runWorkerLifecycleListPanesInWindowSmoke(helperPath, env, timeoutMs) {
   return { ok: result.ok === true, acceptedFailureKinds }
 }
 
+function runWorkerLifecycleFindAgentTeamWindowTargetSmoke(helperPath, env, timeoutMs) {
+  const result = runJsonRpc(helperPath, {
+    jsonrpc: '2.0',
+    id: 'workerLifecycleFindAgentTeamWindowTarget',
+    method: 'workerLifecycle',
+    params: {
+      operation: 'findAgentTeamWindowTarget',
+      sessionName: 'agentteam-builder-smoke-missing',
+    },
+  }, env, timeoutMs, 'workerLifecycle')
+  if (result.operation !== 'findAgentTeamWindowTarget' || result.capability !== 'workerLifecycle' || result.readOnly !== true || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== false) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle findAgentTeamWindowTarget smoke result', 'workerLifecycle')
+  }
+  const acceptedFailureKinds = ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout', 'pane-not-found']
+  if (result.ok === true) {
+    if (result.sessionName !== 'agentteam-builder-smoke-missing' || result.exists !== true || typeof result.target !== 'string' || !result.target || typeof result.windowId !== 'string' || !result.windowId) {
+      fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle findAgentTeamWindowTarget target', 'workerLifecycle')
+    }
+  } else if (result.exists !== false || !acceptedFailureKinds.includes(result.failureKind)) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle findAgentTeamWindowTarget failure', 'workerLifecycle')
+  }
+  return { ok: result.ok === true, acceptedFailureKinds }
+}
+
 function runTmuxAvailabilitySmoke(helperPath, env, timeoutMs) {
   const result = runJsonRpc(helperPath, {
     jsonrpc: '2.0',
@@ -493,6 +517,7 @@ function writeMetadata(input) {
     workerLifecycleListSmoke,
     workerLifecycleCurrentPaneBindingSmoke,
     workerLifecycleWindowPaneListSmoke,
+    workerLifecycleFindAgentTeamWindowTargetSmoke,
     tmuxAvailabilitySmoke,
   } = input
   const artifactDir = path.dirname(helperPath)
@@ -537,6 +562,7 @@ function writeMetadata(input) {
       workerLifecycleListAgentTeamPanes: workerLifecycleListSmoke,
       workerLifecycleCaptureCurrentPaneBinding: workerLifecycleCurrentPaneBindingSmoke,
       workerLifecycleListPanesInWindow: workerLifecycleWindowPaneListSmoke,
+      workerLifecycleFindAgentTeamWindowTarget: workerLifecycleFindAgentTeamWindowTargetSmoke,
       tmuxAvailability: tmuxAvailabilitySmoke,
     },
     outputRootKind,
@@ -623,6 +649,7 @@ function writeMetadata(input) {
       workerLifecycleListAgentTeamPanes: workerLifecycleListSmoke,
       workerLifecycleCaptureCurrentPaneBinding: workerLifecycleCurrentPaneBindingSmoke,
       workerLifecycleListPanesInWindow: workerLifecycleWindowPaneListSmoke,
+      workerLifecycleFindAgentTeamWindowTarget: workerLifecycleFindAgentTeamWindowTargetSmoke,
       tmuxAvailability: tmuxAvailabilitySmoke,
     },
     attestation: {
@@ -681,6 +708,7 @@ function writeMetadata(input) {
         workerLifecycleListAgentTeamPanes: true,
         workerLifecycleCaptureCurrentPaneBinding: true,
         workerLifecycleListPanesInWindow: true,
+        workerLifecycleFindAgentTeamWindowTarget: true,
         tmuxAvailability: true,
       },
       artifact: helperRel,
@@ -728,6 +756,7 @@ function buildGoHelperArtifact(options = {}) {
   const workerLifecycleListSmoke = runWorkerLifecycleListAgentTeamPanesSmoke(helperPath, env, timeoutMs)
   const workerLifecycleCurrentPaneBindingSmoke = runWorkerLifecycleCaptureCurrentPaneBindingSmoke(helperPath, env, timeoutMs)
   const workerLifecycleWindowPaneListSmoke = runWorkerLifecycleListPanesInWindowSmoke(helperPath, env, timeoutMs)
+  const workerLifecycleFindAgentTeamWindowTargetSmoke = runWorkerLifecycleFindAgentTeamWindowTargetSmoke(helperPath, env, timeoutMs)
   const tmuxAvailabilitySmoke = runTmuxAvailabilitySmoke(helperPath, env, timeoutMs)
 
   const metadata = writeMetadata({
@@ -748,6 +777,7 @@ function buildGoHelperArtifact(options = {}) {
     workerLifecycleListSmoke,
     workerLifecycleCurrentPaneBindingSmoke,
     workerLifecycleWindowPaneListSmoke,
+    workerLifecycleFindAgentTeamWindowTargetSmoke,
     tmuxAvailabilitySmoke,
   })
   const result = {

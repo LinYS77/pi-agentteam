@@ -74,6 +74,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.workerLifecycleListAgentTeamPanesConnected, true)
   assert.equal(result.profile.workerLifecycleCaptureCurrentPaneBindingConnected, true)
   assert.equal(result.profile.workerLifecycleListPanesInWindowConnected, true)
+  assert.equal(result.profile.workerLifecycleFindAgentTeamWindowTargetConnected, true)
   assert.equal(result.profile.tmuxAvailabilityConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)
@@ -162,7 +163,9 @@ function assertMethodResult(response, request, fingerprintModule) {
       ? 'listAgentTeamPanes'
       : requestedOperation === 'captureCurrentPaneBinding'
         ? 'captureCurrentPaneBinding'
-        : 'inspectPane'
+        : requestedOperation === 'findAgentTeamWindowTarget'
+          ? 'findAgentTeamWindowTarget'
+          : 'inspectPane'
     assert.equal(response.result.operation, expectedOperation)
     assert.equal(response.result.capability, 'workerLifecycle')
     assert.equal(response.result.readOnly, true)
@@ -177,11 +180,19 @@ function assertMethodResult(response, request, fingerprintModule) {
       assert.equal(typeof response.result.paneId, 'string')
       assert.equal(typeof response.result.target, 'string')
     }
+    if (expectedOperation === 'findAgentTeamWindowTarget') {
+      assert.equal(response.result.sessionName, request.params?.sessionName || '')
+      if (response.result.ok === true) {
+        assert.equal(response.result.exists, true)
+        assert.equal(typeof response.result.target, 'string')
+        assert.equal(typeof response.result.windowId, 'string')
+      }
+    }
     if (response.result.ok === false) {
-      if (expectedOperation === 'inspectPane') assert.equal(response.result.exists, false)
+      if (expectedOperation === 'inspectPane' || expectedOperation === 'findAgentTeamWindowTarget') assert.equal(response.result.exists, false)
       assert.equal(response.result.status, 'unknown')
       assert.equal(response.result.resultMarker, 'stale')
-      assert.ok(['pane-not-found', 'unsupported-operation', 'tmux-command-timeout', 'tmux-command-failed', 'tmux-unavailable'].includes(response.result.failureKind))
+      assert.ok(['pane-not-found', 'unsupported-operation', 'tmux-command-timeout', 'tmux-command-failed', 'tmux-unavailable', 'invalid-session'].includes(response.result.failureKind))
       assert.equal(/stdout|stderr|stack|MAILBOX_BODY|REPORT_BODY|worker transcript|rawState/i.test(JSON.stringify(response.result)), false)
     }
     return

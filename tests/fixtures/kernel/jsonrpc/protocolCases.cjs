@@ -112,6 +112,10 @@ function validMethodCases() {
       request: request('workerLifecycle', { operation: 'captureCurrentPaneBinding' }, 'worker-lifecycle-current-binding-string-id'),
     },
     {
+      name: 'worker lifecycle findAgentTeamWindowTarget',
+      request: request('workerLifecycle', { operation: 'findAgentTeamWindowTarget', sessionName: 'missing-fixture-session' }, 'worker-lifecycle-window-target-string-id'),
+    },
+    {
       name: 'tmux availability',
       request: request('tmuxAvailability', undefined, 'tmux-availability-string-id'),
     },
@@ -219,6 +223,7 @@ function multipleRequestBatch() {
     request('workerLifecycle', { operation: 'inspectPane', paneId: '%batch-missing-pane' }, 'batch-worker-lifecycle'),
     request('workerLifecycle', { operation: 'listAgentTeamPanes' }, 'batch-worker-lifecycle-list'),
     request('workerLifecycle', { operation: 'captureCurrentPaneBinding' }, 'batch-worker-lifecycle-current-binding'),
+    request('workerLifecycle', { operation: 'findAgentTeamWindowTarget', sessionName: 'missing-batch-session' }, 'batch-worker-lifecycle-window-target'),
     request('tmuxAvailability', undefined, 'batch-tmux-availability'),
     { jsonrpc: '2.0', id: 'batch-unknown', method: 'unknownMethod' },
   ]

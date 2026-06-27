@@ -1,3 +1,4 @@
+import { createAgentTeamKernelAdapter } from '../core/kernel.js'
 import { runTmuxAsync, runTmuxNoThrowAsync } from './client.js'
 import {
   ensureTmuxAvailable,
@@ -14,16 +15,10 @@ import {
 } from './labels.js'
 
 async function findAgentTeamWindowTarget(sessionName: string, signal?: AbortSignal): Promise<string | null> {
-  const result = await runTmuxNoThrowAsync(['list-windows', '-t', sessionName, '-F', '#{window_id}\t#{@agentteam-window}'], undefined, signal)
-  if (!result.ok || !result.stdout) return null
-  for (const line of result.stdout.split('\n')) {
-    if (!line.trim()) continue
-    const [windowId, marker] = line.split('\t')
-    if (marker === '1' && windowId) {
-      return `${sessionName}:${windowId}`
-    }
-  }
-  return null
+  if (!sessionName || signal?.aborted) return null
+  const result = await createAgentTeamKernelAdapter().findAgentTeamWindowTargetAsync(sessionName, signal)
+  if (!result.ok || !result.target) return null
+  return result.target
 }
 
 export async function ensureSwarmWindow(

@@ -132,6 +132,7 @@ export type AgentTeamKernelProfile = AgentTeamKernelHealth & {
     workerLifecycleListAgentTeamPanesConnected?: boolean
     workerLifecycleCaptureCurrentPaneBindingConnected?: boolean
     workerLifecycleListPanesInWindowConnected?: boolean
+    workerLifecycleFindAgentTeamWindowTargetConnected?: boolean
     tmuxAvailabilityConnected?: boolean
     panelConnected: false
     taskReportPlanRunConnected: false
@@ -176,6 +177,7 @@ export type AgentTeamKernelWorkerLifecycleFailureKind =
   | 'pane-not-found'
   | 'invalid-pane-id'
   | 'invalid-target'
+  | 'invalid-session'
 
 export type AgentTeamKernelWorkerPaneInspection = {
   ok: boolean
@@ -252,6 +254,25 @@ export type AgentTeamKernelWindowPaneList = {
   tmuxMutation: false
 }
 
+export type AgentTeamKernelAgentTeamWindowTarget = {
+  ok: boolean
+  operation: 'findAgentTeamWindowTarget'
+  capability: 'workerLifecycle'
+  sessionName: string
+  exists: boolean
+  target?: string
+  windowId?: string
+  status?: 'unknown'
+  resultMarker?: 'stale'
+  failureKind?: AgentTeamKernelWorkerLifecycleFailureKind
+  reason?: string
+  error?: string
+  readOnly: true
+  stateFilesRead: false
+  stateFilesWritten: false
+  tmuxMutation: false
+}
+
 export type AgentTeamKernelTmuxAvailability = {
   ok: boolean
   capability: 'tmuxAvailability'
@@ -279,6 +300,7 @@ export type AgentTeamKernelAdapter = {
   listAgentTeamPanes(): AgentTeamKernelWorkerPaneList
   captureCurrentPaneBinding(): AgentTeamKernelCurrentPaneBinding
   listPanesInWindowAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowPaneList>
+  findAgentTeamWindowTargetAsync(sessionName: string, signal?: AbortSignal): Promise<AgentTeamKernelAgentTeamWindowTarget>
   checkTmuxAvailableAsync(signal?: AbortSignal): Promise<AgentTeamKernelTmuxAvailability>
   compactReadModelFingerprint(input: unknown, fallback?: (input: unknown) => AgentTeamKernelCompactReadModelResult): AgentTeamKernelCompactReadModelResult
 }
@@ -310,6 +332,13 @@ function compactTmuxWindowTarget(value: unknown): string {
   if (!raw || raw.length > KERNEL_DIAGNOSTIC_TEXT_LIMIT) return ''
   if (raw !== compactKernelText(raw)) return ''
   return /^[a-zA-Z0-9_./:=@%+-]+$/.test(raw) ? raw : ''
+}
+
+function compactTmuxSessionName(value: unknown): string {
+  const raw = String(value ?? '').trim()
+  if (!raw || raw.length > KERNEL_DIAGNOSTIC_TEXT_LIMIT) return ''
+  if (raw !== compactKernelText(raw)) return ''
+  return /^[a-zA-Z0-9_./=%+-]+$/.test(raw) ? raw : ''
 }
 
 function compactHelperPath(value: unknown): string {
@@ -471,6 +500,7 @@ function fallbackProfile(metadata: AgentTeamKernelMetadata, params: Record<strin
       workerLifecycleListAgentTeamPanesConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleCaptureCurrentPaneBindingConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleListPanesInWindowConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
+      workerLifecycleFindAgentTeamWindowTargetConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       tmuxAvailabilityConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('tmuxAvailability'),
       panelConnected: false,
       taskReportPlanRunConnected: false,
@@ -637,6 +667,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     if (profile.workerLifecycleInspectPaneConnected !== true || profile.workerLifecycleListAgentTeamPanesConnected !== true) return undefined
     if (profile.workerLifecycleCaptureCurrentPaneBindingConnected !== undefined && profile.workerLifecycleCaptureCurrentPaneBindingConnected !== true) return undefined
     if (profile.workerLifecycleListPanesInWindowConnected !== undefined && profile.workerLifecycleListPanesInWindowConnected !== true) return undefined
+    if (profile.workerLifecycleFindAgentTeamWindowTargetConnected !== undefined && profile.workerLifecycleFindAgentTeamWindowTargetConnected !== true) return undefined
     if (profile.tmuxAvailabilityConnected !== undefined && profile.tmuxAvailabilityConnected !== true) return undefined
     if (profile.panelConnected !== false || profile.taskReportPlanRunConnected !== false) return undefined
     return {
@@ -653,6 +684,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         workerLifecycleListAgentTeamPanesConnected: true,
         workerLifecycleCaptureCurrentPaneBindingConnected: profile.workerLifecycleCaptureCurrentPaneBindingConnected === true,
         workerLifecycleListPanesInWindowConnected: profile.workerLifecycleListPanesInWindowConnected === true,
+        workerLifecycleFindAgentTeamWindowTargetConnected: profile.workerLifecycleFindAgentTeamWindowTargetConnected === true,
         tmuxAvailabilityConnected: profile.tmuxAvailabilityConnected === true,
         panelConnected: false,
         taskReportPlanRunConnected: false,
@@ -855,6 +887,32 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       target: safeTarget,
       exists: false,
       paneIds: [],
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind: kind,
+      reason: safeReason,
+      error: safeReason,
+      readOnly: true,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: false,
+    }
+  }
+
+  function workerLifecycleUnavailableAgentTeamWindowTarget(sessionName: string, kind: AgentTeamKernelWorkerLifecycleFailureKind, detail?: unknown): AgentTeamKernelAgentTeamWindowTarget {
+    const safeSessionName = compactTmuxSessionName(sessionName)
+    const reason = kind === 'invalid-session'
+      ? 'Go worker lifecycle findAgentTeamWindowTarget unavailable (invalid-session)'
+      : kind === 'pane-not-found'
+        ? 'Go worker lifecycle findAgentTeamWindowTarget unavailable (pane-not-found)'
+        : cutoverMessage(kind as AgentTeamKernelCutoverFailureKind, detail)
+    const safeReason = compactKernelText(reason, cutoverMessage('previous-helper-failure'))
+    return {
+      ok: false,
+      operation: 'findAgentTeamWindowTarget',
+      capability: 'workerLifecycle',
+      sessionName: safeSessionName,
+      exists: false,
       status: 'unknown',
       resultMarker: 'stale',
       failureKind: kind,
@@ -1082,6 +1140,53 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       target,
       exists: false,
       paneIds: [],
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind,
+      reason,
+      error: reason,
+      readOnly: true,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: false,
+    }
+  }
+
+  function validateAgentTeamWindowTargetResult(value: unknown, requestedSessionName: string): AgentTeamKernelAgentTeamWindowTarget | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const result = value as Partial<AgentTeamKernelAgentTeamWindowTarget>
+    if (result.operation !== 'findAgentTeamWindowTarget' || result.capability !== 'workerLifecycle') return undefined
+    if (result.readOnly !== true || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== false) return undefined
+    const sessionName = compactTmuxSessionName(result.sessionName || requestedSessionName)
+    if (result.ok === true) {
+      const windowId = compactKernelText(result.windowId)
+      const target = compactTmuxWindowTarget(result.target)
+      if (!sessionName || result.exists !== true || !windowId || !target || target !== `${sessionName}:${windowId}`) return undefined
+      return {
+        ok: true,
+        operation: 'findAgentTeamWindowTarget',
+        capability: 'workerLifecycle',
+        sessionName,
+        exists: true,
+        target,
+        windowId,
+        readOnly: true,
+        stateFilesRead: false,
+        stateFilesWritten: false,
+        tmuxMutation: false,
+      }
+    }
+    if (result.ok !== false || result.exists !== false) return undefined
+    const failureKind = typeof result.failureKind === 'string' && ['unsupported-operation', 'pane-not-found', 'invalid-pane-id', 'invalid-target', 'invalid-session', ...AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS].includes(result.failureKind)
+      ? result.failureKind as AgentTeamKernelWorkerLifecycleFailureKind
+      : 'previous-helper-failure'
+    const reason = compactKernelText(result.reason || result.error || cutoverMessage(failureKind as AgentTeamKernelCutoverFailureKind), cutoverMessage('previous-helper-failure'))
+    return {
+      ok: false,
+      operation: 'findAgentTeamWindowTarget',
+      capability: 'workerLifecycle',
+      sessionName,
+      exists: false,
       status: 'unknown',
       resultMarker: 'stale',
       failureKind,
@@ -1471,6 +1576,17 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle listPanesInWindow async result shape')
       }
       return workerLifecycleUnavailableWindowPaneList(requestedTarget, cutoverFailureKind ?? 'previous-helper-failure')
+    },
+    async findAgentTeamWindowTargetAsync(sessionName, signal) {
+      const requestedSessionName = compactTmuxSessionName(sessionName)
+      if (!requestedSessionName) return workerLifecycleUnavailableAgentTeamWindowTarget(sessionName, 'invalid-session')
+      const helperResult = await callHelperAsync<unknown>('workerLifecycle', { operation: 'findAgentTeamWindowTarget', sessionName: requestedSessionName }, signal)
+      const parsed = validateAgentTeamWindowTargetResult(helperResult, requestedSessionName)
+      if (parsed) return parsed
+      if (helperResult !== undefined) {
+        recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle findAgentTeamWindowTarget async result shape')
+      }
+      return workerLifecycleUnavailableAgentTeamWindowTarget(requestedSessionName, cutoverFailureKind ?? 'previous-helper-failure')
     },
     async checkTmuxAvailableAsync(signal) {
       const helperResult = await callHelperAsync<unknown>('tmuxAvailability', undefined, signal)

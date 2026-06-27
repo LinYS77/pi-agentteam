@@ -94,6 +94,7 @@ docs/perf/*
 !docs/perf/v0.6.62-go-window-pane-lookup-facade-cutover.md
 !docs/perf/v0.6.63-go-tmux-availability-facade-cutover.md
 !docs/perf/v0.6.64-go-pane-app-start-wait-cutover.md
+!docs/perf/v0.6.65-go-agentteam-window-discovery-cutover.md
 
 # Dependencies
 node_modules/
