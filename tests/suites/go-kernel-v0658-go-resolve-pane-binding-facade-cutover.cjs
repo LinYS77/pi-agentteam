@@ -65,7 +65,7 @@ const REQUIRED_ROADMAP = [
   'workerLifecycle.inspectPane compact result includes target',
   'the TypeScript display-message fallback for resolvePaneBinding is removed',
   'listAgentTeamPanes still filters labeled panes only',
-  'targetForPaneId, captureCurrentPaneBinding, and resolvePaneBindingAsync are later cut over by v0.6.59-v0.6.61 while window helpers remain TypeScript-owned',
+  'targetForPaneId, captureCurrentPaneBinding, resolvePaneBindingAsync, and window helpers are later cut over by v0.6.59-v0.6.62',
   '**v0.6.58 Go resolvePaneBinding facade cutover**',
 ]
 const RELEASE_OVERCLAIMS = [
@@ -207,7 +207,7 @@ function assertFixtureShape(root) {
   assert.equal(goResolvePaneBindingFacadeCutover.resolvePaneBindingAsyncMigratedByLaterSlice, true)
   assert.equal(goResolvePaneBindingFacadeCutover.targetForPaneIdMigrated, false)
   assert.equal(goResolvePaneBindingFacadeCutover.captureCurrentPaneBindingMigrated, false)
-  assert.equal(goResolvePaneBindingFacadeCutover.windowHelpersMigrated, false)
+  assert.equal(goResolvePaneBindingFacadeCutover.windowHelpersMigratedByLaterSlice, true)
   assert.equal(goResolvePaneBindingFacadeCutover.createTeammatePaneMigrated, false)
   assert.equal(goResolvePaneBindingFacadeCutover.wakePaneMigrated, false)
   assert.equal(goResolvePaneBindingFacadeCutover.syncPaneLabelsMigrated, false)
@@ -270,8 +270,10 @@ function assertFacadeSource(root) {
   assertIncludes(captureBody, 'if (!isInsideTmux()) return null', 'captureCurrentPaneBinding later v0.6.60 guard')
   assertIncludes(captureBody, 'createAgentTeamKernelAdapter().captureCurrentPaneBinding()', 'captureCurrentPaneBinding later v0.6.60 cutover')
   assert.equal(captureBody.includes('display-message'), false, 'captureCurrentPaneBinding display-message path is removed by later v0.6.60 slice')
-  assert.equal(windowExistsBody.includes('list-panes'), true, 'windowExists must remain TypeScript window helper path')
-  assert.equal(firstPaneBody.includes('list-panes'), true, 'firstPaneInWindow must remain TypeScript window helper path')
+  assertIncludes(windowExistsBody, 'createAgentTeamKernelAdapter().listPanesInWindowAsync(target, signal)', 'windowExists later v0.6.62 cutover')
+  assert.equal(windowExistsBody.includes('runTmuxNoThrowAsync(['), false, 'windowExists direct tmux path is removed by later v0.6.62 slice')
+  assertIncludes(firstPaneBody, 'createAgentTeamKernelAdapter().listPanesInWindowAsync(target, signal)', 'firstPaneInWindow later v0.6.62 cutover')
+  assert.equal(firstPaneBody.includes('runTmuxNoThrowAsync(['), false, 'firstPaneInWindow direct tmux path is removed by later v0.6.62 slice')
 
   assertIncludes(kernelSource, 'target?: string', KERNEL)
   assertIncludes(kernelSource, "const target = typeof result.target === 'string' ? compactKernelText(result.target) : ''", KERNEL)

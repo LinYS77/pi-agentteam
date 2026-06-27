@@ -101,13 +101,15 @@ export async function resolvePaneBindingAsync(paneId: string, signal?: AbortSign
 
 export async function windowExists(target: string, signal?: AbortSignal): Promise<boolean> {
   if (!target) return false
-  return (await runTmuxNoThrowAsync(['list-panes', '-t', target, '-F', '#{pane_id}'], undefined, signal)).ok
+  const result = await createAgentTeamKernelAdapter().listPanesInWindowAsync(target, signal)
+  return result.ok
 }
 
 export async function firstPaneInWindow(target: string, signal?: AbortSignal): Promise<string | null> {
-  const result = await runTmuxNoThrowAsync(['list-panes', '-t', target, '-F', '#{pane_id}'], undefined, signal)
-  if (!result.ok || !result.stdout) return null
-  return result.stdout.split('\n').filter(Boolean)[0] ?? null
+  if (!target) return null
+  const result = await createAgentTeamKernelAdapter().listPanesInWindowAsync(target, signal)
+  if (!result.ok || result.paneIds.length === 0) return null
+  return result.paneIds[0] ?? null
 }
 
 export function captureCurrentPaneBinding(): { paneId: string; target: string } | null {

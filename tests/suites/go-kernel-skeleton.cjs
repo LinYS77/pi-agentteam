@@ -96,6 +96,7 @@ module.exports = {
     assert.equal(defaultProfile.profile.workerLifecycleInspectPaneConnected, true)
     assert.equal(defaultProfile.profile.workerLifecycleListAgentTeamPanesConnected, true)
     assert.equal(defaultProfile.profile.workerLifecycleCaptureCurrentPaneBindingConnected, true)
+    assert.equal(defaultProfile.profile.workerLifecycleListPanesInWindowConnected, true)
     assert.equal(defaultProfile.profile.panelConnected, false)
     assert.equal(defaultProfile.profile.taskReportPlanRunConnected, false)
 
@@ -210,6 +211,7 @@ module.exports = {
       assert.equal(profile.result.profile.workerLifecycleInspectPaneConnected, true)
       assert.equal(profile.result.profile.workerLifecycleListAgentTeamPanesConnected, true)
       assert.equal(profile.result.profile.workerLifecycleCaptureCurrentPaneBindingConnected, true)
+      assert.equal(profile.result.profile.workerLifecycleListPanesInWindowConnected, true)
       assert.equal(profile.result.profile.panelConnected, false)
       assert.equal(profile.result.profile.taskReportPlanRunConnected, false)
 

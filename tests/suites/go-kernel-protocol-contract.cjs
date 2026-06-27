@@ -73,6 +73,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.workerLifecycleInspectPaneConnected, true)
   assert.equal(result.profile.workerLifecycleListAgentTeamPanesConnected, true)
   assert.equal(result.profile.workerLifecycleCaptureCurrentPaneBindingConnected, true)
+  assert.equal(result.profile.workerLifecycleListPanesInWindowConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)
 }

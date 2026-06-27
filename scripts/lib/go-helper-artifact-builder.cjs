@@ -326,6 +326,30 @@ function runWorkerLifecycleCaptureCurrentPaneBindingSmoke(helperPath, env, timeo
   return { ok: result.ok === true, acceptedFailureKinds }
 }
 
+function runWorkerLifecycleListPanesInWindowSmoke(helperPath, env, timeoutMs) {
+  const result = runJsonRpc(helperPath, {
+    jsonrpc: '2.0',
+    id: 'workerLifecycleListPanesInWindow',
+    method: 'workerLifecycle',
+    params: {
+      operation: 'listPanesInWindow',
+      target: 'agentteam-builder-smoke:@missing',
+    },
+  }, env, timeoutMs, 'workerLifecycle')
+  if (result.operation !== 'listPanesInWindow' || result.capability !== 'workerLifecycle' || result.readOnly !== true || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== false) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle listPanesInWindow smoke result', 'workerLifecycle')
+  }
+  const acceptedFailureKinds = ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout']
+  if (result.ok === true) {
+    if (result.target !== 'agentteam-builder-smoke:@missing' || result.exists !== true || !Array.isArray(result.paneIds)) {
+      fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle listPanesInWindow pane list', 'workerLifecycle')
+    }
+  } else if (!acceptedFailureKinds.includes(result.failureKind)) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle listPanesInWindow failure', 'workerLifecycle')
+  }
+  return { ok: result.ok === true, acceptedFailureKinds }
+}
+
 function assertHealthMatchesSource(health, sourceMetadata) {
   if (health.implementation !== 'go') fail('go-health-failed', 'reject non-Go helper health response', 'implementation')
   if (health.helperVersion !== sourceMetadata.helperVersion) fail('metadata-invalid', 'reject helper version skew before writing metadata', 'helper-version')
@@ -447,6 +471,7 @@ function writeMetadata(input) {
     workerLifecycleSmoke,
     workerLifecycleListSmoke,
     workerLifecycleCurrentPaneBindingSmoke,
+    workerLifecycleWindowPaneListSmoke,
   } = input
   const artifactDir = path.dirname(helperPath)
   const helperStat = fs.statSync(helperPath)
@@ -489,6 +514,7 @@ function writeMetadata(input) {
       workerLifecycleInspectPane: workerLifecycleSmoke,
       workerLifecycleListAgentTeamPanes: workerLifecycleListSmoke,
       workerLifecycleCaptureCurrentPaneBinding: workerLifecycleCurrentPaneBindingSmoke,
+      workerLifecycleListPanesInWindow: workerLifecycleWindowPaneListSmoke,
     },
     outputRootKind,
   }
@@ -573,6 +599,7 @@ function writeMetadata(input) {
       workerLifecycleInspectPane: workerLifecycleSmoke,
       workerLifecycleListAgentTeamPanes: workerLifecycleListSmoke,
       workerLifecycleCaptureCurrentPaneBinding: workerLifecycleCurrentPaneBindingSmoke,
+      workerLifecycleListPanesInWindow: workerLifecycleWindowPaneListSmoke,
     },
     attestation: {
       path: attestationRel,
@@ -629,6 +656,7 @@ function writeMetadata(input) {
         workerLifecycleInspectPane: true,
         workerLifecycleListAgentTeamPanes: true,
         workerLifecycleCaptureCurrentPaneBinding: true,
+        workerLifecycleListPanesInWindow: true,
       },
       artifact: helperRel,
       files: {
@@ -674,6 +702,7 @@ function buildGoHelperArtifact(options = {}) {
   const workerLifecycleSmoke = runWorkerLifecycleInspectPaneSmoke(helperPath, env, timeoutMs)
   const workerLifecycleListSmoke = runWorkerLifecycleListAgentTeamPanesSmoke(helperPath, env, timeoutMs)
   const workerLifecycleCurrentPaneBindingSmoke = runWorkerLifecycleCaptureCurrentPaneBindingSmoke(helperPath, env, timeoutMs)
+  const workerLifecycleWindowPaneListSmoke = runWorkerLifecycleListPanesInWindowSmoke(helperPath, env, timeoutMs)
 
   const metadata = writeMetadata({
     extRoot,
@@ -692,6 +721,7 @@ function buildGoHelperArtifact(options = {}) {
     workerLifecycleSmoke,
     workerLifecycleListSmoke,
     workerLifecycleCurrentPaneBindingSmoke,
+    workerLifecycleWindowPaneListSmoke,
   })
   const result = {
     extRoot,

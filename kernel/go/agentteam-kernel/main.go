@@ -55,6 +55,7 @@ type profileResult struct {
 const tmuxPaneSnapshotFormat = "#{pane_id}\t#{session_name}:#{window_id}\t#{@agentteam-name}\t#{pane_current_command}"
 const workerLifecycleInspectPaneFormat = "#{pane_id}\t#{session_name}:#{window_id}\t#{pane_current_command}\t#{pane_in_mode}\t#{pane_mode}"
 const workerLifecycleCurrentPaneBindingFormat = "#{pane_id}\t#{session_name}:#{window_id}"
+const workerLifecycleWindowPaneFormat = "#{pane_id}"
 
 type tmuxPaneSnapshotItem struct {
 	PaneID         string `json:"paneId"`
@@ -145,6 +146,24 @@ type workerPaneBindingResult struct {
 	TmuxMutation      bool   `json:"tmuxMutation"`
 }
 
+type workerWindowPaneListResult struct {
+	OK                bool     `json:"ok"`
+	Operation         string   `json:"operation"`
+	Capability        string   `json:"capability"`
+	Target            string   `json:"target"`
+	Exists            bool     `json:"exists"`
+	PaneIDs           []string `json:"paneIds"`
+	Status            string   `json:"status,omitempty"`
+	Marker            string   `json:"resultMarker,omitempty"`
+	Failure           string   `json:"failureKind,omitempty"`
+	Reason            string   `json:"reason,omitempty"`
+	Error             string   `json:"error,omitempty"`
+	ReadOnly          bool     `json:"readOnly"`
+	StateFilesRead    bool     `json:"stateFilesRead"`
+	StateFilesWritten bool     `json:"stateFilesWritten"`
+	TmuxMutation      bool     `json:"tmuxMutation"`
+}
+
 func health() healthResult {
 	return healthResult{
 		OK:                     true,
@@ -173,6 +192,7 @@ func profile(params map[string]any) profileResult {
 			"workerLifecycleInspectPaneConnected":               true,
 			"workerLifecycleListAgentTeamPanesConnected":        true,
 			"workerLifecycleCaptureCurrentPaneBindingConnected": true,
+			"workerLifecycleListPanesInWindowConnected":         true,
 			"panelConnected":                                    false,
 			"taskReportPlanRunConnected":                        false,
 		},
@@ -333,6 +353,25 @@ func tmuxBool(raw string) *bool {
 	}
 	value := trimmed == "1" || trimmed == "true" || trimmed == "yes"
 	return &value
+}
+
+func compactTmuxWindowTarget(raw string) string {
+	target := strings.TrimSpace(raw)
+	if target == "" || len(target) > 160 {
+		return ""
+	}
+	for _, ch := range target {
+		if ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' {
+			continue
+		}
+		switch ch {
+		case '_', '.', '/', ':', '=', '@', '%', '+', '-':
+			continue
+		default:
+			return ""
+		}
+	}
+	return target
 }
 
 func unavailableWorkerPaneInspection(requestedPaneID string, kind string) workerPaneInspectionResult {
@@ -524,6 +563,69 @@ func captureCurrentPaneBinding() workerPaneBindingResult {
 	}
 }
 
+func unavailableWindowPaneList(target string, kind string) workerWindowPaneListResult {
+	safeTarget := compactTmuxWindowTarget(target)
+	reason := "Go worker lifecycle listPanesInWindow unavailable (" + kind + ")"
+	return workerWindowPaneListResult{
+		OK:                false,
+		Operation:         "listPanesInWindow",
+		Capability:        "workerLifecycle",
+		Target:            safeTarget,
+		Exists:            false,
+		PaneIDs:           []string{},
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          true,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      false,
+	}
+}
+
+func listPanesInWindow(params map[string]any) workerWindowPaneListResult {
+	target := compactTmuxWindowTarget(stringParam(params, "target"))
+	if target == "" {
+		return unavailableWindowPaneList("", "invalid-target")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "list-panes", "-t", target, "-F", workerLifecycleWindowPaneFormat)
+	cmd.Env = os.Environ()
+	output, err := cmd.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return unavailableWindowPaneList(target, "tmux-command-timeout")
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return unavailableWindowPaneList(target, "tmux-unavailable")
+		}
+		return unavailableWindowPaneList(target, "tmux-command-failed")
+	}
+	paneIDs := []string{}
+	for _, line := range splitLines(strings.TrimSpace(string(output))) {
+		paneID := strings.TrimSpace(line)
+		if paneID == "" {
+			continue
+		}
+		paneIDs = append(paneIDs, paneID)
+	}
+	return workerWindowPaneListResult{
+		OK:                true,
+		Operation:         "listPanesInWindow",
+		Capability:        "workerLifecycle",
+		Target:            target,
+		Exists:            true,
+		PaneIDs:           paneIDs,
+		ReadOnly:          true,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      false,
+	}
+}
+
 func workerLifecycle(params map[string]any) any {
 	operation := stringParam(params, "operation")
 	switch operation {
@@ -533,6 +635,8 @@ func workerLifecycle(params map[string]any) any {
 		return listAgentTeamPanes()
 	case "captureCurrentPaneBinding":
 		return captureCurrentPaneBinding()
+	case "listPanesInWindow":
+		return listPanesInWindow(params)
 	default:
 		return unavailableWorkerPaneInspection(strings.TrimSpace(stringParam(params, "paneId")), "unsupported-operation")
 	}

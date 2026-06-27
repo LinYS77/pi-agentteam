@@ -91,6 +91,7 @@ docs/perf/*
 !docs/perf/v0.6.59-go-target-for-pane-facade-cutover.md
 !docs/perf/v0.6.60-go-current-pane-binding-facade-cutover.md
 !docs/perf/v0.6.61-go-async-pane-binding-facade-cutover.md
+!docs/perf/v0.6.62-go-window-pane-lookup-facade-cutover.md
 
 # Dependencies
 node_modules/

@@ -40,7 +40,7 @@ const REQUIRED_DOC = [
   'The async helper process forwards only `PATH`, `TMUX`, and `TMUX_PANE`, matching the synchronous helper environment boundary.',
   'Empty pane id, helper unavailable/failure, pane-not-found, unsafe response shape, missing target, pre-aborted signal, and in-flight abort all fail closed to `null` at the public facade.',
   'Abort policy: pre-aborted and in-flight aborted `AbortSignal` resolve `null` at `resolvePaneBindingAsync()` and record only compact `helper-spawn-error`/`aborted` diagnostics inside the adapter; they do not throw or leak process output.',
-  '`windowExists()` and `firstPaneInWindow()` remain TypeScript async tmux-owned window helper paths.',
+  '`windowExists()` and `firstPaneInWindow()` are cut over separately by v0.6.62 through a cancellable async Go `listPanesInWindow` seam.',
   'No Go source or native helper rebuild is required for this TypeScript adapter-seam cutover.',
   '`package.json` remains `0.6.8`.',
   '`tests/fixtures/kernel/v0661/goAsyncPaneBindingFacadeCutover.cjs`',
@@ -142,7 +142,7 @@ function assertFixtureShape(root) {
   assert.equal(goAsyncPaneBindingFacadeCutover.failClosedNullOnMissingTarget, true)
   assert.equal(goAsyncPaneBindingFacadeCutover.failClosedNullOnInvalidResponse, true)
   assert.equal(goAsyncPaneBindingFacadeCutover.syncFacadesUnchanged, true)
-  assert.equal(goAsyncPaneBindingFacadeCutover.windowHelpersMigrated, false)
+  assert.equal(goAsyncPaneBindingFacadeCutover.windowHelpersMigratedByLaterSlice, true)
   assert.equal(goAsyncPaneBindingFacadeCutover.createTeammatePaneMigrated, false)
   assert.equal(goAsyncPaneBindingFacadeCutover.wakePaneMigrated, false)
   assert.equal(goAsyncPaneBindingFacadeCutover.syncPaneLabelsMigrated, false)
@@ -192,10 +192,10 @@ function assertFacadeSource(root) {
   assert.equal(resolveAsyncBody.includes('runTmuxNoThrowAsync(['), false, 'resolvePaneBindingAsync facade must not retain TypeScript tmux fallback')
   assert.equal(resolveAsyncBody.includes('resolvePaneBinding('), false, 'resolvePaneBindingAsync must not wrap the sync facade')
   assert.equal(resolveAsyncBody.includes('signal'), true, 'resolvePaneBindingAsync must preserve AbortSignal parameter usage')
-  assert.equal(windowExistsBody.includes('runTmuxNoThrowAsync(['), true, 'windowExists must remain TypeScript async tmux-owned')
-  assert.equal(windowExistsBody.includes('list-panes'), true, 'windowExists must remain TypeScript window helper path')
-  assert.equal(firstPaneBody.includes('runTmuxNoThrowAsync(['), true, 'firstPaneInWindow must remain TypeScript async tmux-owned')
-  assert.equal(firstPaneBody.includes('list-panes'), true, 'firstPaneInWindow must remain TypeScript window helper path')
+  assertIncludes(windowExistsBody, 'createAgentTeamKernelAdapter().listPanesInWindowAsync(target, signal)', 'windowExists later v0.6.62 cutover')
+  assert.equal(windowExistsBody.includes('runTmuxNoThrowAsync(['), false, 'windowExists direct tmux path is removed by later v0.6.62 slice')
+  assertIncludes(firstPaneBody, 'createAgentTeamKernelAdapter().listPanesInWindowAsync(target, signal)', 'firstPaneInWindow later v0.6.62 cutover')
+  assert.equal(firstPaneBody.includes('runTmuxNoThrowAsync(['), false, 'firstPaneInWindow direct tmux path is removed by later v0.6.62 slice')
   assertIncludes(captureBody, 'if (!isInsideTmux()) return null', 'captureCurrentPaneBinding v0.6.60 guard remains')
   assertIncludes(captureBody, 'createAgentTeamKernelAdapter().captureCurrentPaneBinding()', 'captureCurrentPaneBinding v0.6.60 cutover remains')
   assertIncludes(inspectBody, 'createAgentTeamKernelAdapter().inspectWorkerPane(paneId)', `${TMUX_CORE} inspectPane remains sync Go-backed`)
