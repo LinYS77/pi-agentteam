@@ -1,23 +1,23 @@
-const GO_PANE_EXISTS_FACADE_CUTOVER_SCHEMA_VERSION = 1
-const GO_PANE_EXISTS_FACADE_CUTOVER_THEME = 'v0.6.57 Go paneExists facade cutover'
+const GO_ASYNC_PANE_BINDING_FACADE_CUTOVER_SCHEMA_VERSION = 1
+const GO_ASYNC_PANE_BINDING_FACADE_CUTOVER_THEME = 'v0.6.61 Go resolvePaneBindingAsync facade cutover'
 const PACKAGE_VERSION = '0.6.8'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const PROTOCOL_VERSION = 1
 const CAPABILITY = 'workerLifecycle'
-const ACTIVE_OPERATIONS = Object.freeze(['inspectPane', 'listAgentTeamPanes'])
+const ACTIVE_OPERATIONS = Object.freeze(['inspectPane', 'listAgentTeamPanes', 'captureCurrentPaneBinding'])
 const ACTIVE_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
-const FACADE_NAME = 'paneExists'
-const GO_BACKED_INSPECT_PATH = 'Boolean(paneId && inspectPane(paneId).exists)'
+const FACADE_NAME = 'resolvePaneBindingAsync'
+const KERNEL_ADAPTER_DELEGATION = 'createAgentTeamKernelAdapter().inspectWorkerPaneAsync(paneId, signal)'
+const ASYNC_HELPER_SEAM = 'invokeHelperAsync'
+const ASYNC_ABORT_POLICY = 'pre-aborted and in-flight aborted AbortSignal resolve null at the public facade with compact helper-spawn-error diagnostics'
 const PRESERVED_BOUNDARIES = Object.freeze([
-  'paneExists facade delegates to the Go-backed inspectPane facade',
-  'TypeScript display-message fallback removed for paneExists facade',
-  'inspectPane facade remains Go-owned',
-  'listAgentTeamPanes facade remains Go-owned',
-  'targetForPaneId is cut over by v0.6.59, not this slice',
-  'captureCurrentPaneBinding is cut over by v0.6.60, not this slice',
-  'resolvePaneBinding is cut over by v0.6.58, not this slice',
-  'resolvePaneBindingAsync is cut over separately by v0.6.61 through a cancellable async helper seam',
+  'resolvePaneBindingAsync facade delegates to the cancellable Go workerLifecycle inspectPane async adapter',
+  'TypeScript display-message fallback removed for resolvePaneBindingAsync facade',
+  'AbortSignal cancellation is preserved by the async helper subprocess seam and fails closed to null',
+  'sync facades remain unchanged and Go-backed',
+  'captureCurrentPaneBinding keeps the v0.6.60 outside-tmux guard and Go operation',
   'window helpers remain TypeScript tmux-owned',
+  'Go display-message use is still limited to the no-target current-pane compact binding operation',
   'wake/create/label/kill lifecycle remains TypeScript-owned',
   'state repository remains TypeScript-owned',
   'task/report/PlanRun governance remains TypeScript-owned',
@@ -30,6 +30,7 @@ const FORBIDDEN_GO_TMUX_COMMANDS = Object.freeze([
   'split-window',
   'new-window',
   'kill-pane',
+  'capture-pane',
   'set-option',
   'set-window-option',
   'select-pane',
@@ -45,11 +46,11 @@ const RELEASE_PACKAGE_GUARDS = Object.freeze([
   'no go.mod or go.sum',
   'no lifecycle hooks or postinstall downloads',
   'no native artifact rename',
-  'native helper rebuild handled only by later target-field contract slice',
+  'no Go source or native helper rebuild required for this TypeScript adapter seam cutover',
 ])
-const goPaneExistsFacadeCutover = Object.freeze({
-  schemaVersion: GO_PANE_EXISTS_FACADE_CUTOVER_SCHEMA_VERSION,
-  theme: GO_PANE_EXISTS_FACADE_CUTOVER_THEME,
+const goAsyncPaneBindingFacadeCutover = Object.freeze({
+  schemaVersion: GO_ASYNC_PANE_BINDING_FACADE_CUTOVER_SCHEMA_VERSION,
+  theme: GO_ASYNC_PANE_BINDING_FACADE_CUTOVER_THEME,
   packageVersion: PACKAGE_VERSION,
   helperVersion: HELPER_VERSION,
   protocolVersion: PROTOCOL_VERSION,
@@ -57,17 +58,18 @@ const goPaneExistsFacadeCutover = Object.freeze({
   activeOperations: ACTIVE_OPERATIONS,
   activeCapabilities: ACTIVE_CAPABILITIES,
   facadeName: FACADE_NAME,
-  goBackedInspectPath: GO_BACKED_INSPECT_PATH,
+  kernelAdapterDelegation: KERNEL_ADAPTER_DELEGATION,
+  asyncHelperSeam: ASYNC_HELPER_SEAM,
+  asyncAbortPolicy: ASYNC_ABORT_POLICY,
   facadeCutoverMigrated: true,
+  cancellableAsyncKernelSeamAdded: true,
   typescriptDisplayMessageFallbackRemoved: true,
-  failClosedFalseOnHelperFailure: true,
-  publicFacadeReturnsBooleanOnly: true,
-  inspectPaneFacadeStillMigrated: true,
-  listAgentTeamPanesFacadeStillMigrated: true,
-  targetForPaneIdMigrated: false,
-  captureCurrentPaneBindingMigrated: false,
-  resolvePaneBindingMigrated: false,
-  resolvePaneBindingAsyncMigratedByLaterSlice: true,
+  abortResolvesNull: true,
+  failClosedNullOnEmptyPaneId: true,
+  failClosedNullOnHelperFailure: true,
+  failClosedNullOnMissingTarget: true,
+  failClosedNullOnInvalidResponse: true,
+  syncFacadesUnchanged: true,
   windowHelpersMigrated: false,
   createTeammatePaneMigrated: false,
   wakePaneMigrated: false,
@@ -79,6 +81,7 @@ const goPaneExistsFacadeCutover = Object.freeze({
   releasePackageVerificationMigrated: false,
   nativeArtifactRenamed: false,
   nativeHelperRebuilt: false,
+  goSourceChanged: false,
   packageVersionChanged: false,
   packageReleaseApproved: false,
   npmVersionChanged: false,
@@ -92,16 +95,18 @@ const goPaneExistsFacadeCutover = Object.freeze({
 module.exports = {
   ACTIVE_CAPABILITIES,
   ACTIVE_OPERATIONS,
+  ASYNC_ABORT_POLICY,
+  ASYNC_HELPER_SEAM,
   CAPABILITY,
   FACADE_NAME,
   FORBIDDEN_GO_TMUX_COMMANDS,
-  GO_BACKED_INSPECT_PATH,
-  GO_PANE_EXISTS_FACADE_CUTOVER_SCHEMA_VERSION,
-  GO_PANE_EXISTS_FACADE_CUTOVER_THEME,
+  GO_ASYNC_PANE_BINDING_FACADE_CUTOVER_SCHEMA_VERSION,
+  GO_ASYNC_PANE_BINDING_FACADE_CUTOVER_THEME,
   HELPER_VERSION,
+  KERNEL_ADAPTER_DELEGATION,
   PACKAGE_VERSION,
   PRESERVED_BOUNDARIES,
   PROTOCOL_VERSION,
   RELEASE_PACKAGE_GUARDS,
-  goPaneExistsFacadeCutover,
+  goAsyncPaneBindingFacadeCutover,
 }

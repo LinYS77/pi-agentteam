@@ -45,7 +45,7 @@ const REQUIRED_DOC = [
   'Go uses exactly `tmux display-message -p workerLifecycleCurrentPaneBindingFormat` with compact format `#{pane_id}\\t#{session_name}:#{window_id}`.',
   'The adapter forwards only `PATH`, `TMUX`, and `TMUX_PANE` to the helper process.',
   'Helper failure, outside-tmux, tmux unavailable, empty pane id, empty target, unsafe response shape, and command timeout all fail closed to `null` at the public facade.',
-  '`resolvePaneBindingAsync(paneId, signal)` remains TypeScript `display-message`-owned to preserve `AbortSignal` semantics.',
+  '`resolvePaneBindingAsync(paneId, signal)` is cut over separately by v0.6.61 through a cancellable async helper seam.',
   '`windowExists()` and `firstPaneInWindow()` remain TypeScript window helper paths.',
   'Mutating worker lifecycle remains TypeScript-owned',
   'Native artifact path and binary name remain unchanged.',
@@ -60,7 +60,7 @@ const REQUIRED_ROADMAP = [
   'tmux/core.ts captureCurrentPaneBinding() keeps the isInsideTmux guard and delegates to createAgentTeamKernelAdapter().captureCurrentPaneBinding()',
   'Go `workerLifecycle.captureCurrentPaneBinding` uses only `tmux display-message -p workerLifecycleCurrentPaneBindingFormat`',
   'the TypeScript display-message fallback for captureCurrentPaneBinding is removed',
-  'resolvePaneBindingAsync remains TypeScript-owned because the current kernel adapter is sync/per-call and cannot preserve AbortSignal semantics',
+  'resolvePaneBindingAsync is cut over separately by v0.6.61 through a cancellable async helper seam',
   'window helpers remain TypeScript-owned',
   '**v0.6.60 Go captureCurrentPaneBinding facade cutover**',
 ]
@@ -72,7 +72,6 @@ const RELEASE_OVERCLAIMS = [
   'GitHub release created',
   'release can ship',
   'v0.7 is release-ready',
-  'resolvePaneBindingAsyncMigrated: true',
   'windowHelpersMigrated: true',
   'createTeammatePaneMigrated: true',
   'wakePaneMigrated: true',
@@ -185,7 +184,7 @@ function assertFixtureShape(root) {
   assert.equal(goCurrentPaneBindingFacadeCutover.failClosedNullOnMissingPaneIdOrTarget, true)
   assert.equal(goCurrentPaneBindingFacadeCutover.tmuxEnvForwardedToHelper, true)
   assert.equal(goCurrentPaneBindingFacadeCutover.currentPaneDisplayMessageAllowedOnlyForThisOperation, true)
-  assert.equal(goCurrentPaneBindingFacadeCutover.resolvePaneBindingAsyncMigrated, false)
+  assert.equal(goCurrentPaneBindingFacadeCutover.resolvePaneBindingAsyncMigratedByLaterSlice, true)
   assert.equal(goCurrentPaneBindingFacadeCutover.windowHelpersMigrated, false)
   assert.equal(goCurrentPaneBindingFacadeCutover.createTeammatePaneMigrated, false)
   assert.equal(goCurrentPaneBindingFacadeCutover.wakePaneMigrated, false)
@@ -235,8 +234,9 @@ function assertFacadeSource(root) {
   assert.equal(captureBody.includes('display-message'), false, 'captureCurrentPaneBinding facade must not call display-message directly')
   assert.equal(coreSource.includes('runTmuxNoThrow,'), false, `${TMUX_CORE} should not import sync runTmuxNoThrow after current-pane cutover`)
 
-  assert.equal(resolveAsyncBody.includes('display-message'), true, 'resolvePaneBindingAsync must remain TypeScript display-message path')
-  assert.equal(resolveAsyncBody.includes('runTmuxNoThrowAsync(['), true, 'resolvePaneBindingAsync must remain async tmux-owned')
+  assertIncludes(resolveAsyncBody, 'createAgentTeamKernelAdapter().inspectWorkerPaneAsync(paneId, signal)', 'resolvePaneBindingAsync later v0.6.61 cutover')
+  assert.equal(resolveAsyncBody.includes('display-message'), false, 'resolvePaneBindingAsync display-message path is removed by later v0.6.61 slice')
+  assert.equal(resolveAsyncBody.includes('runTmuxNoThrowAsync(['), false, 'resolvePaneBindingAsync direct tmux path is removed by later v0.6.61 slice')
   assert.equal(resolveAsyncBody.includes('signal'), true, 'resolvePaneBindingAsync must preserve AbortSignal parameter usage')
   assert.equal(windowExistsBody.includes('list-panes'), true, 'windowExists must remain TypeScript window helper path')
   assert.equal(firstPaneBody.includes('list-panes'), true, 'firstPaneInWindow must remain TypeScript window helper path')

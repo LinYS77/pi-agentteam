@@ -255,6 +255,7 @@ else error(-32601, 'unexpected')
     for (const forbidden of ['state/repository', 'taskApplication', 'taskReportWorkflow', 'planRunApplication']) {
       assert.equal(kernelSource.includes(forbidden), false, `kernel adapter must not import/control ${forbidden}`)
     }
-    assert.match(kernelSource, /env:\s*\{\s*PATH:\s*env\.PATH \?\? process\.env\.PATH \?\? '',\s*\.\.\.\(env\.TMUX \? \{ TMUX: env\.TMUX \} : \{\}\),\s*\.\.\.\(env\.TMUX_PANE \? \{ TMUX_PANE: env\.TMUX_PANE \} : \{\}\),\s*\}/, 'helper subprocess env should stay narrow to PATH/TMUX/TMUX_PANE')
+    assert.match(kernelSource, /function helperSpawnEnv\(\): Record<string, string> \{\s*return \{\s*PATH: env\.PATH \?\? process\.env\.PATH \?\? '',\s*\.\.\.\(env\.TMUX \? \{ TMUX: env\.TMUX \} : \{\}\),\s*\.\.\.\(env\.TMUX_PANE \? \{ TMUX_PANE: env\.TMUX_PANE \} : \{\}\),\s*\}\s*\}/, 'helper subprocess env should stay narrow to PATH/TMUX/TMUX_PANE')
+    assert.equal((kernelSource.match(/env: helperSpawnEnv\(\)/g) || []).length >= 2, true, 'sync and async helper subprocesses should share narrow env')
   },
 }

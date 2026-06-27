@@ -91,14 +91,11 @@ export function resolvePaneBinding(paneId: string): PaneBinding | null {
 
 export async function resolvePaneBindingAsync(paneId: string, signal?: AbortSignal): Promise<PaneBinding | null> {
   if (!paneId) return null
-  const paneResult = await runTmuxNoThrowAsync(['display-message', '-p', '-t', paneId, '#{pane_id}'], undefined, signal)
-  const targetResult = await runTmuxNoThrowAsync(['display-message', '-p', '-t', paneId, '#{session_name}:#{window_id}'], undefined, signal)
-  if (!paneResult.ok || !paneResult.stdout || !targetResult.ok || !targetResult.stdout) {
-    return null
-  }
+  const result = await createAgentTeamKernelAdapter().inspectWorkerPaneAsync(paneId, signal)
+  if (!result.ok || !result.target) return null
   return {
-    paneId: paneResult.stdout,
-    target: targetResult.stdout,
+    paneId: result.paneId || paneId,
+    target: result.target,
   }
 }
 

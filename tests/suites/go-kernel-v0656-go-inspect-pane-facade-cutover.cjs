@@ -42,7 +42,7 @@ const REQUIRED_DOC = [
   'Failed adapter results map to `{ paneId, exists:false, error }`.',
   'Kernel-level diagnostics remain compact on the adapter result and do not leak raw stdout, stderr, cwd, stack traces, state archives, mailbox bodies, report bodies, or worker transcripts.',
   '`paneExists()` remains outside the v0.6.56 inspect facade slice and is cut over separately by v0.6.57.',
-  '`resolvePaneBinding()` is cut over separately by v0.6.58, `targetForPaneId()` by v0.6.59, and `captureCurrentPaneBinding()` by v0.6.60.',
+  '`resolvePaneBinding()` is cut over separately by v0.6.58, `targetForPaneId()` by v0.6.59, `captureCurrentPaneBinding()` by v0.6.60, and `resolvePaneBindingAsync()` by v0.6.61.',
   '`listAgentTeamPanes()` remains delegated to `createAgentTeamKernelAdapter().listAgentTeamPanes()`.',
   'No Go source or native helper rebuild is required for this facade-only cutover.',
   '`package.json` remains `0.6.8`.',
@@ -54,7 +54,7 @@ const REQUIRED_ROADMAP = [
   'docs/perf/v0.6.56-go-inspect-pane-facade-cutover.md',
   'tmux/core.ts inspectPane(paneId) delegates to createAgentTeamKernelAdapter().inspectWorkerPane(paneId)',
   'the TypeScript display-message fallback for inspectPane is removed',
-  '`resolvePaneBinding()`、`targetForPaneId()`、and `captureCurrentPaneBinding()` are later cut over by v0.6.58-v0.6.60',
+  '`resolvePaneBinding()`、`targetForPaneId()`、`captureCurrentPaneBinding()`、and `resolvePaneBindingAsync()` are later cut over by v0.6.58-v0.6.61',
   'paneExists is cut over separately by v0.6.57',
   '**v0.6.56 Go inspectPane facade cutover**',
 ]
@@ -143,6 +143,7 @@ function assertFixtureShape(root) {
   assert.equal(goInspectPaneFacadeCutover.listAgentTeamPanesFacadeStillMigrated, true)
   assert.equal(goInspectPaneFacadeCutover.targetForPaneIdMigrated, false)
   assert.equal(goInspectPaneFacadeCutover.captureCurrentPaneBindingMigrated, false)
+  assert.equal(goInspectPaneFacadeCutover.resolvePaneBindingAsyncMigratedByLaterSlice, true)
   assert.equal(goInspectPaneFacadeCutover.windowHelpersMigrated, false)
   assert.equal(goInspectPaneFacadeCutover.createTeammatePaneMigrated, false)
   assert.equal(goInspectPaneFacadeCutover.wakePaneMigrated, false)

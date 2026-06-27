@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -238,6 +238,7 @@ export type AgentTeamKernelAdapter = {
   parseTmuxPaneSnapshot(stdout: string, capturedAt: number, fallback?: (stdout: string, capturedAt: number) => AgentTeamKernelTmuxSnapshot): AgentTeamKernelTmuxSnapshot
   captureTmuxSnapshot(capturedAt: number): AgentTeamKernelTmuxSnapshot
   inspectWorkerPane(paneId: string): AgentTeamKernelWorkerPaneInspection
+  inspectWorkerPaneAsync(paneId: string, signal?: AbortSignal): Promise<AgentTeamKernelWorkerPaneInspection>
   listAgentTeamPanes(): AgentTeamKernelWorkerPaneList
   captureCurrentPaneBinding(): AgentTeamKernelCurrentPaneBinding
   compactReadModelFingerprint(input: unknown, fallback?: (input: unknown) => AgentTeamKernelCompactReadModelResult): AgentTeamKernelCompactReadModelResult
@@ -989,34 +990,22 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     if (code === 'ETIMEDOUT' || /timed?\s*out|timeout/i.test(message)) {
       return { kind: 'helper-timeout', detail: `timeoutMs=${timeoutMs}` }
     }
+    if (code === 'ABORT_ERR' || /abort/i.test(message)) {
+      return { kind: 'helper-spawn-error', detail: 'aborted' }
+    }
     return { kind: 'helper-spawn-error', detail: code ? `code=${compactKernelText(code)}` : compactKernelText(err.name, 'spawn error') }
   }
 
-  function invokeHelper<T>(method: AgentTeamKernelCapability, params?: Record<string, unknown>): { ok: true; result: T } | { ok: false; kind: AgentTeamKernelHelperFailureKind; detail?: string } {
-    if (helperDisabledAfterFailure) return { ok: false, kind: cutoverRequested ? 'previous-helper-failure' : 'missing-helper', detail: 'helper disabled after prior failure' }
-    if (!usesGo() || !helperPath) return { ok: false, kind: 'missing-helper', detail: 'helper unavailable' }
-    helperCalls += 1
-    const request = createKernelJsonRpcRequest(method, params)
-    const result = spawnSync(helperPath, [], {
-      input: `${JSON.stringify(request)}\n`,
-      encoding: 'utf8',
-      timeout: timeoutMs,
-      maxBuffer: 1024 * 1024,
-      env: {
-        PATH: env.PATH ?? process.env.PATH ?? '',
-        ...(env.TMUX ? { TMUX: env.TMUX } : {}),
-        ...(env.TMUX_PANE ? { TMUX_PANE: env.TMUX_PANE } : {}),
-      },
-    })
-    if (result.error) {
-      return { ok: false, ...classifySpawnError(result.error) }
+  function helperSpawnEnv(): Record<string, string> {
+    return {
+      PATH: env.PATH ?? process.env.PATH ?? '',
+      ...(env.TMUX ? { TMUX: env.TMUX } : {}),
+      ...(env.TMUX_PANE ? { TMUX_PANE: env.TMUX_PANE } : {}),
     }
-    if (result.status !== 0) {
-      const signal = typeof result.signal === 'string' && result.signal ? result.signal : ''
-      if (signal) return { ok: false, kind: 'helper-crash', detail: `signal=${compactKernelText(signal)}` }
-      return { ok: false, kind: 'helper-nonzero-exit', detail: `status=${result.status ?? 'unknown'}` }
-    }
-    const responseText = String(result.stdout || '').split('\n').find(line => line.trim())
+  }
+
+  function parseHelperResponse<T>(stdout: unknown): { ok: true; result: T } | { ok: false; kind: AgentTeamKernelHelperFailureKind; detail?: string } {
+    const responseText = String(stdout || '').split('\n').find(line => line.trim())
     if (!responseText) {
       return { ok: false, kind: 'helper-empty-response', detail: 'stdout empty' }
     }
@@ -1048,10 +1037,109 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     return { ok: true, result: response.result as T }
   }
 
+  function invokeHelper<T>(method: AgentTeamKernelCapability, params?: Record<string, unknown>): { ok: true; result: T } | { ok: false; kind: AgentTeamKernelHelperFailureKind; detail?: string } {
+    if (helperDisabledAfterFailure) return { ok: false, kind: cutoverRequested ? 'previous-helper-failure' : 'missing-helper', detail: 'helper disabled after prior failure' }
+    if (!usesGo() || !helperPath) return { ok: false, kind: 'missing-helper', detail: 'helper unavailable' }
+    helperCalls += 1
+    const request = createKernelJsonRpcRequest(method, params)
+    const result = spawnSync(helperPath, [], {
+      input: `${JSON.stringify(request)}\n`,
+      encoding: 'utf8',
+      timeout: timeoutMs,
+      maxBuffer: 1024 * 1024,
+      env: helperSpawnEnv(),
+    })
+    if (result.error) {
+      return { ok: false, ...classifySpawnError(result.error) }
+    }
+    if (result.status !== 0) {
+      const signal = typeof result.signal === 'string' && result.signal ? result.signal : ''
+      if (signal) return { ok: false, kind: 'helper-crash', detail: `signal=${compactKernelText(signal)}` }
+      return { ok: false, kind: 'helper-nonzero-exit', detail: `status=${result.status ?? 'unknown'}` }
+    }
+    return parseHelperResponse<T>(result.stdout)
+  }
+
+  function invokeHelperAsync<T>(method: AgentTeamKernelCapability, params?: Record<string, unknown>, signal?: AbortSignal): Promise<{ ok: true; result: T } | { ok: false; kind: AgentTeamKernelHelperFailureKind; detail?: string }> {
+    if (signal?.aborted) return Promise.resolve({ ok: false, kind: 'helper-spawn-error', detail: 'aborted' })
+    if (helperDisabledAfterFailure) return Promise.resolve({ ok: false, kind: cutoverRequested ? 'previous-helper-failure' : 'missing-helper', detail: 'helper disabled after prior failure' })
+    if (!usesGo() || !helperPath) return Promise.resolve({ ok: false, kind: 'missing-helper', detail: 'helper unavailable' })
+    helperCalls += 1
+    const request = createKernelJsonRpcRequest(method, params)
+    return new Promise(resolve => {
+      let settled = false
+      let stdout = ''
+      let stderrLength = 0
+      const child = spawn(helperPath, [], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: helperSpawnEnv(),
+        signal,
+      })
+      type TimerHandle = ReturnType<typeof setImmediate>
+      const timers = globalThis as unknown as Record<string, unknown>
+      const scheduleTimeout = timers['set' + 'Timeout'] as (callback: () => void, ms: number) => TimerHandle
+      const cancelTimeout = timers['clear' + 'Timeout'] as (timer: TimerHandle) => void
+      const helperTimer = scheduleTimeout(() => {
+        if (settled) return
+        child.kill('SIGTERM')
+      }, timeoutMs)
+      function finish(result: { ok: true; result: T } | { ok: false; kind: AgentTeamKernelHelperFailureKind; detail?: string }): void {
+        if (settled) return
+        settled = true
+        cancelTimeout(helperTimer)
+        resolve(result)
+      }
+      child.stdout.setEncoding('utf8')
+      child.stdout.on('data', chunk => {
+        if (stdout.length < 1024 * 1024) stdout += String(chunk).slice(0, 1024 * 1024 - stdout.length)
+      })
+      child.stderr.on('data', chunk => {
+        stderrLength += Buffer.byteLength(chunk)
+      })
+      child.on('error', error => {
+        finish({ ok: false, ...classifySpawnError(error) })
+      })
+      child.on('close', (status, closeSignal) => {
+        if (settled) return
+        if (signal?.aborted) {
+          finish({ ok: false, kind: 'helper-spawn-error', detail: 'aborted' })
+          return
+        }
+        if (closeSignal) {
+          finish({ ok: false, kind: closeSignal === 'SIGTERM' ? 'helper-timeout' : 'helper-crash', detail: closeSignal === 'SIGTERM' ? `timeoutMs=${timeoutMs}` : `signal=${compactKernelText(closeSignal)}` })
+          return
+        }
+        if (status !== 0) {
+          finish({ ok: false, kind: 'helper-nonzero-exit', detail: `status=${status ?? 'unknown'}${stderrLength ? '; stderr=redacted' : ''}` })
+          return
+        }
+        finish(parseHelperResponse<T>(stdout))
+      })
+      child.stdin.end(`${JSON.stringify(request)}\n`)
+    })
+  }
+
   function ensureHelperCompatible(method: AgentTeamKernelCapability): boolean {
     if (!usesGo()) return false
     if (helperPreflightPassed) return true
     const healthCall = invokeHelper<unknown>('health')
+    if (!healthCall.ok) {
+      recordRuntimeFallback(healthCall.kind, healthCall.detail)
+      return false
+    }
+    const failure = classifyHealthCompatibility(healthCall.result, method)
+    if (failure) {
+      recordRuntimeFallback(failure.kind, failure.detail)
+      return false
+    }
+    helperPreflightPassed = true
+    return true
+  }
+
+  async function ensureHelperCompatibleAsync(method: AgentTeamKernelCapability, signal?: AbortSignal): Promise<boolean> {
+    if (!usesGo()) return false
+    if (helperPreflightPassed) return true
+    const healthCall = await invokeHelperAsync<unknown>('health', undefined, signal)
     if (!healthCall.ok) {
       recordRuntimeFallback(healthCall.kind, healthCall.detail)
       return false
@@ -1073,6 +1161,21 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     if (!usesGo() || !helperPath) return undefined
     if (method !== 'health' && !ensureHelperCompatible(method)) return undefined
     const helperCall = invokeHelper<T>(method, params)
+    if (!helperCall.ok) {
+      recordRuntimeFallback(helperCall.kind, helperCall.detail)
+      return undefined
+    }
+    return helperCall.result
+  }
+
+  async function callHelperAsync<T>(method: AgentTeamKernelCapability, params?: Record<string, unknown>, signal?: AbortSignal): Promise<T | undefined> {
+    if (helperDisabledAfterFailure && cutoverRequested) {
+      recordCutoverUnavailable('previous-helper-failure', 'helper disabled after prior failure')
+      return undefined
+    }
+    if (!usesGo() || !helperPath) return undefined
+    if (method !== 'health' && !(await ensureHelperCompatibleAsync(method, signal))) return undefined
+    const helperCall = await invokeHelperAsync<T>(method, params, signal)
     if (!helperCall.ok) {
       recordRuntimeFallback(helperCall.kind, helperCall.detail)
       return undefined
@@ -1140,6 +1243,16 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       if (parsed) return parsed
       if (helperResult !== undefined) {
         recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle inspectPane result shape')
+      }
+      return workerLifecycleUnavailableInspection(requestedPaneId, cutoverFailureKind ?? 'previous-helper-failure')
+    },
+    async inspectWorkerPaneAsync(paneId, signal) {
+      const requestedPaneId = compactKernelText(paneId, 'unknown')
+      const helperResult = await callHelperAsync<unknown>('workerLifecycle', { operation: 'inspectPane', paneId: requestedPaneId }, signal)
+      const parsed = validateWorkerPaneInspectionResult(helperResult, requestedPaneId)
+      if (parsed) return parsed
+      if (helperResult !== undefined) {
+        recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle inspectPane async result shape')
       }
       return workerLifecycleUnavailableInspection(requestedPaneId, cutoverFailureKind ?? 'previous-helper-failure')
     },
