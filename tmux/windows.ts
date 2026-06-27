@@ -2,6 +2,7 @@ import { createAgentTeamKernelAdapter } from '../core/kernel.js'
 import { runTmuxAsync } from './client.js'
 import {
   ensureTmuxAvailable,
+  captureCurrentPaneBinding,
   firstPaneInWindow,
   isInsideTmux,
   resolvePaneBindingAsync,
@@ -30,8 +31,15 @@ export async function ensureSwarmWindow(
   if (isInsideTmux()) {
     const preferredBinding = preferred?.leaderPaneId ? await resolvePaneBindingAsync(preferred.leaderPaneId, signal) : null
     const preferredTarget = preferredBinding?.target ?? (preferred?.target && await windowExists(preferred.target, signal) ? preferred.target : null)
-    const target = preferredTarget ?? await runTmuxAsync(['display-message', '-p', '#{session_name}:#{window_id}'], undefined, signal)
-    const leaderPaneId = preferredBinding?.paneId ?? await firstPaneInWindow(target, signal) ?? await runTmuxAsync(['display-message', '-p', '#{pane_id}'], undefined, signal)
+    let currentBinding: { paneId: string; target: string } | null | undefined
+    const getCurrentBinding = (): { paneId: string; target: string } | null => {
+      currentBinding ??= captureCurrentPaneBinding()
+      return currentBinding
+    }
+    const target = preferredTarget ?? getCurrentBinding()?.target
+    if (!target) throw new Error('Failed to resolve current tmux pane binding')
+    const leaderPaneId = preferredBinding?.paneId ?? await firstPaneInWindow(target, signal) ?? getCurrentBinding()?.paneId
+    if (!leaderPaneId) throw new Error('Failed to resolve current tmux pane binding')
     await markWindowAsAgentTeam(target, signal)
     await refreshWindowPaneLabels(target, signal)
     return {

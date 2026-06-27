@@ -51,7 +51,7 @@ const REQUIRED_DOC = [
   'Go uses exactly `tmux list-windows -t <sessionName> -F workerLifecycleAgentTeamWindowFormat` with compact format `#{window_id}\\t#{@agentteam-window}` for `workerLifecycle.findAgentTeamWindowTarget`.',
   'A marked agentteam window returns `${sessionName}:${windowId}` as before.',
   'No marked window, missing session, helper failure, invalid response, empty session name, pre-aborted signal, and in-flight abort fail closed to `null` so TypeScript-owned creation remains in place.',
-  '`new-session`, `new-window`, list-panes during pane setup, display-message current target fallbacks, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned; `has-session` is superseded by the v0.6.66 `sessionExists` cutover.',
+  '`new-session`, `new-window`, list-panes during pane setup, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned; `has-session` is superseded by the v0.6.66 `sessionExists` cutover, and inside-tmux current binding `display-message` fallbacks are superseded by the v0.6.67 `captureCurrentPaneBinding()` reuse cutover.',
   'Because Go source changes, the existing embedded helper is rebuilt in the same approved path with refreshed manifest, checksums, provenance, and placeholder attestation.',
   '`package.json` remains `0.6.8`.',
   '`tests/fixtures/kernel/v0665/goAgentTeamWindowDiscoveryCutover.cjs`',
@@ -288,7 +288,9 @@ function assertFacadeSource(root) {
   assertIncludes(ensureBody, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-window remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['list-windows', '-t', SWARM_SESSION, '-F', '#{window_id}\\t#{window_name}']", 'post-creation window name lookup remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['list-panes', '-t', initialTarget, '-F', '#{pane_id}']", 'pane setup list-panes remains TS-owned')
-  assertIncludes(ensureBody, "runTmuxAsync(['display-message', '-p', '-t', leaderPaneId, '#{window_id}']", 'current target fallback remains TS-owned')
+  assertIncludes(ensureBody, "runTmuxAsync(['display-message', '-p', '-t', leaderPaneId, '#{window_id}']", 'detached target-based fallback remains TS-owned')
+  assert.equal(ensureBody.includes("runTmuxAsync(['display-message', '-p', '#{session_name}:#{window_id}']"), false, 'inside-tmux current target fallback is superseded by v0.6.67')
+  assert.equal(ensureBody.includes("runTmuxAsync(['display-message', '-p', '#{pane_id}']"), false, 'inside-tmux current pane fallback is superseded by v0.6.67')
   assertIncludes(ensureBody, 'await markWindowAsAgentTeam', 'marking remains TS-owned')
   assertIncludes(ensureBody, 'await refreshWindowPaneLabels', 'label refresh remains TS-owned')
 
