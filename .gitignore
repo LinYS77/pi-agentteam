@@ -99,6 +99,8 @@ docs/perf/*
 !docs/perf/v0.6.67-go-current-binding-window-fallback-cutover.md
 !docs/perf/v0.6.68-go-detached-leader-binding-cutover.md
 !docs/perf/v0.6.69-go-detached-first-pane-cutover.md
+!docs/perf/v0.6.70-go-window-name-lookup-cutover.md
+!docs/perf/v0.6.71-go-mutating-window-marking-gate.md
 
 # Dependencies
 node_modules/

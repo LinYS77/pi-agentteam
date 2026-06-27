@@ -1,7 +1,6 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { spawnSync } = require('node:child_process')
 const {
   ACTIVE_CAPABILITIES,
   ACTIVE_OPERATIONS,
@@ -42,7 +41,7 @@ const REQUIRED_DOC = [
   'If `firstPaneInWindow(initialTarget, signal)` cannot provide a pane id, `ensureSwarmWindow()` throws compact `Error(\'Failed to resolve agentteam leader pane\')`.',
   '`resolvePaneBindingAsync(leaderPaneId, signal)` remains the Go-backed target source after leader pane selection.',
   'Successful detached behavior still returns `{ session, window, target, leaderPaneId }`.',
-  "Post-creation `list-windows -F '#{window_id}\\t#{window_name}'`, `new-session`, `new-window`, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned.",
+  "Post-creation `list-windows -F '#{window_id}\\t#{window_name}'` is superseded by the v0.6.70 `findWindowTargetByName()` cutover; `new-session`, `new-window`, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned.",
   'No Go source or native artifact rebuild is required for this slice.',
   '`package.json` remains `0.6.8`.',
   '`tests/fixtures/kernel/v0669/goDetachedFirstPaneCutover.cjs`',
@@ -54,7 +53,7 @@ const REQUIRED_ROADMAP = [
   'tmux/windows.ts detached ensureSwarmWindow()` uses `firstPaneInWindow(initialTarget, signal)` as the sole leader pane source',
   'direct TypeScript `list-panes -t initialTarget -F #{pane_id}` parsing is removed',
   'missing first pane throws compact `Failed to resolve agentteam leader pane`',
-  'post-creation list-windows/new-session/new-window/marking/labels remain TypeScript-owned',
+  'post-creation list-windows lookup is superseded by v0.6.70 while new-session/new-window/marking/labels remain TypeScript-owned',
   'no Go source/native artifact rebuild',
   '**v0.6.69 Go detached first pane cutover**',
 ]
@@ -204,7 +203,8 @@ function assertFacadeSource(root) {
   assertIncludes(ensureBody, "createAgentTeamKernelAdapter().sessionExistsAsync(SWARM_SESSION, signal)", 'session existence remains Go-backed')
   assertIncludes(ensureBody, "runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-session remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-window remains TS-owned')
-  assertIncludes(ensureBody, "runTmuxAsync(['list-windows', '-t', SWARM_SESSION, '-F', '#{window_id}\\t#{window_name}']", 'post-creation window lookup remains TS-owned')
+  assertIncludes(ensureBody, 'findWindowTargetByName(SWARM_SESSION, SWARM_WINDOW, signal)', 'post-creation window lookup is superseded by v0.6.70')
+  assert.equal(ensureBody.includes("runTmuxAsync(['list-windows', '-t', SWARM_SESSION, '-F', '#{window_id}\\t#{window_name}']"), false, 'direct post-creation window lookup is superseded by v0.6.70')
   assertIncludes(ensureBody, 'await markWindowAsAgentTeam', 'marking remains TS-owned')
   assertIncludes(ensureBody, 'await refreshWindowPaneLabels', 'label refresh remains TS-owned')
   assertIncludes(ensureBody, 'captureCurrentPaneBinding()', 'v0.6.67 inside-tmux current binding remains Go-backed')
@@ -238,13 +238,8 @@ function assertPackageAndNativeGuards(root) {
   assert.equal(exists(root, `${NATIVE_ROOT}/SHA256SUMS`), true, 'existing native checksums should remain present')
 }
 
-function assertNoNativeDiff(root) {
-  const diff = spawnSync('git', ['diff', '--name-only', '--', GO_SOURCE, NATIVE_ROOT], {
-    cwd: root,
-    encoding: 'utf8',
-  })
-  assert.equal(diff.status, 0, diff.stderr)
-  assert.equal(diff.stdout.trim(), '', 'T021 should not modify Go source or native artifact files')
+function assertNoNativeDiff(_root) {
+  // Historical v0.6.69 made no Go/native changes; later slices such as v0.6.70 may legitimately change them.
 }
 
 function clearDistModules(env, rels) {
@@ -284,6 +279,7 @@ async function withPatchedDetachedDeps(env, patch, callback) {
   kernel.createAgentTeamKernelAdapter = () => ({
     sessionExistsAsync: async () => ({ ok: true, exists: true }),
     findAgentTeamWindowTargetAsync: async () => ({ ok: true, target: 'pi-agentteam:@7' }),
+    findWindowTargetByNameAsync: async (sessionName, windowName) => ({ ok: true, exists: true, sessionName, windowName, target: `${sessionName}:@7`, windowId: '@7' }),
     ...(patch.kernelAdapter || {}),
   })
   labels.markWindowAsAgentTeam = async (target, signal) => { markCalls.push({ target, signal }) }
@@ -294,7 +290,6 @@ async function withPatchedDetachedDeps(env, patch, callback) {
     async execAsync(args) {
       tmuxCalls.push(args)
       if (args[0] === 'new-session' || args[0] === 'new-window') return ''
-      if (args[0] === 'list-windows') return '@9\tagentteam'
       throw new Error(`unexpected direct tmux call: ${args.join(' ')}`)
     },
     async execNoThrowAsync(args) {

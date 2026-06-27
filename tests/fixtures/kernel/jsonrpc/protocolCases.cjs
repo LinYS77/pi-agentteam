@@ -116,6 +116,10 @@ function validMethodCases() {
       request: request('workerLifecycle', { operation: 'findAgentTeamWindowTarget', sessionName: 'missing-fixture-session' }, 'worker-lifecycle-window-target-string-id'),
     },
     {
+      name: 'worker lifecycle findWindowTargetByName',
+      request: request('workerLifecycle', { operation: 'findWindowTargetByName', sessionName: 'missing-fixture-session', windowName: 'agentteam' }, 'worker-lifecycle-window-name-target-string-id'),
+    },
+    {
       name: 'worker lifecycle sessionExists',
       request: request('workerLifecycle', { operation: 'sessionExists', sessionName: 'missing-fixture-session' }, 'worker-lifecycle-session-exists-string-id'),
     },
@@ -228,6 +232,7 @@ function multipleRequestBatch() {
     request('workerLifecycle', { operation: 'listAgentTeamPanes' }, 'batch-worker-lifecycle-list'),
     request('workerLifecycle', { operation: 'captureCurrentPaneBinding' }, 'batch-worker-lifecycle-current-binding'),
     request('workerLifecycle', { operation: 'findAgentTeamWindowTarget', sessionName: 'missing-batch-session' }, 'batch-worker-lifecycle-window-target'),
+    request('workerLifecycle', { operation: 'findWindowTargetByName', sessionName: 'missing-batch-session', windowName: 'agentteam' }, 'batch-worker-lifecycle-window-name-target'),
     request('workerLifecycle', { operation: 'sessionExists', sessionName: 'missing-batch-session' }, 'batch-worker-lifecycle-session-exists'),
     request('tmuxAvailability', undefined, 'batch-tmux-availability'),
     { jsonrpc: '2.0', id: 'batch-unknown', method: 'unknownMethod' },

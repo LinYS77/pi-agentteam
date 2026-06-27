@@ -22,7 +22,7 @@ const PRESERVED_BOUNDARIES = Object.freeze([
   'firstPaneInWindow continues to choose leader pane when target is known',
   'unavailable current binding throws compact Failed to resolve current tmux pane binding only when no preferred or first-pane equivalent can provide needed values',
   'target-based detached leaderPane window_id display-message fallback is superseded by v0.6.68 resolvePaneBindingAsync reuse',
-  'post-creation list-windows window name lookup remains TypeScript-owned',
+  'post-creation list-windows window name lookup is superseded by v0.6.70 findWindowTargetByName reuse',
   'pane setup list-panes is superseded by v0.6.69 firstPaneInWindow reuse',
   'new-session remains TypeScript-owned',
   'new-window remains TypeScript-owned',

@@ -119,7 +119,7 @@ const helperSource = [
   "function error(code, message) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, error: { code, message } }) + '\\\\n') }",
   "if (request.method === 'health') respond(baseHealth)",
   "else if (request.method === 'tmuxSnapshotParse') { const params = request.params || {}; const byPaneId = {}; const panes = []; for (const line of String(params.stdout || '').split('\\\\n')) { if (!line) continue; const fields = line.split('\\\\t'); if (fields.length < 4 || !fields[0]) continue; const item = { paneId: fields[0], target: fields[1], label: fields[2], currentCommand: fields[3] }; if (!byPaneId[item.paneId]) panes.push(item); byPaneId[item.paneId] = item } respond({ ok: true, capturedAt: Number(params.capturedAt || 0), panes, byPaneId }) }",
-  "else if (request.method === 'workerLifecycle') { const params = request.params || {}; if (params.operation === 'listAgentTeamPanes') respond({ ok: true, operation: 'listAgentTeamPanes', capability: 'workerLifecycle', panes: [], byPaneId: {}, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }); else if (params.operation === 'captureCurrentPaneBinding') respond({ ok: true, operation: 'captureCurrentPaneBinding', capability: 'workerLifecycle', paneId: '%fake-current', target: 'fake:@1', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }); else if (params.operation === 'listPanesInWindow') respond({ ok: true, operation: 'listPanesInWindow', capability: 'workerLifecycle', target: params.target || 'fake:@1', exists: true, paneIds: ['%fake-current'], readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }); else if (params.operation === 'findAgentTeamWindowTarget') respond({ ok: true, operation: 'findAgentTeamWindowTarget', capability: 'workerLifecycle', sessionName: params.sessionName || 'fake', exists: true, target: (params.sessionName || 'fake') + ':@1', windowId: '@1', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }); else if (params.operation === 'sessionExists') respond({ ok: true, operation: 'sessionExists', capability: 'workerLifecycle', sessionName: params.sessionName || 'fake', exists: true, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }); else respond({ ok: false, operation: 'inspectPane', capability: 'workerLifecycle', paneId: params.paneId || '', requestedPaneId: params.paneId || '', exists: false, status: 'unknown', resultMarker: 'stale', failureKind: 'pane-not-found', reason: 'Go worker lifecycle inspectPane unavailable (pane-not-found)', error: 'Go worker lifecycle inspectPane unavailable (pane-not-found)', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }) }",
+  "else if (request.method === 'workerLifecycle') { const params = request.params || {}; if (params.operation === 'listAgentTeamPanes') respond({ ok: true, operation: 'listAgentTeamPanes', capability: 'workerLifecycle', panes: [], byPaneId: {}, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }); else if (params.operation === 'captureCurrentPaneBinding') respond({ ok: true, operation: 'captureCurrentPaneBinding', capability: 'workerLifecycle', paneId: '%fake-current', target: 'fake:@1', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }); else if (params.operation === 'listPanesInWindow') respond({ ok: true, operation: 'listPanesInWindow', capability: 'workerLifecycle', target: params.target || 'fake:@1', exists: true, paneIds: ['%fake-current'], readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }); else if (params.operation === 'findAgentTeamWindowTarget') respond({ ok: true, operation: 'findAgentTeamWindowTarget', capability: 'workerLifecycle', sessionName: params.sessionName || 'fake', exists: true, target: (params.sessionName || 'fake') + ':@1', windowId: '@1', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }); else if (params.operation === 'findWindowTargetByName') respond({ ok: true, operation: 'findWindowTargetByName', capability: 'workerLifecycle', sessionName: params.sessionName || 'fake', windowName: params.windowName || 'agentteam', exists: true, target: (params.sessionName || 'fake') + ':@1', windowId: '@1', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }); else if (params.operation === 'sessionExists') respond({ ok: true, operation: 'sessionExists', capability: 'workerLifecycle', sessionName: params.sessionName || 'fake', exists: true, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }); else respond({ ok: false, operation: 'inspectPane', capability: 'workerLifecycle', paneId: params.paneId || '', requestedPaneId: params.paneId || '', exists: false, status: 'unknown', resultMarker: 'stale', failureKind: 'pane-not-found', reason: 'Go worker lifecycle inspectPane unavailable (pane-not-found)', error: 'Go worker lifecycle inspectPane unavailable (pane-not-found)', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }) }",
   "else if (request.method === 'tmuxAvailability') respond({ ok: true, capability: 'tmuxAvailability', available: true, version: 'tmux 3.4', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false })",
   "else error(-32601, 'method not found')",
 ].join('\\n') + '\\n'
@@ -220,6 +220,7 @@ function assertPositiveArtifact(root, outputRoot, result, recordPath) {
   assert.equal(result.summary.smoke.workerLifecycleCaptureCurrentPaneBinding, true)
   assert.equal(result.summary.smoke.workerLifecycleListPanesInWindow, true)
   assert.equal(result.summary.smoke.workerLifecycleFindAgentTeamWindowTarget, true)
+  assert.equal(result.summary.smoke.workerLifecycleFindWindowTargetByName, true)
   assert.equal(result.summary.smoke.workerLifecycleSessionExists, true)
   assert.equal(result.summary.smoke.tmuxAvailability, true)
 
@@ -259,6 +260,7 @@ function assertPositiveArtifact(root, outputRoot, result, recordPath) {
   assert.deepEqual(manifest.smoke.workerLifecycleCaptureCurrentPaneBinding, { ok: true, acceptedFailureKinds: ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout', 'pane-not-found'] })
   assert.deepEqual(manifest.smoke.workerLifecycleListPanesInWindow, { ok: true, acceptedFailureKinds: ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout'] })
   assert.deepEqual(manifest.smoke.workerLifecycleFindAgentTeamWindowTarget, { ok: true, acceptedFailureKinds: ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout', 'pane-not-found'] })
+  assert.deepEqual(manifest.smoke.workerLifecycleFindWindowTargetByName, { ok: true, acceptedFailureKinds: ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout', 'pane-not-found'] })
   assert.deepEqual(manifest.smoke.workerLifecycleSessionExists, { ok: true, acceptedFailureKinds: ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout', 'pane-not-found'] })
   assert.deepEqual(manifest.smoke.tmuxAvailability, { ok: true, acceptedFailureKinds: ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout'] })
   assert.equal(manifest.source.path, 'kernel/go/agentteam-kernel')
@@ -294,6 +296,7 @@ function assertPositiveArtifact(root, outputRoot, result, recordPath) {
   assert.deepEqual(provenance.smoke.workerLifecycleCaptureCurrentPaneBinding.acceptedFailureKinds, ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout', 'pane-not-found'])
   assert.deepEqual(provenance.smoke.workerLifecycleListPanesInWindow.acceptedFailureKinds, ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout'])
   assert.deepEqual(provenance.smoke.workerLifecycleFindAgentTeamWindowTarget.acceptedFailureKinds, ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout', 'pane-not-found'])
+  assert.deepEqual(provenance.smoke.workerLifecycleFindWindowTargetByName.acceptedFailureKinds, ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout', 'pane-not-found'])
   assert.deepEqual(provenance.smoke.workerLifecycleSessionExists.acceptedFailureKinds, ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout', 'pane-not-found'])
   assert.deepEqual(provenance.smoke.tmuxAvailability.acceptedFailureKinds, ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout'])
   const licenseMetadata = safeReadJson(result.licenseMetadataPath)
@@ -365,6 +368,7 @@ function runCliFakePositive(root) {
     assert.equal(summary.smoke.workerLifecycleCaptureCurrentPaneBinding, true)
     assert.equal(summary.smoke.workerLifecycleListPanesInWindow, true)
     assert.equal(summary.smoke.workerLifecycleFindAgentTeamWindowTarget, true)
+    assert.equal(summary.smoke.workerLifecycleFindWindowTargetByName, true)
     assert.equal(summary.smoke.workerLifecycleSessionExists, true)
     assert.equal(summary.smoke.tmuxAvailability, true)
     assertSafeRelPath(summary.artifact, 'cli summary artifact')
@@ -464,6 +468,7 @@ function runOptionalRealGoBuild(root) {
     assert.equal(result.summary.smoke.workerLifecycleCaptureCurrentPaneBinding, true)
     assert.equal(result.summary.smoke.workerLifecycleListPanesInWindow, true)
     assert.equal(result.summary.smoke.workerLifecycleFindAgentTeamWindowTarget, true)
+    assert.equal(result.summary.smoke.workerLifecycleFindWindowTargetByName, true)
     assert.equal(result.summary.smoke.workerLifecycleSessionExists, true)
     assert.equal(result.summary.smoke.tmuxAvailability, true)
     assertSafeRelPath(result.summary.artifact, 'real go artifact')

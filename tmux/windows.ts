@@ -22,6 +22,13 @@ async function findAgentTeamWindowTarget(sessionName: string, signal?: AbortSign
   return result.target
 }
 
+async function findWindowTargetByName(sessionName: string, windowName: string, signal?: AbortSignal): Promise<string | null> {
+  if (!sessionName || !windowName || signal?.aborted) return null
+  const result = await createAgentTeamKernelAdapter().findWindowTargetByNameAsync(sessionName, windowName, signal)
+  if (!result.ok || !result.target) return null
+  return result.target
+}
+
 export async function ensureSwarmWindow(
   preferred?: { target?: string; leaderPaneId?: string },
   signal?: AbortSignal,
@@ -60,14 +67,10 @@ export async function ensureSwarmWindow(
   let initialTarget = await findAgentTeamWindowTarget(SWARM_SESSION, signal)
   if (!initialTarget) {
     await runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW], undefined, signal)
-    const result = (await runTmuxAsync(['list-windows', '-t', SWARM_SESSION, '-F', '#{window_id}\t#{window_name}'], undefined, signal))
-      .split('\n')
-      .map(line => line.split('\t'))
-      .find(parts => parts[1] === SWARM_WINDOW)
-    if (!result?.[0]) {
+    initialTarget = await findWindowTargetByName(SWARM_SESSION, SWARM_WINDOW, signal)
+    if (!initialTarget) {
       throw new Error('Failed to locate agentteam tmux window after creation')
     }
-    initialTarget = `${SWARM_SESSION}:${result[0]}`
     await markWindowAsAgentTeam(initialTarget, signal)
   }
 

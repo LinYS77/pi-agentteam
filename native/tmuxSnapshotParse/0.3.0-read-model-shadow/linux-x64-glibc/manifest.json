@@ -24,8 +24,8 @@
   "artifact": {
     "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/agentteam-tmuxSnapshotParse",
     "filename": "agentteam-tmuxSnapshotParse",
-    "size": 3451693,
-    "sha256": "82f3dab634c3d34acbf6f426d69bc9bdd32d475877a3a98037758b433a6bfb1d",
+    "size": 3466064,
+    "sha256": "06f14a8ac91fc352cd475c04b06690d98b79874e0d6a83b35fdb37fd57de37ef",
     "executable": true,
     "mode": "0755"
   },
@@ -40,7 +40,7 @@
   },
   "source": {
     "path": "kernel/go/agentteam-kernel",
-    "revision": "145389d4c60f18c20bf8e9100ee10dac99261d30"
+    "revision": "5d11d9292fb1a5d15636f76aabca516a44aff6f6"
   },
   "build": {
     "command": [
@@ -57,7 +57,7 @@
     "cwd": "kernel/go/agentteam-kernel",
     "toolchain": "go version go1.25.10 linux/amd64",
     "runIdentity": "local-reviewer-run",
-    "generatedAt": "2026-06-27T07:53:16.706Z"
+    "generatedAt": "2026-06-27T13:09:55.546Z"
   },
   "smoke": {
     "health": true,
@@ -109,6 +109,15 @@
         "pane-not-found"
       ]
     },
+    "workerLifecycleFindWindowTargetByName": {
+      "ok": false,
+      "acceptedFailureKinds": [
+        "tmux-command-failed",
+        "tmux-unavailable",
+        "tmux-command-timeout",
+        "pane-not-found"
+      ]
+    },
     "workerLifecycleSessionExists": {
       "ok": false,
       "acceptedFailureKinds": [
@@ -131,7 +140,7 @@
     "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/attestation.intoto.jsonl",
     "kind": "placeholder-only",
     "signed": false,
-    "sha256": "ff73a45dc4f58695a66071c8d77af268aeff2c7e70df65256bf6fd5c89936da4"
+    "sha256": "235523cab0d1ac7dee1317191060ad6d253afa44ab177f8bc8ebb3817784300b"
   },
   "license": {
     "name": "MIT",

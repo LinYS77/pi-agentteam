@@ -19,7 +19,7 @@ const PRESERVED_BOUNDARIES = Object.freeze([
   'unavailable leader binding throws compact Failed to resolve agentteam leader pane binding',
   'initialTarget discovery and creation behavior remain unchanged',
   'pane setup list-panes is superseded by v0.6.69 firstPaneInWindow reuse',
-  'post-creation list-windows window name lookup remains TypeScript-owned',
+  'post-creation list-windows window name lookup is superseded by v0.6.70 findWindowTargetByName reuse',
   'new-session remains TypeScript-owned',
   'new-window remains TypeScript-owned',
   'markWindowAsAgentTeam and refreshWindowPaneLabels remain TypeScript-owned',

@@ -51,7 +51,7 @@ const REQUIRED_DOC = [
   'Go uses exactly `tmux list-windows -t <sessionName> -F workerLifecycleAgentTeamWindowFormat` with compact format `#{window_id}\\t#{@agentteam-window}` for `workerLifecycle.findAgentTeamWindowTarget`.',
   'A marked agentteam window returns `${sessionName}:${windowId}` as before.',
   'No marked window, missing session, helper failure, invalid response, empty session name, pre-aborted signal, and in-flight abort fail closed to `null` so TypeScript-owned creation remains in place.',
-  '`new-session`, `new-window`, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned; `has-session` is superseded by the v0.6.66 `sessionExists` cutover, inside-tmux current binding `display-message` fallbacks are superseded by the v0.6.67 `captureCurrentPaneBinding()` reuse cutover, detached target-based leader-pane `display-message` is superseded by v0.6.68, and pane setup `list-panes` is superseded by v0.6.69.',
+  '`new-session`, `new-window`, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned; `has-session` is superseded by the v0.6.66 `sessionExists` cutover, inside-tmux current binding `display-message` fallbacks are superseded by the v0.6.67 `captureCurrentPaneBinding()` reuse cutover, detached target-based leader-pane `display-message` is superseded by v0.6.68, pane setup `list-panes` is superseded by v0.6.69, and post-creation `list-windows` is superseded by v0.6.70.',
   'Because Go source changes, the existing embedded helper is rebuilt in the same approved path with refreshed manifest, checksums, provenance, and placeholder attestation.',
   '`package.json` remains `0.6.8`.',
   '`tests/fixtures/kernel/v0665/goAgentTeamWindowDiscoveryCutover.cjs`',
@@ -65,6 +65,7 @@ const REQUIRED_ROADMAP = [
   'missing session/no marked window/helper failure/empty session/pre-aborted/in-flight aborted signals fail closed to null',
   'new-session/new-window/marking/labels remain TypeScript-owned while has-session is superseded by v0.6.66',
   'pane setup list-panes is superseded by v0.6.69',
+  'post-creation list-windows is superseded by v0.6.70',
   '**v0.6.65 Go agentteam window discovery cutover**',
 ]
 const RELEASE_OVERCLAIMS = [
@@ -287,7 +288,8 @@ function assertFacadeSource(root) {
   assert.equal(ensureBody.includes("runTmuxNoThrowAsync(['has-session'"), false, 'has-session direct TS fallback is superseded by v0.6.66')
   assertIncludes(ensureBody, "runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-session remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-window remains TS-owned')
-  assertIncludes(ensureBody, "runTmuxAsync(['list-windows', '-t', SWARM_SESSION, '-F', '#{window_id}\\t#{window_name}']", 'post-creation window name lookup remains TS-owned')
+  assertIncludes(ensureBody, 'findWindowTargetByName(SWARM_SESSION, SWARM_WINDOW, signal)', 'post-creation window name lookup is superseded by v0.6.70')
+  assert.equal(ensureBody.includes("runTmuxAsync(['list-windows', '-t', SWARM_SESSION, '-F', '#{window_id}\\t#{window_name}']"), false, 'direct post-creation window lookup is superseded by v0.6.70')
   assertIncludes(ensureBody, 'firstPaneInWindow(initialTarget, signal)', 'pane setup first-pane lookup is superseded by v0.6.69')
   assert.equal(ensureBody.includes("runTmuxAsync(['list-panes', '-t', initialTarget, '-F', '#{pane_id}']"), false, 'direct pane setup list-panes is superseded by v0.6.69')
   assertIncludes(ensureBody, 'resolvePaneBindingAsync(leaderPaneId, signal)', 'detached leader target binding is superseded by v0.6.68')

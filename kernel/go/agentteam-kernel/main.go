@@ -57,6 +57,7 @@ const workerLifecycleInspectPaneFormat = "#{pane_id}\t#{session_name}:#{window_i
 const workerLifecycleCurrentPaneBindingFormat = "#{pane_id}\t#{session_name}:#{window_id}"
 const workerLifecycleWindowPaneFormat = "#{pane_id}"
 const workerLifecycleAgentTeamWindowFormat = "#{window_id}\t#{@agentteam-window}"
+const workerLifecycleWindowNameFormat = "#{window_id}\t#{window_name}"
 
 type tmuxPaneSnapshotItem struct {
 	PaneID         string `json:"paneId"`
@@ -184,6 +185,26 @@ type workerAgentTeamWindowTargetResult struct {
 	TmuxMutation      bool   `json:"tmuxMutation"`
 }
 
+type workerWindowNameTargetResult struct {
+	OK                bool   `json:"ok"`
+	Operation         string `json:"operation"`
+	Capability        string `json:"capability"`
+	SessionName       string `json:"sessionName"`
+	WindowName        string `json:"windowName"`
+	Exists            bool   `json:"exists"`
+	Target            string `json:"target,omitempty"`
+	WindowID          string `json:"windowId,omitempty"`
+	Status            string `json:"status,omitempty"`
+	Marker            string `json:"resultMarker,omitempty"`
+	Failure           string `json:"failureKind,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Error             string `json:"error,omitempty"`
+	ReadOnly          bool   `json:"readOnly"`
+	StateFilesRead    bool   `json:"stateFilesRead"`
+	StateFilesWritten bool   `json:"stateFilesWritten"`
+	TmuxMutation      bool   `json:"tmuxMutation"`
+}
+
 type workerSessionExistenceResult struct {
 	OK                bool   `json:"ok"`
 	Operation         string `json:"operation"`
@@ -247,6 +268,7 @@ func profile(params map[string]any) profileResult {
 			"workerLifecycleCaptureCurrentPaneBindingConnected": true,
 			"workerLifecycleListPanesInWindowConnected":         true,
 			"workerLifecycleFindAgentTeamWindowTargetConnected": true,
+			"workerLifecycleFindWindowTargetByNameConnected":    true,
 			"workerLifecycleSessionExistsConnected":             true,
 			"tmuxAvailabilityConnected":                         true,
 			"panelConnected":                                    false,
@@ -447,6 +469,25 @@ func compactTmuxSessionName(raw string) string {
 		}
 	}
 	return sessionName
+}
+
+func compactTmuxWindowName(raw string) string {
+	windowName := strings.TrimSpace(raw)
+	if windowName == "" || len(windowName) > 160 {
+		return ""
+	}
+	for _, ch := range windowName {
+		if ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' {
+			continue
+		}
+		switch ch {
+		case '_', '.', '/', ':', '=', '@', '%', '+', '-', ' ':
+			continue
+		default:
+			return ""
+		}
+	}
+	return strings.Join(strings.Fields(windowName), " ")
 }
 
 func compactKernelText(raw string) string {
@@ -838,6 +879,80 @@ func findAgentTeamWindowTarget(params map[string]any) workerAgentTeamWindowTarge
 	return unavailableAgentTeamWindowTarget(sessionName, "pane-not-found")
 }
 
+func unavailableWindowNameTarget(sessionName string, windowName string, kind string) workerWindowNameTargetResult {
+	safeSessionName := compactTmuxSessionName(sessionName)
+	safeWindowName := compactTmuxWindowName(windowName)
+	reason := "Go worker lifecycle findWindowTargetByName unavailable (" + kind + ")"
+	return workerWindowNameTargetResult{
+		OK:                false,
+		Operation:         "findWindowTargetByName",
+		Capability:        "workerLifecycle",
+		SessionName:       safeSessionName,
+		WindowName:        safeWindowName,
+		Exists:            false,
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          true,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      false,
+	}
+}
+
+func findWindowTargetByName(params map[string]any) workerWindowNameTargetResult {
+	sessionName := compactTmuxSessionName(stringParam(params, "sessionName"))
+	windowName := compactTmuxWindowName(stringParam(params, "windowName"))
+	if sessionName == "" {
+		return unavailableWindowNameTarget("", windowName, "invalid-session")
+	}
+	if windowName == "" {
+		return unavailableWindowNameTarget(sessionName, "", "invalid-window-name")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "list-windows", "-t", sessionName, "-F", workerLifecycleWindowNameFormat)
+	cmd.Env = os.Environ()
+	output, err := cmd.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return unavailableWindowNameTarget(sessionName, windowName, "tmux-command-timeout")
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return unavailableWindowNameTarget(sessionName, windowName, "tmux-unavailable")
+		}
+		return unavailableWindowNameTarget(sessionName, windowName, "tmux-command-failed")
+	}
+	for _, line := range splitLines(strings.TrimSpace(string(output))) {
+		fields := splitTabs(line)
+		if len(fields) < 2 {
+			continue
+		}
+		windowID := compactKernelText(fields[0])
+		candidateName := compactTmuxWindowName(fields[1])
+		if windowID == "" || candidateName != windowName {
+			continue
+		}
+		return workerWindowNameTargetResult{
+			OK:                true,
+			Operation:         "findWindowTargetByName",
+			Capability:        "workerLifecycle",
+			SessionName:       sessionName,
+			WindowName:        windowName,
+			Exists:            true,
+			Target:            sessionName + ":" + windowID,
+			WindowID:          windowID,
+			ReadOnly:          true,
+			StateFilesRead:    false,
+			StateFilesWritten: false,
+			TmuxMutation:      false,
+		}
+	}
+	return unavailableWindowNameTarget(sessionName, windowName, "pane-not-found")
+}
+
 func unavailableSessionExistence(sessionName string, kind string) workerSessionExistenceResult {
 	safeSessionName := compactTmuxSessionName(sessionName)
 	reason := "Go worker lifecycle sessionExists unavailable (" + kind + ")"
@@ -904,6 +1019,8 @@ func workerLifecycle(params map[string]any) any {
 		return listPanesInWindow(params)
 	case "findAgentTeamWindowTarget":
 		return findAgentTeamWindowTarget(params)
+	case "findWindowTargetByName":
+		return findWindowTargetByName(params)
 	case "sessionExists":
 		return sessionExists(params)
 	default:

@@ -1,29 +1,31 @@
-const GO_SESSION_EXISTENCE_CUTOVER_SCHEMA_VERSION = 1
-const GO_SESSION_EXISTENCE_CUTOVER_THEME = 'v0.6.66 Go session existence cutover'
+const GO_WINDOW_NAME_LOOKUP_CUTOVER_SCHEMA_VERSION = 1
+const GO_WINDOW_NAME_LOOKUP_CUTOVER_THEME = 'v0.6.70 Go window name lookup cutover'
 const PACKAGE_VERSION = '0.6.8'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const PROTOCOL_VERSION = 1
 const CAPABILITY = 'workerLifecycle'
-const OPERATION = 'sessionExists'
+const OPERATION = 'findWindowTargetByName'
 const FACADE_NAME = 'ensureSwarmWindow'
 const RUNTIME_FILE = 'tmux/windows.ts'
-const KERNEL_ADAPTER_DELEGATION = 'createAgentTeamKernelAdapter().sessionExistsAsync(SWARM_SESSION, signal)'
-const GO_SESSION_EXISTS_COMMAND = 'exec.CommandContext(ctx, "tmux", "has-session", "-t", sessionName)'
-const ASYNC_ABORT_POLICY = 'pre-aborted and in-flight aborted AbortSignal fail closed to false at ensureSwarmWindow session existence with compact helper diagnostics hidden inside the adapter'
-const ACTIVE_OPERATIONS = Object.freeze(['inspectPane', 'listAgentTeamPanes', 'captureCurrentPaneBinding', 'listPanesInWindow', 'findAgentTeamWindowTarget', 'sessionExists'])
+const WINDOW_NAME_DELEGATION = 'findWindowTargetByName(SWARM_SESSION, SWARM_WINDOW, signal)'
+const ADAPTER_DELEGATION = 'createAgentTeamKernelAdapter().findWindowTargetByNameAsync(sessionName, windowName, signal)'
+const GO_WINDOW_NAME_COMMAND = 'exec.CommandContext(ctx, "tmux", "list-windows", "-t", sessionName, "-F", workerLifecycleWindowNameFormat)'
+const WINDOW_NAME_FORMAT = '#{window_id}\t#{window_name}'
+const COMPACT_FAILURE_ERROR = 'Failed to locate agentteam tmux window after creation'
+const ACTIVE_OPERATIONS = Object.freeze(['inspectPane', 'listAgentTeamPanes', 'captureCurrentPaneBinding', 'listPanesInWindow', 'findAgentTeamWindowTarget', 'findWindowTargetByName', 'sessionExists'])
 const ACTIVE_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'])
 const PRESERVED_BOUNDARIES = Object.freeze([
-  'ensureSwarmWindow delegates session existence to a cancellable Go workerLifecycle sessionExists async adapter',
-  'TypeScript runTmuxNoThrowAsync has-session fallback is removed from ensureSwarmWindow',
-  'positive sessionExists confirmation skips new-session as before',
-  'missing session, helper failure, invalid response, empty session name, and abort fail closed to false',
-  'Go sessionExists uses only tmux has-session -t sessionName',
+  'detached ensureSwarmWindow post-new-window lookup uses workerLifecycle findWindowTargetByName',
+  'direct TypeScript list-windows window-name parsing is removed from the post-creation detached branch',
+  'Go findWindowTargetByName uses only list-windows by session with compact window id and window name format',
   'new-session remains TypeScript-owned',
-  'new-window remains TypeScript-owned',
-  'post-creation list-windows window name lookup is superseded by v0.6.70 findWindowTargetByName reuse',
-  'pane setup list-panes is superseded by v0.6.69 firstPaneInWindow reuse',
-  'inside-tmux current binding display-message fallbacks are superseded by v0.6.67 captureCurrentPaneBinding reuse',
+  'new-window remains TypeScript-owned and still runs before post-creation lookup',
   'markWindowAsAgentTeam and refreshWindowPaneLabels remain TypeScript-owned',
+  'firstPaneInWindow remains the v0.6.69 Go-backed leader pane source after initialTarget',
+  'resolvePaneBindingAsync remains the v0.6.68 Go-backed target source after leader pane selection',
+  'agentteam marked-window discovery remains v0.6.65 findAgentTeamWindowTarget',
+  'session existence remains v0.6.66 sessionExists',
+  'inside-tmux current binding fallback remains v0.6.67 captureCurrentPaneBinding reuse',
   'createTeammatePane, pane creation, labels, kill, wake, and sync lifecycle remain TypeScript-owned',
   'state repository remains TypeScript-owned',
   'task/report/PlanRun governance remains TypeScript-owned',
@@ -53,11 +55,11 @@ const RELEASE_PACKAGE_GUARDS = Object.freeze([
   'no go.mod or go.sum',
   'no lifecycle hooks or postinstall downloads',
   'no native artifact rename',
-  'native helper rebuilt only in the existing embedded path because Go source changed',
+  'rebuild only the existing embedded native helper path/name because Go source changed',
 ])
-const goSessionExistenceCutover = Object.freeze({
-  schemaVersion: GO_SESSION_EXISTENCE_CUTOVER_SCHEMA_VERSION,
-  theme: GO_SESSION_EXISTENCE_CUTOVER_THEME,
+const goWindowNameLookupCutover = Object.freeze({
+  schemaVersion: GO_WINDOW_NAME_LOOKUP_CUTOVER_SCHEMA_VERSION,
+  theme: GO_WINDOW_NAME_LOOKUP_CUTOVER_THEME,
   packageVersion: PACKAGE_VERSION,
   helperVersion: HELPER_VERSION,
   protocolVersion: PROTOCOL_VERSION,
@@ -67,23 +69,24 @@ const goSessionExistenceCutover = Object.freeze({
   activeCapabilities: ACTIVE_CAPABILITIES,
   facadeName: FACADE_NAME,
   runtimeFile: RUNTIME_FILE,
-  kernelAdapterDelegation: KERNEL_ADAPTER_DELEGATION,
-  goSessionExistsCommand: GO_SESSION_EXISTS_COMMAND,
-  asyncAbortPolicy: ASYNC_ABORT_POLICY,
+  windowNameDelegation: WINDOW_NAME_DELEGATION,
+  adapterDelegation: ADAPTER_DELEGATION,
+  goWindowNameCommand: GO_WINDOW_NAME_COMMAND,
+  windowNameFormat: WINDOW_NAME_FORMAT,
+  compactFailureError: COMPACT_FAILURE_ERROR,
   facadeCutoverMigrated: true,
-  typescriptHasSessionFallbackRemoved: true,
-  ensureSwarmWindowBehaviorPreserved: true,
-  failClosedOnHelperFailure: true,
-  failClosedOnMissingSession: true,
-  failClosedOnEmptySessionName: true,
-  failClosedOnAbort: true,
+  typescriptPostCreationListWindowsFallbackRemoved: true,
+  findWindowTargetByNameAdded: true,
+  failClosedThrowOnMissingWindow: true,
+  newWindowStillTypeScriptOwned: true,
+  newWindowRunsBeforeLookup: true,
+  firstPaneInWindowReused: true,
+  resolvePaneBindingAsyncReused: true,
+  returnedShapePreservedOnSuccess: true,
   rawOutputLeakageAllowed: false,
-  targetDisplayMessageAdded: false,
-  hasSessionMigrated: true,
+  postCreationWindowLookupMigrated: true,
   newSessionMigrated: false,
   newWindowMigrated: false,
-  postCreationWindowLookupMigrated: false,
-  paneSetupMigrated: false,
   markWindowAsAgentTeamMigrated: false,
   refreshWindowPaneLabelsMigrated: false,
   createTeammatePaneMigrated: false,
@@ -110,20 +113,22 @@ const goSessionExistenceCutover = Object.freeze({
 module.exports = {
   ACTIVE_CAPABILITIES,
   ACTIVE_OPERATIONS,
-  ASYNC_ABORT_POLICY,
+  ADAPTER_DELEGATION,
   CAPABILITY,
+  COMPACT_FAILURE_ERROR,
   FACADE_NAME,
   FORBIDDEN_GO_TMUX_COMMANDS,
-  GO_SESSION_EXISTENCE_CUTOVER_SCHEMA_VERSION,
-  GO_SESSION_EXISTENCE_CUTOVER_THEME,
-  GO_SESSION_EXISTS_COMMAND,
+  GO_WINDOW_NAME_COMMAND,
+  GO_WINDOW_NAME_LOOKUP_CUTOVER_SCHEMA_VERSION,
+  GO_WINDOW_NAME_LOOKUP_CUTOVER_THEME,
   HELPER_VERSION,
-  KERNEL_ADAPTER_DELEGATION,
   OPERATION,
   PACKAGE_VERSION,
   PRESERVED_BOUNDARIES,
   PROTOCOL_VERSION,
   RELEASE_PACKAGE_GUARDS,
   RUNTIME_FILE,
-  goSessionExistenceCutover,
+  WINDOW_NAME_DELEGATION,
+  WINDOW_NAME_FORMAT,
+  goWindowNameLookupCutover,
 }
