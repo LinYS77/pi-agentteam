@@ -1,32 +1,29 @@
-const GO_CURRENT_BINDING_WINDOW_FALLBACK_CUTOVER_SCHEMA_VERSION = 1
-const GO_CURRENT_BINDING_WINDOW_FALLBACK_CUTOVER_THEME = 'v0.6.67 Go current binding window fallback cutover'
+const GO_DETACHED_LEADER_BINDING_CUTOVER_SCHEMA_VERSION = 1
+const GO_DETACHED_LEADER_BINDING_CUTOVER_THEME = 'v0.6.68 Go detached leader binding cutover'
 const PACKAGE_VERSION = '0.6.8'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const PROTOCOL_VERSION = 1
 const CAPABILITY = 'workerLifecycle'
-const OPERATION = 'captureCurrentPaneBinding'
+const OPERATION = 'inspectPane'
 const FACADE_NAME = 'ensureSwarmWindow'
 const RUNTIME_FILE = 'tmux/windows.ts'
-const CURRENT_BINDING_DELEGATION = 'captureCurrentPaneBinding()'
-const GO_CURRENT_PANE_FORMAT = '#{pane_id}\t#{session_name}:#{window_id}'
-const GO_CURRENT_PANE_COMMAND = 'exec.CommandContext(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat)'
-const COMPACT_FAILURE_ERROR = 'Failed to resolve current tmux pane binding'
+const LEADER_BINDING_DELEGATION = 'resolvePaneBindingAsync(leaderPaneId, signal)'
+const GO_INSPECT_PANE_COMMAND = 'exec.CommandContext(ctx, "tmux", "list-panes", "-a", "-F", workerLifecycleInspectPaneFormat)'
+const COMPACT_FAILURE_ERROR = 'Failed to resolve agentteam leader pane binding'
 const ACTIVE_OPERATIONS = Object.freeze(['inspectPane', 'listAgentTeamPanes', 'captureCurrentPaneBinding', 'listPanesInWindow', 'findAgentTeamWindowTarget', 'sessionExists'])
 const ACTIVE_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'])
 const PRESERVED_BOUNDARIES = Object.freeze([
-  'ensureSwarmWindow inside-tmux branch reuses captureCurrentPaneBinding for current target and current pane fallbacks',
-  'direct TypeScript display-message current target fallback is removed from ensureSwarmWindow inside-tmux branch',
-  'direct TypeScript display-message current pane id fallback is removed from ensureSwarmWindow inside-tmux branch',
-  'preferred leader pane binding continues to win before current binding fallback',
-  'preferred target continues to win when windowExists confirms it',
-  'firstPaneInWindow continues to choose leader pane when target is known',
-  'unavailable current binding throws compact Failed to resolve current tmux pane binding only when no preferred or first-pane equivalent can provide needed values',
-  'target-based detached leaderPane window_id display-message fallback is superseded by v0.6.68 resolvePaneBindingAsync reuse',
-  'post-creation list-windows window name lookup remains TypeScript-owned',
+  'detached ensureSwarmWindow leader target resolution reuses resolvePaneBindingAsync leaderPaneId signal',
+  'direct TypeScript target-based display-message leaderPane window_id fallback is removed from detached ensureSwarmWindow branch',
+  'resolvePaneBindingAsync remains Go-backed through workerLifecycle inspectPane and compact target',
+  'unavailable leader binding throws compact Failed to resolve agentteam leader pane binding',
+  'initialTarget discovery and creation behavior remain unchanged',
   'pane setup list-panes remains TypeScript-owned',
+  'post-creation list-windows window name lookup remains TypeScript-owned',
   'new-session remains TypeScript-owned',
   'new-window remains TypeScript-owned',
   'markWindowAsAgentTeam and refreshWindowPaneLabels remain TypeScript-owned',
+  'inside-tmux current binding fallback remains v0.6.67 captureCurrentPaneBinding reuse',
   'createTeammatePane, pane creation, labels, kill, wake, and sync lifecycle remain TypeScript-owned',
   'state repository remains TypeScript-owned',
   'task/report/PlanRun governance remains TypeScript-owned',
@@ -58,9 +55,9 @@ const RELEASE_PACKAGE_GUARDS = Object.freeze([
   'no native artifact rename',
   'no Go source or native artifact rebuild in this slice',
 ])
-const goCurrentBindingWindowFallbackCutover = Object.freeze({
-  schemaVersion: GO_CURRENT_BINDING_WINDOW_FALLBACK_CUTOVER_SCHEMA_VERSION,
-  theme: GO_CURRENT_BINDING_WINDOW_FALLBACK_CUTOVER_THEME,
+const goDetachedLeaderBindingCutover = Object.freeze({
+  schemaVersion: GO_DETACHED_LEADER_BINDING_CUTOVER_SCHEMA_VERSION,
+  theme: GO_DETACHED_LEADER_BINDING_CUTOVER_THEME,
   packageVersion: PACKAGE_VERSION,
   helperVersion: HELPER_VERSION,
   protocolVersion: PROTOCOL_VERSION,
@@ -70,22 +67,18 @@ const goCurrentBindingWindowFallbackCutover = Object.freeze({
   activeCapabilities: ACTIVE_CAPABILITIES,
   facadeName: FACADE_NAME,
   runtimeFile: RUNTIME_FILE,
-  currentBindingDelegation: CURRENT_BINDING_DELEGATION,
-  goCurrentPaneFormat: GO_CURRENT_PANE_FORMAT,
-  goCurrentPaneCommand: GO_CURRENT_PANE_COMMAND,
+  leaderBindingDelegation: LEADER_BINDING_DELEGATION,
+  goInspectPaneCommand: GO_INSPECT_PANE_COMMAND,
   compactFailureError: COMPACT_FAILURE_ERROR,
   facadeCutoverMigrated: true,
-  typescriptCurrentTargetDisplayMessageFallbackRemoved: true,
-  typescriptCurrentPaneDisplayMessageFallbackRemoved: true,
-  captureCurrentPaneBindingReused: true,
-  preferredBindingPreserved: true,
-  preferredTargetPreserved: true,
-  firstPaneInWindowPreserved: true,
-  failClosedThrowOnMissingCurrentBinding: true,
+  typescriptTargetBasedDisplayMessageFallbackRemoved: true,
+  resolvePaneBindingAsyncReused: true,
+  failClosedThrowOnMissingLeaderBinding: true,
+  returnedShapePreservedOnSuccess: true,
   rawOutputLeakageAllowed: false,
-  targetBasedLeaderPaneWindowIdFallbackMigrated: false,
-  postCreationWindowLookupMigrated: false,
+  insideTmuxCurrentBindingMigratedByPreviousSlice: true,
   paneSetupMigrated: false,
+  postCreationWindowLookupMigrated: false,
   newSessionMigrated: false,
   newWindowMigrated: false,
   markWindowAsAgentTeamMigrated: false,
@@ -116,19 +109,18 @@ module.exports = {
   ACTIVE_OPERATIONS,
   CAPABILITY,
   COMPACT_FAILURE_ERROR,
-  CURRENT_BINDING_DELEGATION,
   FACADE_NAME,
   FORBIDDEN_GO_TMUX_COMMANDS,
-  GO_CURRENT_BINDING_WINDOW_FALLBACK_CUTOVER_SCHEMA_VERSION,
-  GO_CURRENT_BINDING_WINDOW_FALLBACK_CUTOVER_THEME,
-  GO_CURRENT_PANE_COMMAND,
-  GO_CURRENT_PANE_FORMAT,
+  GO_DETACHED_LEADER_BINDING_CUTOVER_SCHEMA_VERSION,
+  GO_DETACHED_LEADER_BINDING_CUTOVER_THEME,
+  GO_INSPECT_PANE_COMMAND,
   HELPER_VERSION,
+  LEADER_BINDING_DELEGATION,
   OPERATION,
   PACKAGE_VERSION,
   PRESERVED_BOUNDARIES,
   PROTOCOL_VERSION,
   RELEASE_PACKAGE_GUARDS,
   RUNTIME_FILE,
-  goCurrentBindingWindowFallbackCutover,
+  goDetachedLeaderBindingCutover,
 }

@@ -45,7 +45,7 @@ const REQUIRED_DOC = [
   'Preferred leader pane binding still wins first; preferred target still wins when `windowExists(preferred.target, signal)` confirms it; `firstPaneInWindow(target, signal)` still chooses the leader pane when a target is known.',
   'If no preferred binding, preferred target, or first-pane lookup can provide the needed values and `captureCurrentPaneBinding()` returns `null`, `ensureSwarmWindow()` throws compact `Error(\'Failed to resolve current tmux pane binding\')`.',
   '`tmux/core.ts` `captureCurrentPaneBinding()` remains the v0.6.60 Go-backed facade over `workerLifecycle.captureCurrentPaneBinding`.',
-  "The detached setup fallback `runTmuxAsync(['display-message', '-p', '-t', leaderPaneId, '#{window_id}'], undefined, signal)` remains TypeScript-owned and out of scope.",
+  "The detached setup fallback `runTmuxAsync(['display-message', '-p', '-t', leaderPaneId, '#{window_id}'], undefined, signal)` is superseded by the v0.6.68 `resolvePaneBindingAsync(leaderPaneId, signal)` cutover.",
   "`new-session`, `new-window`, post-creation `list-windows -F '#{window_id}\\t#{window_name}'`, pane setup `list-panes`, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned.",
   'No Go source or native artifact rebuild is required for this slice.',
   '`package.json` remains `0.6.8`.',
@@ -59,7 +59,7 @@ const REQUIRED_ROADMAP = [
   'direct TypeScript current target `display-message -p #{session_name}:#{window_id}` fallback is removed',
   'direct TypeScript current pane `display-message -p #{pane_id}` fallback is removed',
   'missing current binding throws compact `Failed to resolve current tmux pane binding` only when no preferred/first-pane equivalent can provide values',
-  'target-based detached `display-message -p -t leaderPaneId #{window_id}` remains TypeScript-owned',
+  'target-based detached `display-message -p -t leaderPaneId #{window_id}` fallback is superseded by v0.6.68',
   'no Go source/native artifact rebuild',
   '**v0.6.67 Go current binding window fallback cutover**',
 ]
@@ -216,7 +216,8 @@ function assertFacadeSource(root) {
   assert.equal(/runTmuxAsync\(\['display-message', '-p', '#\{session_name\}:#\{window_id\}'\]/.test(ensureBody), false, 'inside-tmux current target fallback must not remain under formatting variation')
   assert.equal(/runTmuxAsync\(\['display-message', '-p', '#\{pane_id\}'\]/.test(ensureBody), false, 'inside-tmux current pane fallback must not remain under formatting variation')
   assert.equal(ensureBody.includes('stdout'), false, 'inside-tmux current binding path must not parse raw stdout')
-  assertIncludes(ensureBody, TARGET_BASED_DETACHED_CALL, 'detached target-based fallback remains TS-owned')
+  assertIncludes(ensureBody, 'resolvePaneBindingAsync(leaderPaneId, signal)', 'detached leader binding is superseded by v0.6.68')
+  assert.equal(ensureBody.includes(TARGET_BASED_DETACHED_CALL), false, 'detached target-based display-message fallback is superseded by v0.6.68')
   assertIncludes(ensureBody, "runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-session remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-window remains TS-owned')
   assertIncludes(ensureBody, "runTmuxAsync(['list-windows', '-t', SWARM_SESSION, '-F', '#{window_id}\\t#{window_name}']", 'post-creation window lookup remains TS-owned')

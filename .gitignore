@@ -97,6 +97,7 @@ docs/perf/*
 !docs/perf/v0.6.65-go-agentteam-window-discovery-cutover.md
 !docs/perf/v0.6.66-go-session-existence-cutover.md
 !docs/perf/v0.6.67-go-current-binding-window-fallback-cutover.md
+!docs/perf/v0.6.68-go-detached-leader-binding-cutover.md
 
 # Dependencies
 node_modules/
