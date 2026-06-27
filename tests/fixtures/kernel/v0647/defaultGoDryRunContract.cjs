@@ -8,7 +8,7 @@ const GO_AUTHORITY = 'tmuxSnapshotParse-parser-only'
 const PACKAGE_VERSION = '0.6.8'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const PROTOCOL_VERSION = 1
-const REQUIRED_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
+const REQUIRED_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'])
 
 const DRY_RUN_RUNTIME_PATH = Object.freeze({
   cli: 'scripts/verify-v0647-default-go-dry-run.cjs',

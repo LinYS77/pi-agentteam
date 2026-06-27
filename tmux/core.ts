@@ -1,5 +1,4 @@
 import { createAgentTeamKernelAdapter } from '../core/kernel.js'
-import { runTmuxNoThrowAsync } from './client.js'
 export {
   captureTmuxSnapshot,
   findPaneInSnapshot,
@@ -50,9 +49,10 @@ export function isInsideTmux(): boolean {
 }
 
 export async function ensureTmuxAvailable(signal?: AbortSignal): Promise<void> {
-  const result = await runTmuxNoThrowAsync(['-V'], undefined, signal)
+  const result = await createAgentTeamKernelAdapter().checkTmuxAvailableAsync(signal)
   if (!result.ok) {
-    throw new Error(`tmux is required for agentteam panes${result.stderr ? `: ${result.stderr}` : ''}`)
+    const suffix = result.failureKind ? ` (${result.failureKind})` : ''
+    throw new Error(`tmux is required for agentteam panes${suffix}`)
   }
 }
 

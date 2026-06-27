@@ -302,7 +302,7 @@ function assertIncompatibleHelperFailClosed(env) {
   const testCase = cases().find(item => item.name === 'single row with trailing newline')
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-v0648-bad-helper-'))
   const helper = path.join(tmp, 'agentteam-tmuxSnapshotParse')
-  fs.writeFileSync(helper, `#!/usr/bin/env node\nlet input = ''\nprocess.stdin.on('data', chunk => { input += chunk })\nprocess.stdin.on('end', () => {\n  const request = JSON.parse(input || '{}')\n  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { ok: true, implementation: 'go', protocolVersion: 999, adapterVersion: 'bad', helperVersion: 'bad', capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'], businessPathsConnected: false } }) + '\\n')\n})\n`, 'utf8')
+  fs.writeFileSync(helper, `#!/usr/bin/env node\nlet input = ''\nprocess.stdin.on('data', chunk => { input += chunk })\nprocess.stdin.on('end', () => {\n  const request = JSON.parse(input || '{}')\n  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { ok: true, implementation: 'go', protocolVersion: 999, adapterVersion: 'bad', helperVersion: 'bad', capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'], businessPathsConnected: false } }) + '\\n')\n})\n`, 'utf8')
   fs.chmodSync(helper, 0o755)
   try {
     const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'default', env: {}, helperPath: helper })

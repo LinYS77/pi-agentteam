@@ -6,7 +6,7 @@ const path = require('node:path')
 const BAD_STDOUT_SENTINEL = 'COMPAT_MATRIX_BAD_STDOUT_SHOULD_NOT_LEAK'
 const BAD_STDERR_SENTINEL = 'COMPAT_MATRIX_BAD_STDERR_SHOULD_NOT_LEAK'
 const FULL_PATH_SENTINEL = 'compat-secret-helper-path'
-const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle']
+const REQUIRED_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability']
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 
 function writeHelper(name, source) {

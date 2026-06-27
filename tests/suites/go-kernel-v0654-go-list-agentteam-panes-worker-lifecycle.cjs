@@ -227,7 +227,7 @@ function assertSourceAndMetadata(root) {
   }
   for (const rel of ROOT_FORBIDDEN_FILES) assert.equal(exists(root, rel), false, `${rel} must not exist`)
 
-  assertIncludes(contract, "AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle']", CONTRACT)
+  assertIncludes(contract, "AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability']", CONTRACT)
   assertIncludes(contract, "AGENTTEAM_KERNEL_FUTURE_WORKER_LIFECYCLE_CONTRACT_STATUS = 'runtime-read-only-inspect-and-list-agentteam-panes'", CONTRACT)
   assertIncludes(contract, "activeOperations: ['inspectPane', 'listAgentTeamPanes']", CONTRACT)
   assertIncludes(kernel, 'listAgentTeamPanes(): AgentTeamKernelWorkerPaneList', KERNEL)

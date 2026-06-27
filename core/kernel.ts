@@ -132,6 +132,7 @@ export type AgentTeamKernelProfile = AgentTeamKernelHealth & {
     workerLifecycleListAgentTeamPanesConnected?: boolean
     workerLifecycleCaptureCurrentPaneBindingConnected?: boolean
     workerLifecycleListPanesInWindowConnected?: boolean
+    tmuxAvailabilityConnected?: boolean
     panelConnected: false
     taskReportPlanRunConnected: false
   }
@@ -251,6 +252,22 @@ export type AgentTeamKernelWindowPaneList = {
   tmuxMutation: false
 }
 
+export type AgentTeamKernelTmuxAvailability = {
+  ok: boolean
+  capability: 'tmuxAvailability'
+  available: boolean
+  version?: string
+  status?: 'unknown'
+  resultMarker?: 'stale'
+  failureKind?: AgentTeamKernelCutoverFailureKind
+  reason?: string
+  error?: string
+  readOnly: true
+  stateFilesRead: false
+  stateFilesWritten: false
+  tmuxMutation: false
+}
+
 export type AgentTeamKernelAdapter = {
   metadata(): AgentTeamKernelMetadata
   health(): AgentTeamKernelHealth
@@ -262,6 +279,7 @@ export type AgentTeamKernelAdapter = {
   listAgentTeamPanes(): AgentTeamKernelWorkerPaneList
   captureCurrentPaneBinding(): AgentTeamKernelCurrentPaneBinding
   listPanesInWindowAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowPaneList>
+  checkTmuxAvailableAsync(signal?: AbortSignal): Promise<AgentTeamKernelTmuxAvailability>
   compactReadModelFingerprint(input: unknown, fallback?: (input: unknown) => AgentTeamKernelCompactReadModelResult): AgentTeamKernelCompactReadModelResult
 }
 
@@ -453,6 +471,7 @@ function fallbackProfile(metadata: AgentTeamKernelMetadata, params: Record<strin
       workerLifecycleListAgentTeamPanesConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleCaptureCurrentPaneBindingConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleListPanesInWindowConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
+      tmuxAvailabilityConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('tmuxAvailability'),
       panelConnected: false,
       taskReportPlanRunConnected: false,
     },
@@ -618,6 +637,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     if (profile.workerLifecycleInspectPaneConnected !== true || profile.workerLifecycleListAgentTeamPanesConnected !== true) return undefined
     if (profile.workerLifecycleCaptureCurrentPaneBindingConnected !== undefined && profile.workerLifecycleCaptureCurrentPaneBindingConnected !== true) return undefined
     if (profile.workerLifecycleListPanesInWindowConnected !== undefined && profile.workerLifecycleListPanesInWindowConnected !== true) return undefined
+    if (profile.tmuxAvailabilityConnected !== undefined && profile.tmuxAvailabilityConnected !== true) return undefined
     if (profile.panelConnected !== false || profile.taskReportPlanRunConnected !== false) return undefined
     return {
       ...health,
@@ -633,6 +653,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         workerLifecycleListAgentTeamPanesConnected: true,
         workerLifecycleCaptureCurrentPaneBindingConnected: profile.workerLifecycleCaptureCurrentPaneBindingConnected === true,
         workerLifecycleListPanesInWindowConnected: profile.workerLifecycleListPanesInWindowConnected === true,
+        tmuxAvailabilityConnected: profile.tmuxAvailabilityConnected === true,
         panelConnected: false,
         taskReportPlanRunConnected: false,
       },
@@ -834,6 +855,25 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       target: safeTarget,
       exists: false,
       paneIds: [],
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind: kind,
+      reason: safeReason,
+      error: safeReason,
+      readOnly: true,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: false,
+    }
+  }
+
+  function unavailableTmuxAvailability(kind: AgentTeamKernelCutoverFailureKind, detail?: unknown): AgentTeamKernelTmuxAvailability {
+    const reason = cutoverMessage(kind, detail)
+    const safeReason = compactKernelText(reason, cutoverMessage('previous-helper-failure'))
+    return {
+      ok: false,
+      capability: 'tmuxAvailability',
+      available: false,
       status: 'unknown',
       resultMarker: 'stale',
       failureKind: kind,
@@ -1070,6 +1110,46 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       fullTextIncluded: false,
       stateFilesRead: false,
       stateFilesWritten: false,
+    }
+  }
+
+  function validateTmuxAvailabilityResult(value: unknown): AgentTeamKernelTmuxAvailability | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const result = value as Partial<AgentTeamKernelTmuxAvailability>
+    if (result.capability !== 'tmuxAvailability') return undefined
+    if (result.readOnly !== true || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== false) return undefined
+    if (result.ok === true) {
+      if (result.available !== true) return undefined
+      const version = compactKernelText(result.version)
+      return {
+        ok: true,
+        capability: 'tmuxAvailability',
+        available: true,
+        ...(version ? { version } : {}),
+        readOnly: true,
+        stateFilesRead: false,
+        stateFilesWritten: false,
+        tmuxMutation: false,
+      }
+    }
+    if (result.ok !== false || result.available !== false) return undefined
+    const failureKind = typeof result.failureKind === 'string' && AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS.includes(result.failureKind as AgentTeamKernelCutoverFailureKind)
+      ? result.failureKind as AgentTeamKernelCutoverFailureKind
+      : 'previous-helper-failure'
+    const reason = compactKernelText(result.reason || result.error || cutoverMessage(failureKind), cutoverMessage('previous-helper-failure'))
+    return {
+      ok: false,
+      capability: 'tmuxAvailability',
+      available: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind,
+      reason,
+      error: reason,
+      readOnly: true,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: false,
     }
   }
 
@@ -1391,6 +1471,15 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle listPanesInWindow async result shape')
       }
       return workerLifecycleUnavailableWindowPaneList(requestedTarget, cutoverFailureKind ?? 'previous-helper-failure')
+    },
+    async checkTmuxAvailableAsync(signal) {
+      const helperResult = await callHelperAsync<unknown>('tmuxAvailability', undefined, signal)
+      const parsed = validateTmuxAvailabilityResult(helperResult)
+      if (parsed) return parsed
+      if (helperResult !== undefined) {
+        recordRuntimeFallback('helper-incompatible-response', 'tmuxAvailability result shape')
+      }
+      return unavailableTmuxAvailability(cutoverFailureKind ?? 'previous-helper-failure')
     },
     compactReadModelFingerprint(input, fallback = fallbackCompactReadModelFingerprint) {
       const compactInput = sanitizeCompactReadModelInput(input)

@@ -350,6 +350,26 @@ function runWorkerLifecycleListPanesInWindowSmoke(helperPath, env, timeoutMs) {
   return { ok: result.ok === true, acceptedFailureKinds }
 }
 
+function runTmuxAvailabilitySmoke(helperPath, env, timeoutMs) {
+  const result = runJsonRpc(helperPath, {
+    jsonrpc: '2.0',
+    id: 'tmuxAvailability',
+    method: 'tmuxAvailability',
+  }, env, timeoutMs, 'tmuxAvailability')
+  if (result.capability !== 'tmuxAvailability' || result.readOnly !== true || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== false) {
+    fail('go-health-failed', 'reject helper artifact with invalid tmuxAvailability smoke result', 'tmuxAvailability')
+  }
+  const acceptedFailureKinds = ['tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout']
+  if (result.ok === true) {
+    if (result.available !== true || typeof result.version !== 'string' || !result.version) {
+      fail('go-health-failed', 'reject helper artifact with invalid tmuxAvailability version result', 'tmuxAvailability')
+    }
+  } else if (result.available !== false || !acceptedFailureKinds.includes(result.failureKind)) {
+    fail('go-health-failed', 'reject helper artifact with invalid tmuxAvailability failure', 'tmuxAvailability')
+  }
+  return { ok: result.ok === true, acceptedFailureKinds }
+}
+
 function assertHealthMatchesSource(health, sourceMetadata) {
   if (health.implementation !== 'go') fail('go-health-failed', 'reject non-Go helper health response', 'implementation')
   if (health.helperVersion !== sourceMetadata.helperVersion) fail('metadata-invalid', 'reject helper version skew before writing metadata', 'helper-version')
@@ -357,6 +377,7 @@ function assertHealthMatchesSource(health, sourceMetadata) {
   const capabilities = Array.isArray(health.capabilities) ? health.capabilities : []
   if (!capabilities.includes(MODULE)) fail('metadata-invalid', 'reject helper without tmuxSnapshotParse capability', 'capability')
   if (!capabilities.includes('workerLifecycle')) fail('metadata-invalid', 'reject helper without workerLifecycle capability', 'capability')
+  if (!capabilities.includes('tmuxAvailability')) fail('metadata-invalid', 'reject helper without tmuxAvailability capability', 'capability')
 }
 
 function assertNoMetadataLeaks(values, forbiddenRoots) {
@@ -472,6 +493,7 @@ function writeMetadata(input) {
     workerLifecycleListSmoke,
     workerLifecycleCurrentPaneBindingSmoke,
     workerLifecycleWindowPaneListSmoke,
+    tmuxAvailabilitySmoke,
   } = input
   const artifactDir = path.dirname(helperPath)
   const helperStat = fs.statSync(helperPath)
@@ -515,6 +537,7 @@ function writeMetadata(input) {
       workerLifecycleListAgentTeamPanes: workerLifecycleListSmoke,
       workerLifecycleCaptureCurrentPaneBinding: workerLifecycleCurrentPaneBindingSmoke,
       workerLifecycleListPanesInWindow: workerLifecycleWindowPaneListSmoke,
+      tmuxAvailability: tmuxAvailabilitySmoke,
     },
     outputRootKind,
   }
@@ -600,6 +623,7 @@ function writeMetadata(input) {
       workerLifecycleListAgentTeamPanes: workerLifecycleListSmoke,
       workerLifecycleCaptureCurrentPaneBinding: workerLifecycleCurrentPaneBindingSmoke,
       workerLifecycleListPanesInWindow: workerLifecycleWindowPaneListSmoke,
+      tmuxAvailability: tmuxAvailabilitySmoke,
     },
     attestation: {
       path: attestationRel,
@@ -657,6 +681,7 @@ function writeMetadata(input) {
         workerLifecycleListAgentTeamPanes: true,
         workerLifecycleCaptureCurrentPaneBinding: true,
         workerLifecycleListPanesInWindow: true,
+        tmuxAvailability: true,
       },
       artifact: helperRel,
       files: {
@@ -703,6 +728,7 @@ function buildGoHelperArtifact(options = {}) {
   const workerLifecycleListSmoke = runWorkerLifecycleListAgentTeamPanesSmoke(helperPath, env, timeoutMs)
   const workerLifecycleCurrentPaneBindingSmoke = runWorkerLifecycleCaptureCurrentPaneBindingSmoke(helperPath, env, timeoutMs)
   const workerLifecycleWindowPaneListSmoke = runWorkerLifecycleListPanesInWindowSmoke(helperPath, env, timeoutMs)
+  const tmuxAvailabilitySmoke = runTmuxAvailabilitySmoke(helperPath, env, timeoutMs)
 
   const metadata = writeMetadata({
     extRoot,
@@ -722,6 +748,7 @@ function buildGoHelperArtifact(options = {}) {
     workerLifecycleListSmoke,
     workerLifecycleCurrentPaneBindingSmoke,
     workerLifecycleWindowPaneListSmoke,
+    tmuxAvailabilitySmoke,
   })
   const result = {
     extRoot,

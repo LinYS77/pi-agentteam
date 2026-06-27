@@ -1,23 +1,25 @@
-const GO_ASYNC_PANE_BINDING_FACADE_CUTOVER_SCHEMA_VERSION = 1
-const GO_ASYNC_PANE_BINDING_FACADE_CUTOVER_THEME = 'v0.6.61 Go resolvePaneBindingAsync facade cutover'
+const GO_TMUX_AVAILABILITY_FACADE_CUTOVER_SCHEMA_VERSION = 1
+const GO_TMUX_AVAILABILITY_FACADE_CUTOVER_THEME = 'v0.6.63 Go tmux availability facade cutover'
 const PACKAGE_VERSION = '0.6.8'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const PROTOCOL_VERSION = 1
-const CAPABILITY = 'workerLifecycle'
-const ACTIVE_OPERATIONS = Object.freeze(['inspectPane', 'listAgentTeamPanes', 'captureCurrentPaneBinding'])
+const CAPABILITY = 'tmuxAvailability'
+const ACTIVE_OPERATIONS = Object.freeze(['inspectPane', 'listAgentTeamPanes', 'captureCurrentPaneBinding', 'listPanesInWindow'])
 const ACTIVE_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'])
-const FACADE_NAME = 'resolvePaneBindingAsync'
-const KERNEL_ADAPTER_DELEGATION = 'createAgentTeamKernelAdapter().inspectWorkerPaneAsync(paneId, signal)'
-const ASYNC_HELPER_SEAM = 'invokeHelperAsync'
-const ASYNC_ABORT_POLICY = 'pre-aborted and in-flight aborted AbortSignal resolve null at the public facade with compact helper-spawn-error diagnostics'
+const FACADE_NAME = 'ensureTmuxAvailable'
+const KERNEL_ADAPTER_DELEGATION = 'createAgentTeamKernelAdapter().checkTmuxAvailableAsync(signal)'
+const ASYNC_ABORT_POLICY = 'pre-aborted and in-flight aborted AbortSignal throw compact tmux-required Error through ensureTmuxAvailable with helper-spawn-error diagnostics hidden inside the adapter'
+const GO_TMUX_VERSION_COMMAND = 'exec.CommandContext(ctx, "tmux", "-V")'
 const PRESERVED_BOUNDARIES = Object.freeze([
-  'resolvePaneBindingAsync facade delegates to the cancellable Go workerLifecycle inspectPane async adapter',
-  'TypeScript display-message fallback removed for resolvePaneBindingAsync facade',
-  'AbortSignal cancellation is preserved by the async helper subprocess seam and fails closed to null',
-  'sync facades remain unchanged and Go-backed',
-  'captureCurrentPaneBinding keeps the v0.6.60 outside-tmux guard and Go operation',
-  'window helpers are cut over by v0.6.62 through a cancellable async Go listPanesInWindow seam',
-  'Go display-message use is still limited to the no-target current-pane compact binding operation',
+  'ensureTmuxAvailable delegates to a cancellable Go tmuxAvailability async adapter',
+  'TypeScript tmux -V fallback removed from ensureTmuxAvailable',
+  'public ensureTmuxAvailable still resolves void when tmux is available',
+  'public ensureTmuxAvailable still throws Error when tmux is unavailable or helper fails',
+  'availability error text is compact and does not include raw stdout/stderr/cwd/stack/helper paths/mailbox/report/worker transcript bodies',
+  'Go tmuxAvailability uses only exact tmux -V read-only command',
+  'windowExists and firstPaneInWindow remain Go-backed through listPanesInWindowAsync',
+  'resolvePaneBindingAsync remains Go-backed through inspectWorkerPaneAsync',
+  'captureCurrentPaneBinding keeps the v0.6.60 outside-tmux guard and current-pane Go operation',
   'wake/create/label/kill lifecycle remains TypeScript-owned',
   'state repository remains TypeScript-owned',
   'task/report/PlanRun governance remains TypeScript-owned',
@@ -46,11 +48,11 @@ const RELEASE_PACKAGE_GUARDS = Object.freeze([
   'no go.mod or go.sum',
   'no lifecycle hooks or postinstall downloads',
   'no native artifact rename',
-  'no Go source or native helper rebuild required for this TypeScript adapter seam cutover',
+  'native helper rebuilt only in the existing embedded path because Go source changed',
 ])
-const goAsyncPaneBindingFacadeCutover = Object.freeze({
-  schemaVersion: GO_ASYNC_PANE_BINDING_FACADE_CUTOVER_SCHEMA_VERSION,
-  theme: GO_ASYNC_PANE_BINDING_FACADE_CUTOVER_THEME,
+const goTmuxAvailabilityFacadeCutover = Object.freeze({
+  schemaVersion: GO_TMUX_AVAILABILITY_FACADE_CUTOVER_SCHEMA_VERSION,
+  theme: GO_TMUX_AVAILABILITY_FACADE_CUTOVER_THEME,
   packageVersion: PACKAGE_VERSION,
   helperVersion: HELPER_VERSION,
   protocolVersion: PROTOCOL_VERSION,
@@ -59,18 +61,17 @@ const goAsyncPaneBindingFacadeCutover = Object.freeze({
   activeCapabilities: ACTIVE_CAPABILITIES,
   facadeName: FACADE_NAME,
   kernelAdapterDelegation: KERNEL_ADAPTER_DELEGATION,
-  asyncHelperSeam: ASYNC_HELPER_SEAM,
   asyncAbortPolicy: ASYNC_ABORT_POLICY,
+  goTmuxVersionCommand: GO_TMUX_VERSION_COMMAND,
   facadeCutoverMigrated: true,
-  cancellableAsyncKernelSeamAdded: true,
-  typescriptDisplayMessageFallbackRemoved: true,
-  abortResolvesNull: true,
-  failClosedNullOnEmptyPaneId: true,
-  failClosedNullOnHelperFailure: true,
-  failClosedNullOnMissingTarget: true,
-  failClosedNullOnInvalidResponse: true,
-  syncFacadesUnchanged: true,
-  windowHelpersMigratedByLaterSlice: true,
+  typescriptTmuxVersionFallbackRemoved: true,
+  throwsOnUnavailable: true,
+  resolvesVoidOnAvailable: true,
+  failClosedOnHelperFailure: true,
+  compactErrorMessage: true,
+  abortThrowsCompactError: true,
+  rawOutputLeakageAllowed: false,
+  targetDisplayMessageAdded: false,
   createTeammatePaneMigrated: false,
   wakePaneMigrated: false,
   syncPaneLabelsMigrated: false,
@@ -80,8 +81,8 @@ const goAsyncPaneBindingFacadeCutover = Object.freeze({
   teamPanelViewModelMigrated: false,
   releasePackageVerificationMigrated: false,
   nativeArtifactRenamed: false,
-  nativeHelperRebuilt: false,
-  goSourceChanged: false,
+  nativeHelperRebuilt: true,
+  goSourceChanged: true,
   packageVersionChanged: false,
   packageReleaseApproved: false,
   npmVersionChanged: false,
@@ -96,17 +97,17 @@ module.exports = {
   ACTIVE_CAPABILITIES,
   ACTIVE_OPERATIONS,
   ASYNC_ABORT_POLICY,
-  ASYNC_HELPER_SEAM,
   CAPABILITY,
   FACADE_NAME,
   FORBIDDEN_GO_TMUX_COMMANDS,
-  GO_ASYNC_PANE_BINDING_FACADE_CUTOVER_SCHEMA_VERSION,
-  GO_ASYNC_PANE_BINDING_FACADE_CUTOVER_THEME,
+  GO_TMUX_AVAILABILITY_FACADE_CUTOVER_SCHEMA_VERSION,
+  GO_TMUX_AVAILABILITY_FACADE_CUTOVER_THEME,
+  GO_TMUX_VERSION_COMMAND,
   HELPER_VERSION,
   KERNEL_ADAPTER_DELEGATION,
   PACKAGE_VERSION,
   PRESERVED_BOUNDARIES,
   PROTOCOL_VERSION,
   RELEASE_PACKAGE_GUARDS,
-  goAsyncPaneBindingFacadeCutover,
+  goTmuxAvailabilityFacadeCutover,
 }

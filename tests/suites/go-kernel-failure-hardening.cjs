@@ -25,7 +25,7 @@ const baseHealth = {
   implementation: 'go',
   protocolVersion: 1,
   helperVersion: '0.3.0-read-model-shadow',
-  capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'],
+  capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'],
   businessPathsConnected: false,
 }
 function respond(result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n') }

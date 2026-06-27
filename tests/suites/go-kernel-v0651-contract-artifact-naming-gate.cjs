@@ -62,7 +62,7 @@ const REQUIRED_ROADMAP = [
   'no native path/binary rename、no runtime migration、no package/release action',
   '**v0.6.51 contract constants and artifact naming gate**',
 ]
-const CURRENT_REQUIRED_CAPABILITIES = [...REQUIRED_CAPABILITIES, 'workerLifecycle']
+const CURRENT_REQUIRED_CAPABILITIES = [...REQUIRED_CAPABILITIES, 'workerLifecycle', 'tmuxAvailability']
 const RELEASE_OVERCLAIMS = [
   'npm publish completed',
   'npm version completed',

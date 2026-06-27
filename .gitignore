@@ -92,6 +92,8 @@ docs/perf/*
 !docs/perf/v0.6.60-go-current-pane-binding-facade-cutover.md
 !docs/perf/v0.6.61-go-async-pane-binding-facade-cutover.md
 !docs/perf/v0.6.62-go-window-pane-lookup-facade-cutover.md
+!docs/perf/v0.6.63-go-tmux-availability-facade-cutover.md
+!docs/perf/v0.6.64-go-pane-app-start-wait-cutover.md
 
 # Dependencies
 node_modules/

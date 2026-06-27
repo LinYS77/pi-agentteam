@@ -74,6 +74,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.workerLifecycleListAgentTeamPanesConnected, true)
   assert.equal(result.profile.workerLifecycleCaptureCurrentPaneBindingConnected, true)
   assert.equal(result.profile.workerLifecycleListPanesInWindowConnected, true)
+  assert.equal(result.profile.tmuxAvailabilityConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)
 }
@@ -138,6 +139,23 @@ function assertMethodResult(response, request, fingerprintModule) {
     assertReadModelResult(response.result, expectedFingerprint, expectedProjection)
     return
   }
+  if (request.method === 'tmuxAvailability') {
+    assert.equal(response.result.capability, 'tmuxAvailability')
+    assert.equal(response.result.readOnly, true)
+    assert.equal(response.result.stateFilesRead, false)
+    assert.equal(response.result.stateFilesWritten, false)
+    assert.equal(response.result.tmuxMutation, false)
+    assert.equal(response.result.ok === true || response.result.ok === false, true)
+    if (response.result.ok === true) {
+      assert.equal(response.result.available, true)
+      assert.equal(typeof response.result.version, 'string')
+    } else {
+      assert.equal(response.result.available, false)
+      assert.ok(['tmux-command-timeout', 'tmux-command-failed', 'tmux-unavailable'].includes(response.result.failureKind))
+      assert.equal(/stdout|stderr|stack|MAILBOX_BODY|REPORT_BODY|worker transcript/i.test(JSON.stringify(response.result)), false)
+    }
+    return
+  }
   if (request.method === 'workerLifecycle') {
     const requestedOperation = request.params?.operation || 'inspectPane'
     const expectedOperation = requestedOperation === 'listAgentTeamPanes'
@@ -189,7 +207,7 @@ const baseHealth = {
   implementation: 'go',
   protocolVersion: 1,
   helperVersion: '0.3.0-read-model-shadow',
-  capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'],
+  capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'],
   businessPathsConnected: false,
 }
 function respond(result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n') }

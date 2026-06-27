@@ -1,6 +1,6 @@
 const PROTOCOL_VERSION = 1
 const HELPER_VERSION = '0.3.0-read-model-shadow'
-const CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle']
+const CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability']
 
 const tmuxStdout = [
   '%pane-a\tsession:@1\tagentteam leader\tpi',
@@ -111,6 +111,10 @@ function validMethodCases() {
       name: 'worker lifecycle captureCurrentPaneBinding',
       request: request('workerLifecycle', { operation: 'captureCurrentPaneBinding' }, 'worker-lifecycle-current-binding-string-id'),
     },
+    {
+      name: 'tmux availability',
+      request: request('tmuxAvailability', undefined, 'tmux-availability-string-id'),
+    },
   ]
 }
 
@@ -215,6 +219,7 @@ function multipleRequestBatch() {
     request('workerLifecycle', { operation: 'inspectPane', paneId: '%batch-missing-pane' }, 'batch-worker-lifecycle'),
     request('workerLifecycle', { operation: 'listAgentTeamPanes' }, 'batch-worker-lifecycle-list'),
     request('workerLifecycle', { operation: 'captureCurrentPaneBinding' }, 'batch-worker-lifecycle-current-binding'),
+    request('tmuxAvailability', undefined, 'batch-tmux-availability'),
     { jsonrpc: '2.0', id: 'batch-unknown', method: 'unknownMethod' },
   ]
 }

@@ -10,7 +10,7 @@ const PACKAGE_NAME = 'pi-agentteam'
 const PACKAGE_VERSION = '0.6.8'
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const PROTOCOL_VERSION = 1
-const REQUIRED_CAPABILITIES = ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle']
+const REQUIRED_CAPABILITIES = ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability']
 const ARTIFACT_INDEX_FILENAME = 'artifact-index.json'
 const REVIEW_RETENTION_DAYS = 7
 const DEFAULT_SIZE_LIMITS = Object.freeze({
@@ -69,7 +69,7 @@ const PROVENANCE_KEYS = new Set([
 const PROVENANCE_SOURCE_KEYS = new Set(['path', 'revision'])
 const PROVENANCE_BUILD_KEYS = new Set(['command', 'env', 'cwd', 'toolchain', 'runIdentity', 'generatedAt'])
 const PROVENANCE_BUILD_ENV_KEYS = new Set(['GO111MODULE'])
-const PROVENANCE_SMOKE_KEYS = new Set(['health', MODULE, 'workerLifecycleInspectPane', 'workerLifecycleListAgentTeamPanes', 'workerLifecycleCaptureCurrentPaneBinding', 'workerLifecycleListPanesInWindow'])
+const PROVENANCE_SMOKE_KEYS = new Set(['health', MODULE, 'workerLifecycleInspectPane', 'workerLifecycleListAgentTeamPanes', 'workerLifecycleCaptureCurrentPaneBinding', 'workerLifecycleListPanesInWindow', 'tmuxAvailability'])
 const PROVENANCE_TMUX_SMOKE_KEYS = new Set(['ok', 'paneCount', 'capturedAt'])
 const FAILURE_KINDS = new Set([
   'artifact-root-invalid',

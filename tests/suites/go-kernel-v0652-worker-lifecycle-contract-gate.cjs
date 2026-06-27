@@ -38,7 +38,7 @@ const BROAD_GO_LIFECYCLE_COMMANDS = [
   'select-pane',
   'respawn-pane',
 ]
-const CURRENT_RUNTIME_CAPABILITIES = [...ACTIVE_RUNTIME_CAPABILITIES, FUTURE_CAPABILITY]
+const CURRENT_RUNTIME_CAPABILITIES = [...ACTIVE_RUNTIME_CAPABILITIES, FUTURE_CAPABILITY, 'tmuxAvailability']
 const REQUIRED_DOC = [
   '# v0.6.52 Worker Lifecycle Contract Gate',
   'Result: v0.6.52 defines the future Go worker lifecycle JSON-RPC boundary and helper connection model as a non-runtime gate.',

@@ -48,7 +48,7 @@ module.exports = {
     assert.equal(kernel.AGENTTEAM_KERNEL_PROTOCOL_VERSION, 1)
     assert.equal(kernel.AGENTTEAM_KERNEL_ADAPTER_VERSION, '0.3.0-read-model-shadow')
     assert.equal(kernel.AGENTTEAM_KERNEL_HELPER_VERSION, '0.3.0-read-model-shadow')
-    assert.deepEqual(kernel.AGENTTEAM_KERNEL_CAPABILITIES, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
+    assert.deepEqual(kernel.AGENTTEAM_KERNEL_CAPABILITIES, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'])
     assert.equal(kernel.AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED, false)
 
     assert.equal(kernel.normalizeAgentTeamKernelMode(undefined), 'default')
@@ -74,7 +74,7 @@ module.exports = {
     assert.equal(defaultMetadata.kernel.fallbacks, 0)
     assert.equal(defaultMetadata.kernel.protocolVersion, 1)
     assert.equal(defaultMetadata.kernel.adapterVersion, '0.3.0-read-model-shadow')
-    assert.deepEqual(defaultMetadata.kernel.capabilities, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
+    assert.deepEqual(defaultMetadata.kernel.capabilities, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'])
     assert.equal(defaultMetadata.kernel.businessPathsConnected, false)
     assert.equal(defaultMetadata.kernel.cutoverModule, 'tmuxSnapshotParse')
     assert.equal(defaultMetadata.kernel.cutoverStatus, 'active')
@@ -83,7 +83,7 @@ module.exports = {
     assert.equal(defaultHealth.ok, true)
     assert.equal(defaultHealth.implementation, 'go')
     assert.equal(defaultHealth.businessPathsConnected, false)
-    assert.deepEqual(defaultHealth.capabilities, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
+    assert.deepEqual(defaultHealth.capabilities, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'])
 
     const defaultProfile = defaultAdapter.profile({ bench: 'state' })
     assert.equal(defaultProfile.profile.scope, 'skeleton-only')
@@ -97,6 +97,7 @@ module.exports = {
     assert.equal(defaultProfile.profile.workerLifecycleListAgentTeamPanesConnected, true)
     assert.equal(defaultProfile.profile.workerLifecycleCaptureCurrentPaneBindingConnected, true)
     assert.equal(defaultProfile.profile.workerLifecycleListPanesInWindowConnected, true)
+    assert.equal(defaultProfile.profile.tmuxAvailabilityConnected, true)
     assert.equal(defaultProfile.profile.panelConnected, false)
     assert.equal(defaultProfile.profile.taskReportPlanRunConnected, false)
 
@@ -162,6 +163,13 @@ module.exports = {
             assert.equal((text.match(/core\/kernel\.js/g) || []).length, 1, `${rel} must not add more Go kernel imports`)
             continue
           }
+          if (rel === 'tmux/process.ts') {
+            assert.equal(text.includes("import { createAgentTeamKernelAdapter } from '../core/kernel.js'"), true, `${rel} must keep only the approved app-start wait inspect seam`)
+            assert.equal(text.includes('kernel.inspectWorkerPaneAsync(paneId, signal)'), true, `${rel} must use the approved async inspect seam`)
+            assert.equal(text.includes('runTmuxNoThrowAsync'), false, `${rel} must not retain direct tmux polling`)
+            assert.equal((text.match(/core\/kernel\.js/g) || []).length, 1, `${rel} must not add more Go kernel imports`)
+            continue
+          }
           assert.equal(text.includes('core/kernel.js'), false, `${rel} must not import Go kernel skeleton`)
           assert.equal(text.includes('../core/kernel.js'), false, `${rel} must not import Go kernel skeleton`)
           assert.equal(text.includes('../../core/kernel.js'), false, `${rel} must not import Go kernel skeleton`)
@@ -191,7 +199,7 @@ module.exports = {
       assert.equal(health.result.implementation, 'go')
       assert.equal(health.result.protocolVersion, 1)
       assert.equal(health.result.helperVersion, '0.3.0-read-model-shadow')
-      assert.deepEqual(health.result.capabilities, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
+      assert.deepEqual(health.result.capabilities, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'])
       assert.equal(health.result.businessPathsConnected, false)
 
       const profileRun = runGoHelper(env.helpers.extRoot, jsonRpcRequest('profile', { fixture: 'tiny' }, 'go-profile'))
@@ -212,6 +220,7 @@ module.exports = {
       assert.equal(profile.result.profile.workerLifecycleListAgentTeamPanesConnected, true)
       assert.equal(profile.result.profile.workerLifecycleCaptureCurrentPaneBindingConnected, true)
       assert.equal(profile.result.profile.workerLifecycleListPanesInWindowConnected, true)
+      assert.equal(profile.result.profile.tmuxAvailabilityConnected, true)
       assert.equal(profile.result.profile.panelConnected, false)
       assert.equal(profile.result.profile.taskReportPlanRunConnected, false)
 

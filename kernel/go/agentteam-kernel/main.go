@@ -17,7 +17,7 @@ import (
 const protocolVersion = 1
 const helperVersion = "0.3.0-read-model-shadow"
 
-var capabilities = []string{"health", "profile", "tmuxSnapshotParse", "tmuxSnapshotCapture", "compactReadModelFingerprint", "workerLifecycle"}
+var capabilities = []string{"health", "profile", "tmuxSnapshotParse", "tmuxSnapshotCapture", "compactReadModelFingerprint", "workerLifecycle", "tmuxAvailability"}
 
 type rpcRequest struct {
 	JSONRPC string         `json:"jsonrpc"`
@@ -164,6 +164,22 @@ type workerWindowPaneListResult struct {
 	TmuxMutation      bool     `json:"tmuxMutation"`
 }
 
+type tmuxAvailabilityResult struct {
+	OK                bool   `json:"ok"`
+	Capability        string `json:"capability"`
+	Available         bool   `json:"available"`
+	Version           string `json:"version,omitempty"`
+	Status            string `json:"status,omitempty"`
+	Marker            string `json:"resultMarker,omitempty"`
+	Failure           string `json:"failureKind,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Error             string `json:"error,omitempty"`
+	ReadOnly          bool   `json:"readOnly"`
+	StateFilesRead    bool   `json:"stateFilesRead"`
+	StateFilesWritten bool   `json:"stateFilesWritten"`
+	TmuxMutation      bool   `json:"tmuxMutation"`
+}
+
 func health() healthResult {
 	return healthResult{
 		OK:                     true,
@@ -193,6 +209,7 @@ func profile(params map[string]any) profileResult {
 			"workerLifecycleListAgentTeamPanesConnected":        true,
 			"workerLifecycleCaptureCurrentPaneBindingConnected": true,
 			"workerLifecycleListPanesInWindowConnected":         true,
+			"tmuxAvailabilityConnected":                         true,
 			"panelConnected":                                    false,
 			"taskReportPlanRunConnected":                        false,
 		},
@@ -372,6 +389,77 @@ func compactTmuxWindowTarget(raw string) string {
 		}
 	}
 	return target
+}
+
+func compactKernelText(raw string) string {
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return ""
+	}
+	builder := strings.Builder{}
+	for _, ch := range text {
+		if ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' {
+			builder.WriteRune(ch)
+			continue
+		}
+		switch ch {
+		case '_', '.', '/', ':', '=', '@', '%', '+', '-', ' ':
+			builder.WriteRune(ch)
+		}
+		if builder.Len() >= 160 {
+			break
+		}
+	}
+	return strings.Join(strings.Fields(builder.String()), " ")
+}
+
+func unavailableTmuxAvailability(kind string) tmuxAvailabilityResult {
+	reason := "Go tmux availability unavailable (" + kind + ")"
+	return tmuxAvailabilityResult{
+		OK:                false,
+		Capability:        "tmuxAvailability",
+		Available:         false,
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          true,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      false,
+	}
+}
+
+func checkTmuxAvailability() tmuxAvailabilityResult {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "-V")
+	cmd.Env = os.Environ()
+	output, err := cmd.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return unavailableTmuxAvailability("tmux-command-timeout")
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return unavailableTmuxAvailability("tmux-unavailable")
+		}
+		return unavailableTmuxAvailability("tmux-command-failed")
+	}
+	version := compactKernelText(string(output))
+	if version == "" {
+		return unavailableTmuxAvailability("tmux-command-failed")
+	}
+	return tmuxAvailabilityResult{
+		OK:                true,
+		Capability:        "tmuxAvailability",
+		Available:         true,
+		Version:           version,
+		ReadOnly:          true,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      false,
+	}
 }
 
 func unavailableWorkerPaneInspection(requestedPaneID string, kind string) workerPaneInspectionResult {
@@ -719,6 +807,8 @@ func handle(request rpcRequest) rpcResponse {
 		return rpcResponse{JSONRPC: "2.0", ID: request.ID, Result: compactReadModelFingerprint(request.Params)}
 	case "workerLifecycle":
 		return rpcResponse{JSONRPC: "2.0", ID: request.ID, Result: workerLifecycle(request.Params)}
+	case "tmuxAvailability":
+		return rpcResponse{JSONRPC: "2.0", ID: request.ID, Result: checkTmuxAvailability()}
 	default:
 		return rpcResponse{JSONRPC: "2.0", ID: request.ID, Error: &rpcError{Code: -32601, Message: "method not found"}}
 	}

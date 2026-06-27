@@ -4,7 +4,7 @@ export const AGENTTEAM_KERNEL_PACKAGE_VERSION = '0.6.8' as const
 export const AGENTTEAM_KERNEL_PROTOCOL_VERSION = 1 as const
 export const AGENTTEAM_KERNEL_ADAPTER_VERSION = '0.3.0-read-model-shadow' as const
 export const AGENTTEAM_KERNEL_HELPER_VERSION = '0.3.0-read-model-shadow' as const
-export const AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'] as const
+export const AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'] as const
 export const AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED = false as const
 
 export const AGENTTEAM_KERNEL_CURRENT_NATIVE_MODULE = 'tmuxSnapshotParse' as const

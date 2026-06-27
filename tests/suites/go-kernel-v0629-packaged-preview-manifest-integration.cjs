@@ -180,7 +180,7 @@ function helperSource(paneId, options = {}) {
     protocolVersion: 1,
     adapterVersion: HELPER_VERSION,
     helperVersion: HELPER_VERSION,
-    capabilities: ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'],
+    capabilities: ['health', 'profile', MODULE, 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'],
     businessPathsConnected: false,
   }
   return `#!/usr/bin/env node

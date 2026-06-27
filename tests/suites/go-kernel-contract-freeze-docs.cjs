@@ -30,7 +30,7 @@ module.exports = {
     assert.equal(kernel.AGENTTEAM_KERNEL_PROTOCOL_VERSION, 1)
     assert.equal(kernel.AGENTTEAM_KERNEL_ADAPTER_VERSION, '0.3.0-read-model-shadow')
     assert.equal(kernel.AGENTTEAM_KERNEL_HELPER_VERSION, '0.3.0-read-model-shadow')
-    assert.deepEqual(kernel.AGENTTEAM_KERNEL_CAPABILITIES, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
+    assert.deepEqual(kernel.AGENTTEAM_KERNEL_CAPABILITIES, ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'])
     assert.equal(kernel.AGENTTEAM_KERNEL_BUSINESS_PATHS_CONNECTED, false)
     assert.match(kernelContractSource, /AGENTTEAM_KERNEL_PROTOCOL_VERSION = 1/)
     assert.match(kernelSource, /from '\.\/kernelContract\.js'/)
@@ -58,7 +58,7 @@ module.exports = {
       assert.ok(doc.includes(expected), `freeze doc should reference ${expected}`)
     }
 
-    for (const capability of ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle']) {
+    for (const capability of ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability']) {
       assert.ok(doc.includes(capability), `freeze doc should document capability ${capability}`)
     }
 

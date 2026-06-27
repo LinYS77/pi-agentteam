@@ -14,7 +14,7 @@ const APPROVED_EMBEDDED_NATIVE_FILES = Object.freeze([
   'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/license.json',
   'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/attestation.intoto.jsonl',
 ])
-const REQUIRED_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle'])
+const REQUIRED_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'])
 const FAILURE_CLASSES = Object.freeze([
   'unsupported-platform',
   'integrity-failed',
