@@ -104,6 +104,7 @@ docs/perf/*
 !docs/perf/v0.6.72-go-window-marking-cutover.md
 !docs/perf/v0.6.73-go-refresh-window-pane-labels-gate.md
 !docs/perf/v0.6.74-go-refresh-window-pane-labels-cutover.md
+!docs/perf/v0.6.75-go-pane-label-setting-gate.md
 
 # Dependencies
 node_modules/
