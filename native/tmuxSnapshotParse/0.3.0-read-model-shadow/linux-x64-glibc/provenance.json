@@ -6,7 +6,7 @@
   "module": "tmuxSnapshotParse",
   "source": {
     "path": "kernel/go/agentteam-kernel",
-    "revision": "e341edd381812aff511fb6494734a544d8946872"
+    "revision": "323c983500ea2334c315cb1e189ea87bc0998df7"
   },
   "build": {
     "command": [
@@ -23,7 +23,7 @@
     "cwd": "kernel/go/agentteam-kernel",
     "toolchain": "go version go1.25.10 linux/amd64",
     "runIdentity": "local-reviewer-run",
-    "generatedAt": "2026-06-28T10:08:05.001Z"
+    "generatedAt": "2026-06-28T12:20:47.774Z"
   },
   "smoke": {
     "health": true,
@@ -103,6 +103,12 @@
       "ok": false,
       "acceptedFailureKinds": [
         "invalid-target"
+      ]
+    },
+    "workerLifecycleSetPaneLabel": {
+      "ok": false,
+      "acceptedFailureKinds": [
+        "invalid-pane-id"
       ]
     },
     "tmuxAvailability": {

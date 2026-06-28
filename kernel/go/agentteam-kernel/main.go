@@ -16,6 +16,7 @@ import (
 
 const protocolVersion = 1
 const helperVersion = "0.3.0-read-model-shadow"
+const paneLabelArgumentLimit = 4096
 
 var capabilities = []string{"health", "profile", "tmuxSnapshotParse", "tmuxSnapshotCapture", "compactReadModelFingerprint", "workerLifecycle", "tmuxAvailability"}
 
@@ -256,6 +257,23 @@ type workerWindowPaneLabelsRefreshResult struct {
 	TmuxMutation      bool   `json:"tmuxMutation"`
 }
 
+type workerPaneLabelSettingResult struct {
+	OK                bool   `json:"ok"`
+	Operation         string `json:"operation"`
+	Capability        string `json:"capability"`
+	PaneID            string `json:"paneId"`
+	Labeled           bool   `json:"labeled"`
+	Status            string `json:"status,omitempty"`
+	Marker            string `json:"resultMarker,omitempty"`
+	Failure           string `json:"failureKind,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Error             string `json:"error,omitempty"`
+	ReadOnly          bool   `json:"readOnly"`
+	StateFilesRead    bool   `json:"stateFilesRead"`
+	StateFilesWritten bool   `json:"stateFilesWritten"`
+	TmuxMutation      bool   `json:"tmuxMutation"`
+}
+
 type tmuxAvailabilityResult struct {
 	OK                bool   `json:"ok"`
 	Capability        string `json:"capability"`
@@ -306,6 +324,7 @@ func profile(params map[string]any) profileResult {
 			"workerLifecycleSessionExistsConnected":             true,
 			"workerLifecycleMarkWindowAsAgentTeamConnected":     true,
 			"workerLifecycleRefreshWindowPaneLabelsConnected":   true,
+			"workerLifecycleSetPaneLabelConnected":              true,
 			"tmuxAvailabilityConnected":                         true,
 			"panelConnected":                                    false,
 			"taskReportPlanRunConnected":                        false,
@@ -486,6 +505,37 @@ func compactTmuxWindowTarget(raw string) string {
 		}
 	}
 	return target
+}
+
+func compactTmuxPaneID(raw string) string {
+	paneID := strings.TrimSpace(raw)
+	if paneID == "" || len(paneID) > 160 || paneID[0] != '%' {
+		return ""
+	}
+	if len(paneID) == 1 {
+		return ""
+	}
+	for _, ch := range paneID[1:] {
+		if ch < '0' || ch > '9' {
+			return ""
+		}
+	}
+	return paneID
+}
+
+func paneLabelParam(params map[string]any) (string, bool) {
+	if params == nil {
+		return "", false
+	}
+	value, ok := params["label"]
+	if !ok {
+		return "", false
+	}
+	label, ok := value.(string)
+	if !ok {
+		return "", false
+	}
+	return label, len(label) <= paneLabelArgumentLimit
 }
 
 func compactTmuxSessionName(raw string) string {
@@ -1179,6 +1229,95 @@ func refreshWindowPaneLabels(params map[string]any) workerWindowPaneLabelsRefres
 	}
 }
 
+func unavailablePaneLabelSetting(paneID string, kind string) workerPaneLabelSettingResult {
+	safePaneID := compactTmuxPaneID(paneID)
+	reason := "Go worker lifecycle setPaneLabel unavailable (" + kind + ")"
+	return workerPaneLabelSettingResult{
+		OK:                false,
+		Operation:         "setPaneLabel",
+		Capability:        "workerLifecycle",
+		PaneID:            safePaneID,
+		Labeled:           false,
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
+func runPaneLabelSetOption(paneID string, label string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "set-option", "-p", "-t", paneID, "@agentteam-name", label)
+	cmd.Env = os.Environ()
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "tmux-command-timeout"
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return "tmux-unavailable"
+		}
+		return "tmux-command-failed"
+	}
+	return ""
+}
+
+func runPaneLabelSelectPaneTitle(paneID string, label string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)
+	cmd.Env = os.Environ()
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "tmux-command-timeout"
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return "tmux-unavailable"
+		}
+		return "tmux-command-failed"
+	}
+	return ""
+}
+
+func setPaneLabel(params map[string]any) workerPaneLabelSettingResult {
+	paneID := compactTmuxPaneID(stringParam(params, "paneId"))
+	if paneID == "" {
+		return unavailablePaneLabelSetting("", "invalid-pane-id")
+	}
+	label, validLabel := paneLabelParam(params)
+	if !validLabel {
+		return unavailablePaneLabelSetting(paneID, "invalid-label")
+	}
+	failureKind := ""
+	if kind := runPaneLabelSetOption(paneID, label); kind != "" && failureKind == "" {
+		failureKind = kind
+	}
+	if kind := runPaneLabelSelectPaneTitle(paneID, label); kind != "" && failureKind == "" {
+		failureKind = kind
+	}
+	if failureKind != "" {
+		return unavailablePaneLabelSetting(paneID, failureKind)
+	}
+	return workerPaneLabelSettingResult{
+		OK:                true,
+		Operation:         "setPaneLabel",
+		Capability:        "workerLifecycle",
+		PaneID:            paneID,
+		Labeled:           true,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
 func workerLifecycle(params map[string]any) any {
 	operation := stringParam(params, "operation")
 	switch operation {
@@ -1200,6 +1339,8 @@ func workerLifecycle(params map[string]any) any {
 		return markWindowAsAgentTeam(params)
 	case "refreshWindowPaneLabels":
 		return refreshWindowPaneLabels(params)
+	case "setPaneLabel":
+		return setPaneLabel(params)
 	default:
 		return unavailableWorkerPaneInspection(strings.TrimSpace(stringParam(params, "paneId")), "unsupported-operation")
 	}

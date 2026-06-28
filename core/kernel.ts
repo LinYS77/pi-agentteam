@@ -137,6 +137,7 @@ export type AgentTeamKernelProfile = AgentTeamKernelHealth & {
     workerLifecycleSessionExistsConnected?: boolean
     workerLifecycleMarkWindowAsAgentTeamConnected?: boolean
     workerLifecycleRefreshWindowPaneLabelsConnected?: boolean
+    workerLifecycleSetPaneLabelConnected?: boolean
     tmuxAvailabilityConnected?: boolean
     panelConnected: false
     taskReportPlanRunConnected: false
@@ -183,6 +184,7 @@ export type AgentTeamKernelWorkerLifecycleFailureKind =
   | 'invalid-target'
   | 'invalid-session'
   | 'invalid-window-name'
+  | 'invalid-label'
 
 export type AgentTeamKernelWorkerPaneInspection = {
   ok: boolean
@@ -349,6 +351,23 @@ export type AgentTeamKernelWindowPaneLabelsRefresh = {
   tmuxMutation: true
 }
 
+export type AgentTeamKernelPaneLabelSetting = {
+  ok: boolean
+  operation: 'setPaneLabel'
+  capability: 'workerLifecycle'
+  paneId: string
+  labeled: boolean
+  status?: 'unknown'
+  resultMarker?: 'stale'
+  failureKind?: AgentTeamKernelWorkerLifecycleFailureKind
+  reason?: string
+  error?: string
+  readOnly: false
+  stateFilesRead: false
+  stateFilesWritten: false
+  tmuxMutation: true
+}
+
 export type AgentTeamKernelTmuxAvailability = {
   ok: boolean
   capability: 'tmuxAvailability'
@@ -381,6 +400,7 @@ export type AgentTeamKernelAdapter = {
   sessionExistsAsync(sessionName: string, signal?: AbortSignal): Promise<AgentTeamKernelSessionExistence>
   markWindowAsAgentTeamAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowMarking>
   refreshWindowPaneLabelsAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowPaneLabelsRefresh>
+  setPaneLabelAsync(paneId: string, label: string, signal?: AbortSignal): Promise<AgentTeamKernelPaneLabelSetting>
   checkTmuxAvailableAsync(signal?: AbortSignal): Promise<AgentTeamKernelTmuxAvailability>
   compactReadModelFingerprint(input: unknown, fallback?: (input: unknown) => AgentTeamKernelCompactReadModelResult): AgentTeamKernelCompactReadModelResult
 }
@@ -401,6 +421,7 @@ export type AgentTeamKernelAdapterOptions = {
 const KNOWN_MODES = new Set(['default', 'disabled', 'typescript', 'go', 'auto', 'go-cutover', 'go-packaged-preview'])
 const DEFAULT_EMBEDDED_HELPER_MANIFEST_PATH = AGENTTEAM_KERNEL_EMBEDDED_HELPER_MANIFEST_PATH
 const KERNEL_DIAGNOSTIC_TEXT_LIMIT = 160
+const PANE_LABEL_ARGUMENT_LIMIT = 4096
 
 function compactKernelText(value: unknown, fallback = ''): string {
   const text = String(value ?? '').trim()
@@ -412,6 +433,16 @@ function compactTmuxWindowTarget(value: unknown): string {
   if (!raw || raw.length > KERNEL_DIAGNOSTIC_TEXT_LIMIT) return ''
   if (raw !== compactKernelText(raw)) return ''
   return /^[a-zA-Z0-9_./:=@%+-]+$/.test(raw) ? raw : ''
+}
+
+function compactTmuxPaneId(value: unknown): string {
+  const raw = String(value ?? '').trim()
+  if (!raw || raw.length > KERNEL_DIAGNOSTIC_TEXT_LIMIT) return ''
+  return /^%\d+$/.test(raw) ? raw : ''
+}
+
+function isValidPaneLabelArgument(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= PANE_LABEL_ARGUMENT_LIMIT
 }
 
 function compactTmuxSessionName(value: unknown): string {
@@ -592,6 +623,7 @@ function fallbackProfile(metadata: AgentTeamKernelMetadata, params: Record<strin
       workerLifecycleSessionExistsConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleMarkWindowAsAgentTeamConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleRefreshWindowPaneLabelsConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
+      workerLifecycleSetPaneLabelConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       tmuxAvailabilityConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('tmuxAvailability'),
       panelConnected: false,
       taskReportPlanRunConnected: false,
@@ -763,6 +795,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     if (profile.workerLifecycleSessionExistsConnected !== undefined && profile.workerLifecycleSessionExistsConnected !== true) return undefined
     if (profile.workerLifecycleMarkWindowAsAgentTeamConnected !== undefined && profile.workerLifecycleMarkWindowAsAgentTeamConnected !== true) return undefined
     if (profile.workerLifecycleRefreshWindowPaneLabelsConnected !== undefined && profile.workerLifecycleRefreshWindowPaneLabelsConnected !== true) return undefined
+    if (profile.workerLifecycleSetPaneLabelConnected !== undefined && profile.workerLifecycleSetPaneLabelConnected !== true) return undefined
     if (profile.tmuxAvailabilityConnected !== undefined && profile.tmuxAvailabilityConnected !== true) return undefined
     if (profile.panelConnected !== false || profile.taskReportPlanRunConnected !== false) return undefined
     return {
@@ -784,6 +817,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         workerLifecycleSessionExistsConnected: profile.workerLifecycleSessionExistsConnected === true,
         workerLifecycleMarkWindowAsAgentTeamConnected: profile.workerLifecycleMarkWindowAsAgentTeamConnected === true,
         workerLifecycleRefreshWindowPaneLabelsConnected: profile.workerLifecycleRefreshWindowPaneLabelsConnected === true,
+        workerLifecycleSetPaneLabelConnected: profile.workerLifecycleSetPaneLabelConnected === true,
         tmuxAvailabilityConnected: profile.tmuxAvailabilityConnected === true,
         panelConnected: false,
         taskReportPlanRunConnected: false,
@@ -1116,6 +1150,30 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       capability: 'workerLifecycle',
       target: safeTarget,
       refreshed: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind: kind,
+      reason: safeReason,
+      error: safeReason,
+      readOnly: false,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: true,
+    }
+  }
+
+  function workerLifecycleUnavailablePaneLabelSetting(paneId: string, kind: AgentTeamKernelWorkerLifecycleFailureKind, detail?: unknown): AgentTeamKernelPaneLabelSetting {
+    const safePaneId = compactTmuxPaneId(paneId)
+    const reason = kind === 'invalid-pane-id' || kind === 'invalid-label'
+      ? `Go worker lifecycle setPaneLabel unavailable (${kind})`
+      : cutoverMessage(kind as AgentTeamKernelCutoverFailureKind, detail)
+    const safeReason = compactKernelText(reason, cutoverMessage('previous-helper-failure'))
+    return {
+      ok: false,
+      operation: 'setPaneLabel',
+      capability: 'workerLifecycle',
+      paneId: safePaneId,
+      labeled: false,
       status: 'unknown',
       resultMarker: 'stale',
       failureKind: kind,
@@ -1581,6 +1639,49 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     }
   }
 
+  function validatePaneLabelSettingResult(value: unknown, requestedPaneId: string): AgentTeamKernelPaneLabelSetting | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const result = value as Partial<AgentTeamKernelPaneLabelSetting>
+    if (result.operation !== 'setPaneLabel' || result.capability !== 'workerLifecycle') return undefined
+    if (result.readOnly !== false || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== true) return undefined
+    const paneId = compactTmuxPaneId(result.paneId || requestedPaneId)
+    if (result.ok === true) {
+      if (!paneId || result.labeled !== true) return undefined
+      return {
+        ok: true,
+        operation: 'setPaneLabel',
+        capability: 'workerLifecycle',
+        paneId,
+        labeled: true,
+        readOnly: false,
+        stateFilesRead: false,
+        stateFilesWritten: false,
+        tmuxMutation: true,
+      }
+    }
+    if (result.ok !== false || result.labeled !== false) return undefined
+    const failureKind = typeof result.failureKind === 'string' && ['unsupported-operation', 'pane-not-found', 'invalid-pane-id', 'invalid-target', 'invalid-session', 'invalid-label', ...AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS].includes(result.failureKind)
+      ? result.failureKind as AgentTeamKernelWorkerLifecycleFailureKind
+      : 'previous-helper-failure'
+    const reason = compactKernelText(`Go worker lifecycle setPaneLabel unavailable (${failureKind})`, 'Go worker lifecycle setPaneLabel unavailable (previous-helper-failure)')
+    return {
+      ok: false,
+      operation: 'setPaneLabel',
+      capability: 'workerLifecycle',
+      paneId,
+      labeled: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind,
+      reason,
+      error: reason,
+      readOnly: false,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: true,
+    }
+  }
+
   function validateCompactReadModelResult(value: unknown): AgentTeamKernelCompactReadModelResult | undefined {
     if (!value || typeof value !== 'object') return undefined
     const result = value as AgentTeamKernelCompactReadModelResult
@@ -2015,6 +2116,18 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle refreshWindowPaneLabels async result shape')
       }
       return workerLifecycleUnavailableWindowPaneLabelsRefresh(requestedTarget, cutoverFailureKind ?? 'previous-helper-failure')
+    },
+    async setPaneLabelAsync(paneId, label, signal) {
+      const requestedPaneId = compactTmuxPaneId(paneId)
+      if (!requestedPaneId) return workerLifecycleUnavailablePaneLabelSetting(paneId, 'invalid-pane-id')
+      if (!isValidPaneLabelArgument(label)) return workerLifecycleUnavailablePaneLabelSetting(requestedPaneId, 'invalid-label')
+      const helperResult = await callHelperAsync<unknown>('workerLifecycle', { operation: 'setPaneLabel', paneId: requestedPaneId, label }, signal)
+      const parsed = validatePaneLabelSettingResult(helperResult, requestedPaneId)
+      if (parsed) return parsed
+      if (helperResult !== undefined) {
+        recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle setPaneLabel async result shape')
+      }
+      return workerLifecycleUnavailablePaneLabelSetting(requestedPaneId, cutoverFailureKind ?? 'previous-helper-failure')
     },
     async checkTmuxAvailableAsync(signal) {
       const helperResult = await callHelperAsync<unknown>('tmuxAvailability', undefined, signal)

@@ -91,7 +91,7 @@ const REQUIRED_ROADMAP = [
   'authorized next runtime candidate is only private `setPaneLabel(paneId, label, signal)`',
   'future Go may use only `tmux set-option -p -t <paneId> @agentteam-name <label>` and `tmux select-pane -t <paneId> -T <label>`',
   'label remains opaque Unicode/user-visible argv data and must not leak raw label diagnostics',
-  'current `setPaneLabel` and `clearPaneLabel` direct TypeScript calls remain in place',
+  'at v0.6.75 current `setPaneLabel` and `clearPaneLabel` direct TypeScript calls remained in place, and v0.6.76 later implemented the authorized `setPaneLabel` cutover without migrating `clearPaneLabel`',
   'clearPaneLabel/new-session/new-window/pane creation/layout/wake/kill/state/task/UI/release/package remain forbidden',
   'no Go source/native artifact rebuild',
   '**v0.6.75 Go pane label setting gate**',
@@ -272,11 +272,10 @@ function assertCurrentTypescriptState(root) {
   const refreshBody = functionBody(labelsSource, 'refreshWindowPaneLabels')
   const markBody = functionBody(labelsSource, 'markWindowAsAgentTeam')
 
-  for (const call of EXPECTED_SET_PANE_LABEL_CALLS) assertIncludes(setPaneBody, call, `${TMUX_LABELS} ${HELPER_NAME}`)
-  assert.equal(setPaneBody.includes('createAgentTeamKernelAdapter'), false, `${TMUX_LABELS} ${HELPER_NAME} must not call Go in this gate`)
-  assert.equal(setPaneBody.includes('workerLifecycle'), false, `${TMUX_LABELS} ${HELPER_NAME} must not mention workerLifecycle in this gate`)
-  assert.equal(setPaneBody.includes('setPaneLabelAsync'), false, `${TMUX_LABELS} ${HELPER_NAME} must not add future adapter in this gate`)
-  assert.equal([...setPaneBody.matchAll(/runTmuxNoThrowAsync\(/g)].length, 2, `${TMUX_LABELS} ${HELPER_NAME} should keep exactly two direct no-throw calls`)
+  // The v0.6.75 fixture/doc remain historical gate-only evidence; current source may include the later v0.6.76 authorized cutover.
+  for (const call of EXPECTED_SET_PANE_LABEL_CALLS) assert.equal(setPaneBody.includes(call), false, `${TMUX_LABELS} ${HELPER_NAME} direct TS fallback removed after authorized cutover`)
+  assertIncludes(setPaneBody, 'createAgentTeamKernelAdapter().setPaneLabelAsync(paneId, label, signal)', `${TMUX_LABELS} ${HELPER_NAME} uses v0.6.76 Go adapter delegation`)
+  assert.equal([...setPaneBody.matchAll(/runTmuxNoThrowAsync\(/g)].length, 0, `${TMUX_LABELS} ${HELPER_NAME} should not keep same-behavior direct TS no-throw calls after v0.6.76`)
 
   for (const call of EXPECTED_CLEAR_PANE_LABEL_CALLS) assertIncludes(clearPaneBody, call, `${TMUX_LABELS} ${CLEAR_HELPER_NAME}`)
   assert.equal(clearPaneBody.includes('createAgentTeamKernelAdapter'), false, `${TMUX_LABELS} ${CLEAR_HELPER_NAME} must not call Go`)
@@ -286,20 +285,21 @@ function assertCurrentTypescriptState(root) {
   assertIncludes(syncBody, 'await setPaneLabel(member.paneId', `${TMUX_LABELS} ${ORCHESTRATOR_NAME}`)
   assertIncludes(syncBody, 'formatLeaderPaneLabel(team)', `${TMUX_LABELS} ${ORCHESTRATOR_NAME} leader labels`)
   assertIncludes(syncBody, 'formatMemberPaneLabel(member)', `${TMUX_LABELS} ${ORCHESTRATOR_NAME} member labels`)
-  assert.equal(syncBody.includes('setPaneLabelAsync'), false, `${TMUX_LABELS} ${ORCHESTRATOR_NAME} must not call future Go adapter`)
+  assert.equal(syncBody.includes('setPaneLabelAsync'), false, `${TMUX_LABELS} ${ORCHESTRATOR_NAME} remains TS-owned orchestration and should only call the private helper`)
 
   assertIncludes(refreshBody, 'createAgentTeamKernelAdapter().refreshWindowPaneLabelsAsync(target, signal)', `${TMUX_LABELS} refreshWindowPaneLabels v0.6.74 delegation preserved`)
   assertIncludes(markBody, 'createAgentTeamKernelAdapter().markWindowAsAgentTeamAsync(target, signal)', `${TMUX_LABELS} markWindowAsAgentTeam v0.6.72 delegation preserved`)
-  assert.equal(kernelSource.includes('setPaneLabelAsync'), false, `${KERNEL} must not add setPaneLabelAsync in gate-only slice`)
-  assert.equal(kernelSource.includes("operation: 'setPaneLabel'"), false, `${KERNEL} must not add workerLifecycle setPaneLabel in gate-only slice`)
-  assert.equal(kernelSource.includes('AgentTeamKernelPaneLabelSetting'), false, `${KERNEL} must not add pane label result type in gate-only slice`)
+  assertIncludes(kernelSource, 'setPaneLabelAsync(paneId: string, label: string, signal?: AbortSignal): Promise<AgentTeamKernelPaneLabelSetting>', `${KERNEL} v0.6.76 setPaneLabelAsync adapter`)
+  assertIncludes(kernelSource, "operation: 'setPaneLabel'", `${KERNEL} v0.6.76 workerLifecycle setPaneLabel operation`)
+  assertIncludes(kernelSource, 'AgentTeamKernelPaneLabelSetting', `${KERNEL} v0.6.76 pane label result type`)
 }
 
 function assertGoRuntimeAndCommandSurface(root) {
   const goSource = read(root, GO_SOURCE)
   assert.deepEqual(parseGoCapabilities(goSource), [...ACTIVE_CAPABILITIES])
   for (const operation of ACTIVE_OPERATIONS) assert.match(goSource, new RegExp(`case "${operation}"`), `${GO_SOURCE} should keep current operation ${operation}`)
-  for (const snippet of FORBIDDEN_CURRENT_GO_TMUX_SNIPPETS) assert.equal(goSource.includes(snippet), false, `${GO_SOURCE} must not include ${snippet}`)
+  assert.match(goSource, /case "setPaneLabel"/, `${GO_SOURCE} should include later v0.6.76 setPaneLabel`)
+  assert.equal(goSource.includes('exec.CommandContext(ctx, "tmux", "set-option", "-up"'), false, `${GO_SOURCE} must not migrate pane label clearing`)
 
   assertIncludes(goSource, 'func markWindowAsAgentTeam(params map[string]any) workerWindowMarkingResult', `${GO_SOURCE} markWindowAsAgentTeam preserved`)
   assertIncludes(goSource, 'runWindowMarkingSetOption(target, "automatic-rename", "off")', `${GO_SOURCE} automatic-rename mark command`)
@@ -312,10 +312,10 @@ function assertGoRuntimeAndCommandSurface(root) {
   assertIncludes(goSource, 'runWindowPaneLabelsSetOption(target, "pane-border-format", "#{?@agentteam-name,#{@agentteam-name},#{pane_title}}")', `${GO_SOURCE} pane-border-format refresh command`)
   assert.equal([...goSource.matchAll(/runWindowPaneLabelsSetOption\(target,/g)].length, 2, `${GO_SOURCE} should keep exactly two pane-border refresh mutations`)
 
-  assert.equal(goSource.includes('exec.CommandContext(ctx, "tmux", "select-pane"'), false, `${GO_SOURCE} must not migrate pane title setting`)
-  assert.equal(goSource.includes('exec.CommandContext(ctx, "tmux", "set-option", "-p"'), false, `${GO_SOURCE} must not migrate pane label setting`)
+  assertIncludes(goSource, 'func setPaneLabel(params map[string]any) workerPaneLabelSettingResult', `${GO_SOURCE} later v0.6.76 setPaneLabel implementation`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-p", "-t", paneID, "@agentteam-name", label)', `${GO_SOURCE} later v0.6.76 pane label set-option`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)', `${GO_SOURCE} later v0.6.76 pane title setting`)
   assert.equal(goSource.includes('exec.CommandContext(ctx, "tmux", "set-option", "-up"'), false, `${GO_SOURCE} must not migrate pane label clearing`)
-  assert.equal(goSource.includes('setPaneLabel'), false, `${GO_SOURCE} must not add setPaneLabel operation/helper`)
 }
 
 function assertNativeArtifactUnchanged(root) {
@@ -323,20 +323,14 @@ function assertNativeArtifactUnchanged(root) {
   const provenance = JSON.parse(read(root, `${NATIVE_ROOT}/provenance.json`))
   const checksums = read(root, `${NATIVE_ROOT}/SHA256SUMS`)
   assert.equal(exists(root, NATIVE_ARTIFACT_SNAPSHOT.helperPath), true, 'existing native helper should remain present')
-  assert.equal(sha256(root, NATIVE_ARTIFACT_SNAPSHOT.helperPath), NATIVE_ARTIFACT_SNAPSHOT.helperSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/manifest.json`), NATIVE_ARTIFACT_SNAPSHOT.manifestSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/provenance.json`), NATIVE_ARTIFACT_SNAPSHOT.provenanceSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/attestation.intoto.jsonl`), NATIVE_ARTIFACT_SNAPSHOT.attestationSha256)
   assert.equal(manifest.artifact.path, NATIVE_ARTIFACT_SNAPSHOT.helperPath)
   assert.equal(manifest.artifact.filename, 'agentteam-tmuxSnapshotParse')
-  assert.equal(manifest.artifact.size, NATIVE_ARTIFACT_SNAPSHOT.helperSize)
-  assert.equal(manifest.artifact.sha256, NATIVE_ARTIFACT_SNAPSHOT.helperSha256)
-  assert.equal(manifest.source.revision, NATIVE_ARTIFACT_SNAPSHOT.sourceRevision)
-  assert.equal(provenance.source.revision, NATIVE_ARTIFACT_SNAPSHOT.sourceRevision)
+  assert.equal(provenance.source.path, 'kernel/go/agentteam-kernel')
   assert.deepEqual(manifest.capabilities, [...ACTIVE_CAPABILITIES])
-  assert.equal(JSON.stringify(manifest.smoke).includes('setPaneLabel'), false, 'native manifest smoke must not add setPaneLabel')
-  assert.equal(JSON.stringify(provenance.smoke).includes('setPaneLabel'), false, 'native provenance smoke must not add setPaneLabel')
-  assertIncludes(checksums, `${NATIVE_ARTIFACT_SNAPSHOT.helperSha256}  ${NATIVE_ARTIFACT_SNAPSHOT.helperPath}`, `${NATIVE_ROOT}/SHA256SUMS`)
+  assert.equal(manifest.smoke.workerLifecycleSetPaneLabel.ok, false, 'v0.6.76 native manifest includes setPaneLabel smoke')
+  assert.deepEqual(manifest.smoke.workerLifecycleSetPaneLabel.acceptedFailureKinds, ['invalid-pane-id'])
+  assert.equal(provenance.smoke.workerLifecycleSetPaneLabel.ok, false, 'v0.6.76 native provenance includes setPaneLabel smoke')
+  assertIncludes(checksums, `${NATIVE_ROOT}/agentteam-tmuxSnapshotParse`, `${NATIVE_ROOT}/SHA256SUMS`)
 }
 
 function assertPackageAndReleaseGuards(root) {

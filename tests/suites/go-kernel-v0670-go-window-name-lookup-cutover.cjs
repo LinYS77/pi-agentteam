@@ -235,7 +235,9 @@ function assertFacadeSource(root) {
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-windows", "-t", sessionName, "-F", workerLifecycleWindowNameFormat\)/, 'Go window-name lookup command must be exact')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-windows", "-t", sessionName, "-F", workerLifecycleAgentTeamWindowFormat\)/, 'v0.6.65 marked-window discovery remains exact')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-t", target, "-F", workerLifecycleWindowPaneFormat\)/, 'v0.6.69 first-pane source remains exact')
-  for (const command of FORBIDDEN_GO_TMUX_COMMANDS) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add ${command}`)
+  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => command !== 'select-pane')) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add ${command}`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)', `${GO_SOURCE} later v0.6.76 permits only narrow pane-title setPaneLabel select-pane`)
+  assert.equal(goSource.includes('exec.CommandContext(ctx, "tmux", "set-option", "-up"'), false, `${GO_SOURCE} must not add clearPaneLabel set-option -up`)
 
   assertIncludes(builderSource, 'runWorkerLifecycleFindWindowTargetByNameSmoke', BUILDER)
   assertIncludes(builderSource, 'workerLifecycleFindWindowTargetByName', BUILDER)

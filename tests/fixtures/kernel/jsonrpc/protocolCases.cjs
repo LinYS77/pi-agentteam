@@ -1,6 +1,7 @@
 const PROTOCOL_VERSION = 1
 const HELPER_VERSION = '0.3.0-read-model-shadow'
 const CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability']
+const RAW_LABEL_CANARY = 'jsonrpc raw pane label canary 🚫'
 
 const tmuxStdout = [
   '%pane-a\tsession:@1\tagentteam leader\tpi',
@@ -124,6 +125,10 @@ function validMethodCases() {
       request: request('workerLifecycle', { operation: 'sessionExists', sessionName: 'missing-fixture-session' }, 'worker-lifecycle-session-exists-string-id'),
     },
     {
+      name: 'worker lifecycle setPaneLabel invalid pane without raw label leakage',
+      request: request('workerLifecycle', { operation: 'setPaneLabel', paneId: 'invalid fixture pane', label: RAW_LABEL_CANARY }, 'worker-lifecycle-set-pane-label-string-id'),
+    },
+    {
       name: 'tmux availability',
       request: request('tmuxAvailability', undefined, 'tmux-availability-string-id'),
     },
@@ -234,6 +239,7 @@ function multipleRequestBatch() {
     request('workerLifecycle', { operation: 'findAgentTeamWindowTarget', sessionName: 'missing-batch-session' }, 'batch-worker-lifecycle-window-target'),
     request('workerLifecycle', { operation: 'findWindowTargetByName', sessionName: 'missing-batch-session', windowName: 'agentteam' }, 'batch-worker-lifecycle-window-name-target'),
     request('workerLifecycle', { operation: 'sessionExists', sessionName: 'missing-batch-session' }, 'batch-worker-lifecycle-session-exists'),
+    request('workerLifecycle', { operation: 'setPaneLabel', paneId: 'invalid batch pane', label: RAW_LABEL_CANARY }, 'batch-worker-lifecycle-set-pane-label'),
     request('tmuxAvailability', undefined, 'batch-tmux-availability'),
     { jsonrpc: '2.0', id: 'batch-unknown', method: 'unknownMethod' },
   ]
@@ -251,6 +257,7 @@ module.exports = {
   PROTOCOL_VERSION,
   HELPER_VERSION,
   CAPABILITIES,
+  RAW_LABEL_CANARY,
   tmuxStdout,
   compactReadModelInput,
   request,

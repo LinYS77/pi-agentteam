@@ -221,8 +221,10 @@ function assertFacadeAndAdapter(root) {
 
   assertIncludes(markBody, 'createAgentTeamKernelAdapter().markWindowAsAgentTeamAsync(target, signal)', `${TMUX_LABELS} markWindowAsAgentTeam Go delegation preserved`)
   assert.equal(markBody.includes('automatic-rename'), false, `${TMUX_LABELS} mark body should not keep TS fallback`)
-  assertIncludes(setPaneBody, "runTmuxNoThrowAsync(['set-option', '-p'", `${TMUX_LABELS} pane labels remain TS-owned`)
-  assertIncludes(setPaneBody, "runTmuxNoThrowAsync(['select-pane'", `${TMUX_LABELS} pane titles remain TS-owned`)
+  // v0.6.74 remains historical refresh cutover evidence; current source may include the later v0.6.76 setPaneLabel cutover.
+  assertIncludes(setPaneBody, 'createAgentTeamKernelAdapter().setPaneLabelAsync(paneId, label, signal)', `${TMUX_LABELS} pane label setting superseded by v0.6.76 Go cutover`)
+  assert.equal(setPaneBody.includes("runTmuxNoThrowAsync(['set-option', '-p'"), false, `${TMUX_LABELS} setPaneLabel direct TS set-option fallback removed by v0.6.76`)
+  assert.equal(setPaneBody.includes("runTmuxNoThrowAsync(['select-pane', '-t', paneId, '-T', label]"), false, `${TMUX_LABELS} setPaneLabel direct TS select-pane fallback removed by v0.6.76`)
   assertIncludes(clearPaneBody, "runTmuxNoThrowAsync(['set-option', '-up'", `${TMUX_LABELS} pane label clear remains TS-owned`)
   assertIncludes(clearPaneBody, "runTmuxNoThrowAsync(['select-pane'", `${TMUX_LABELS} pane title clear remains TS-owned`)
 
@@ -254,10 +256,10 @@ function assertGoRuntime(root) {
   }
   assert.equal([...goSource.matchAll(/runWindowMarkingSetOption\(target,/g)].length, EXISTING_MARK_WINDOW_TMUX_COMMANDS.length, `${GO_SOURCE} should keep exactly three mark set-option calls`)
 
-  for (const command of FORBIDDEN_GO_TMUX_COMMANDS) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add forbidden command ${command}`)
-  assert.equal(goSource.includes('set-option", "-p"'), false, `${GO_SOURCE} must not migrate pane labels`)
+  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => command !== 'select-pane')) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add forbidden command ${command}`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-p", "-t", paneID, "@agentteam-name", label)', `${GO_SOURCE} later v0.6.76 authorized pane label set-option`)
   assert.equal(goSource.includes('set-option", "-up"'), false, `${GO_SOURCE} must not migrate pane label clear`)
-  assert.equal(goSource.includes('select-pane'), false, `${GO_SOURCE} must not migrate pane titles`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)', `${GO_SOURCE} later v0.6.76 authorized pane title set`)
 }
 
 async function assertPublicNoThrowBehavior(distRoot) {

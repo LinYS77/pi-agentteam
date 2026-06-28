@@ -238,7 +238,9 @@ function assertFacadeSource(root) {
   assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, `${GO_SOURCE} must not add target-based display-message`)
   assert.equal(/"display-message",\s*"-p",\s*"#\{pane_id\}"/.test(goSource), false, 'Go must not split current pane id into separate display-message calls')
   assert.equal(/"display-message",\s*"-p",\s*"#\{session_name\}:#\{window_id\}"/.test(goSource), false, 'Go must not split current target into separate display-message calls')
-  for (const command of FORBIDDEN_GO_TMUX_COMMANDS) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add ${command}`)
+  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => command !== 'select-pane')) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add ${command}`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)', `${GO_SOURCE} later v0.6.76 permits only narrow pane-title setPaneLabel select-pane`)
+  assert.equal(goSource.includes('exec.CommandContext(ctx, "tmux", "set-option", "-up"'), false, `${GO_SOURCE} must not add clearPaneLabel set-option -up`)
 }
 
 function assertPackageAndNativeGuards(root) {

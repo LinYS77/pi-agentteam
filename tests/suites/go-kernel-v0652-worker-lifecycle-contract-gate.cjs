@@ -197,7 +197,9 @@ function assertRuntimeAndGoUnchanged(root) {
   assert.match(goSource, /case\s+"listAgentTeamPanes"/, 'workerLifecycle must activate listAgentTeamPanes')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'later v0.6.60 permits only narrow current-pane binding display-message')
   assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, `${GO_SOURCE} must not add target-based display-message`)
-  for (const command of BROAD_GO_LIFECYCLE_COMMANDS) assert.equal(goSource.includes(command), false, `${GO_SOURCE} must not add broad tmux lifecycle command ${command}`)
+  for (const command of BROAD_GO_LIFECYCLE_COMMANDS.filter(command => command !== 'select-pane')) assert.equal(goSource.includes(command), false, `${GO_SOURCE} must not add broad tmux lifecycle command ${command}`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)', `${GO_SOURCE} later v0.6.76 permits only narrow pane-title setPaneLabel select-pane`)
+  assert.equal(goSource.includes('exec.CommandContext(ctx, "tmux", "set-option", "-up"'), false, `${GO_SOURCE} must not add clearPaneLabel set-option -up`)
   assertIncludes(goSource, ALLOWED_GO_TMUX_COMMAND, GO_SOURCE)
 
   assertIncludes(kernel, "callHelper<unknown>('workerLifecycle', { operation: 'inspectPane'", KERNEL)

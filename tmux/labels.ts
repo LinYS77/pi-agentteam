@@ -56,8 +56,7 @@ export function formatLeaderPaneLabel(team: TeamState): string {
 }
 
 async function setPaneLabel(paneId: string, label: string, signal?: AbortSignal): Promise<void> {
-  await runTmuxNoThrowAsync(['set-option', '-p', '-t', paneId, '@agentteam-name', label], undefined, signal)
-  await runTmuxNoThrowAsync(['select-pane', '-t', paneId, '-T', label], undefined, signal)
+  await createAgentTeamKernelAdapter().setPaneLabelAsync(paneId, label, signal)
 }
 
 async function clearPaneLabel(paneId: string, signal?: AbortSignal): Promise<void> {
