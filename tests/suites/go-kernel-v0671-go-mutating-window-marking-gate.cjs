@@ -246,35 +246,38 @@ function assertDocs(root) {
   assertNoReleaseOverclaims(roadmap, ROADMAP)
 }
 
-function assertNoRuntimeMigration(root) {
+function assertAuthorizedRuntimeCutover(root) {
   const labelsSource = read(root, TMUX_LABELS)
   const kernelSource = read(root, KERNEL)
+  const goSource = read(root, GO_SOURCE)
   const markBody = functionBody(labelsSource, FACADE_NAME)
   const refreshBody = functionBody(labelsSource, 'refreshWindowPaneLabels')
 
   assertIncludes(markBody, `if (!await ${CURRENT_WINDOW_EXISTENCE_GUARD}) return`, `${TMUX_LABELS} window existence guard`)
+  assertIncludes(markBody, FUTURE_ADAPTER_DELEGATION, `${TMUX_LABELS} authorized adapter delegation`)
   for (const command of CURRENT_TYPESCRIPT_COMMAND_SURFACE) {
-    assertIncludes(markBody, command.runTmuxNoThrowAsyncCall, `${TMUX_LABELS} current TS command surface`)
+    assert.equal(markBody.includes(command.runTmuxNoThrowAsyncCall), false, `${TMUX_LABELS} direct TS marking fallback should be gone after the authorized cutover`)
   }
-  assert.equal(markBody.includes('createAgentTeamKernelAdapter'), false, `${TMUX_LABELS} must not implement future Go adapter in this gate`)
-  assert.equal(markBody.includes('markWindowAsAgentTeamAsync'), false, `${TMUX_LABELS} must not add runtime mutation adapter in this gate`)
-  assert.equal(kernelSource.includes('markWindowAsAgentTeamAsync'), false, `${KERNEL} must not add runtime mutation adapter in this gate`)
-  assert.equal(kernelSource.includes(`operation: '${FUTURE_OPERATION}'`), false, `${KERNEL} must not add workerLifecycle ${FUTURE_OPERATION} operation in this gate`)
+  assertIncludes(kernelSource, 'markWindowAsAgentTeamAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowMarking>', `${KERNEL} runtime mutation adapter`)
+  assertIncludes(kernelSource, "callHelperAsync<unknown>('workerLifecycle', { operation: 'markWindowAsAgentTeam', target: requestedTarget }, signal)", `${KERNEL} workerLifecycle ${FUTURE_OPERATION}`)
+
+  assert.deepEqual(parseGoCapabilities(goSource), [...ACTIVE_CAPABILITIES])
+  for (const operation of ACTIVE_OPERATIONS) assert.match(goSource, new RegExp(`case "${operation}"`), `${GO_SOURCE} should keep active read-only operation ${operation}`)
+  assert.match(goSource, new RegExp(`case "${FUTURE_OPERATION}"`), `${GO_SOURCE} should implement the gate-authorized ${FUTURE_OPERATION}`)
+  assertIncludes(goSource, 'func markWindowAsAgentTeam(params map[string]any) workerWindowMarkingResult', `${GO_SOURCE} mark runtime implementation`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-w", "-t", target, option, value)', `${GO_SOURCE} authorized set-option helper`)
+  for (const command of AUTHORIZED_FUTURE_TMUX_COMMANDS) {
+    assertIncludes(goSource, `"${command.option}"`, `${GO_SOURCE} authorized option ${command.option}`)
+    assertIncludes(goSource, `"${command.value}"`, `${GO_SOURCE} authorized value ${command.value}`)
+  }
+  assert.equal(goSource.includes('pane-border-status'), false, `${GO_SOURCE} must not migrate refreshWindowPaneLabels pane-border-status`)
+  assert.equal(goSource.includes('pane-border-format'), false, `${GO_SOURCE} must not migrate refreshWindowPaneLabels pane-border-format`)
+  for (const snippet of REQUIRED_GO_READ_ONLY_COMMAND_SNIPPETS) assertIncludes(goSource, snippet, `${GO_SOURCE} current read-only command surface`)
+  for (const command of FORBIDDEN_CURRENT_GO_TMUX_COMMANDS.filter(command => command !== 'set-option')) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add forbidden tmux command ${command}`)
 
   assertIncludes(refreshBody, "runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'pane-border-status', 'top']", 'refreshWindowPaneLabels remains TS-owned')
   assertIncludes(refreshBody, "runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'pane-border-format'", 'refreshWindowPaneLabels remains TS-owned')
   assert.equal(refreshBody.includes('createAgentTeamKernelAdapter'), false, 'refreshWindowPaneLabels must not be migrated by the window-marking gate')
-}
-
-function assertCurrentGoStillHasNoMutatingTmuxCommands(root) {
-  const goSource = read(root, GO_SOURCE)
-  assert.deepEqual(parseGoCapabilities(goSource), [...ACTIVE_CAPABILITIES])
-  for (const operation of ACTIVE_OPERATIONS) assert.match(goSource, new RegExp(`case "${operation}"`), `${GO_SOURCE} should keep active read-only operation ${operation}`)
-  assert.equal(goSource.includes(`case "${FUTURE_OPERATION}"`), false, `${GO_SOURCE} must not implement ${FUTURE_OPERATION} in this gate`)
-  assert.equal(goSource.includes('markWindowAsAgentTeam'), false, `${GO_SOURCE} must not mention markWindowAsAgentTeam runtime implementation yet`)
-  assert.equal(/TmuxMutation:\s*true/.test(goSource), false, `${GO_SOURCE} must not return tmuxMutation true before an explicit runtime mutating slice`)
-  for (const snippet of REQUIRED_GO_READ_ONLY_COMMAND_SNIPPETS) assertIncludes(goSource, snippet, `${GO_SOURCE} current read-only command surface`)
-  for (const command of FORBIDDEN_CURRENT_GO_TMUX_COMMANDS) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add mutating tmux command ${command}`)
 }
 
 function assertPackageAndNativeGuards(root) {
@@ -299,8 +302,7 @@ module.exports = {
     const root = env.helpers.extRoot
     assertFixtureShape(root)
     assertDocs(root)
-    assertNoRuntimeMigration(root)
-    assertCurrentGoStillHasNoMutatingTmuxCommands(root)
+    assertAuthorizedRuntimeCutover(root)
     assertPackageAndNativeGuards(root)
   },
 }

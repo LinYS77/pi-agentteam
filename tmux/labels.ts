@@ -1,3 +1,4 @@
+import { createAgentTeamKernelAdapter } from '../core/kernel.js'
 import type { WorkerHealth } from '../core/publicModel.js'
 import type { TeamMember, TeamState } from '../internalTypes.js'
 import { projectTeamMemberHealth } from '../runtime/memberHealth.js'
@@ -66,9 +67,7 @@ async function clearPaneLabel(paneId: string, signal?: AbortSignal): Promise<voi
 
 async function markWindowAsAgentTeam(target: string, signal?: AbortSignal): Promise<void> {
   if (!await windowExists(target, signal)) return
-  await runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'automatic-rename', 'off'], undefined, signal)
-  await runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'allow-rename', 'off'], undefined, signal)
-  await runTmuxNoThrowAsync(['set-option', '-w', '-t', target, '@agentteam-window', '1'], undefined, signal)
+  await createAgentTeamKernelAdapter().markWindowAsAgentTeamAsync(target, signal)
 }
 
 async function refreshWindowPaneLabels(target: string, signal?: AbortSignal): Promise<void> {

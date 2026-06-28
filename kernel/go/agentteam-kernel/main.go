@@ -222,6 +222,23 @@ type workerSessionExistenceResult struct {
 	TmuxMutation      bool   `json:"tmuxMutation"`
 }
 
+type workerWindowMarkingResult struct {
+	OK                bool   `json:"ok"`
+	Operation         string `json:"operation"`
+	Capability        string `json:"capability"`
+	Target            string `json:"target"`
+	Marked            bool   `json:"marked"`
+	Status            string `json:"status,omitempty"`
+	Marker            string `json:"resultMarker,omitempty"`
+	Failure           string `json:"failureKind,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Error             string `json:"error,omitempty"`
+	ReadOnly          bool   `json:"readOnly"`
+	StateFilesRead    bool   `json:"stateFilesRead"`
+	StateFilesWritten bool   `json:"stateFilesWritten"`
+	TmuxMutation      bool   `json:"tmuxMutation"`
+}
+
 type tmuxAvailabilityResult struct {
 	OK                bool   `json:"ok"`
 	Capability        string `json:"capability"`
@@ -270,6 +287,7 @@ func profile(params map[string]any) profileResult {
 			"workerLifecycleFindAgentTeamWindowTargetConnected": true,
 			"workerLifecycleFindWindowTargetByNameConnected":    true,
 			"workerLifecycleSessionExistsConnected":             true,
+			"workerLifecycleMarkWindowAsAgentTeamConnected":     true,
 			"tmuxAvailabilityConnected":                         true,
 			"panelConnected":                                    false,
 			"taskReportPlanRunConnected":                        false,
@@ -1006,6 +1024,76 @@ func sessionExists(params map[string]any) workerSessionExistenceResult {
 	}
 }
 
+func unavailableWindowMarking(target string, kind string) workerWindowMarkingResult {
+	safeTarget := compactTmuxWindowTarget(target)
+	reason := "Go worker lifecycle markWindowAsAgentTeam unavailable (" + kind + ")"
+	return workerWindowMarkingResult{
+		OK:                false,
+		Operation:         "markWindowAsAgentTeam",
+		Capability:        "workerLifecycle",
+		Target:            safeTarget,
+		Marked:            false,
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
+func runWindowMarkingSetOption(target string, option string, value string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "set-option", "-w", "-t", target, option, value)
+	cmd.Env = os.Environ()
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "tmux-command-timeout"
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return "tmux-unavailable"
+		}
+		return "tmux-command-failed"
+	}
+	return ""
+}
+
+func markWindowAsAgentTeam(params map[string]any) workerWindowMarkingResult {
+	target := compactTmuxWindowTarget(stringParam(params, "target"))
+	if target == "" {
+		return unavailableWindowMarking("", "invalid-target")
+	}
+	failureKind := ""
+	if kind := runWindowMarkingSetOption(target, "automatic-rename", "off"); kind != "" && failureKind == "" {
+		failureKind = kind
+	}
+	if kind := runWindowMarkingSetOption(target, "allow-rename", "off"); kind != "" && failureKind == "" {
+		failureKind = kind
+	}
+	if kind := runWindowMarkingSetOption(target, "@agentteam-window", "1"); kind != "" && failureKind == "" {
+		failureKind = kind
+	}
+	if failureKind != "" {
+		return unavailableWindowMarking(target, failureKind)
+	}
+	return workerWindowMarkingResult{
+		OK:                true,
+		Operation:         "markWindowAsAgentTeam",
+		Capability:        "workerLifecycle",
+		Target:            target,
+		Marked:            true,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
 func workerLifecycle(params map[string]any) any {
 	operation := stringParam(params, "operation")
 	switch operation {
@@ -1023,6 +1111,8 @@ func workerLifecycle(params map[string]any) any {
 		return findWindowTargetByName(params)
 	case "sessionExists":
 		return sessionExists(params)
+	case "markWindowAsAgentTeam":
+		return markWindowAsAgentTeam(params)
 	default:
 		return unavailableWorkerPaneInspection(strings.TrimSpace(stringParam(params, "paneId")), "unsupported-operation")
 	}

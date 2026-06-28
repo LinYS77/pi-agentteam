@@ -100,6 +100,7 @@ module.exports = {
     assert.equal(defaultProfile.profile.workerLifecycleFindAgentTeamWindowTargetConnected, true)
     assert.equal(defaultProfile.profile.workerLifecycleFindWindowTargetByNameConnected, true)
     assert.equal(defaultProfile.profile.workerLifecycleSessionExistsConnected, true)
+    assert.equal(defaultProfile.profile.workerLifecycleMarkWindowAsAgentTeamConnected, true)
     assert.equal(defaultProfile.profile.tmuxAvailabilityConnected, true)
     assert.equal(defaultProfile.profile.panelConnected, false)
     assert.equal(defaultProfile.profile.taskReportPlanRunConnected, false)
@@ -181,6 +182,12 @@ module.exports = {
             assert.equal((text.match(/core\/kernel\.js/g) || []).length, 1, `${rel} must not add more Go kernel imports`)
             continue
           }
+          if (rel === 'tmux/labels.ts') {
+            assert.equal(text.includes("import { createAgentTeamKernelAdapter } from '../core/kernel.js'"), true, `${rel} must keep only the approved window marking seam`)
+            assert.equal(text.includes('createAgentTeamKernelAdapter().markWindowAsAgentTeamAsync(target, signal)'), true, `${rel} must use the approved markWindowAsAgentTeam seam`)
+            assert.equal((text.match(/core\/kernel\.js/g) || []).length, 1, `${rel} must not add more Go kernel imports`)
+            continue
+          }
           assert.equal(text.includes('core/kernel.js'), false, `${rel} must not import Go kernel skeleton`)
           assert.equal(text.includes('../core/kernel.js'), false, `${rel} must not import Go kernel skeleton`)
           assert.equal(text.includes('../../core/kernel.js'), false, `${rel} must not import Go kernel skeleton`)
@@ -202,6 +209,7 @@ module.exports = {
     assert.match(goSource, /case "findAgentTeamWindowTarget"/)
     assert.match(goSource, /case "findWindowTargetByName"/)
     assert.match(goSource, /case "sessionExists"/)
+    assert.match(goSource, /case "markWindowAsAgentTeam"/)
     assert.match(goSource, /BusinessPathsConnected: false/)
 
     if (hasGoToolchain()) {
@@ -238,6 +246,7 @@ module.exports = {
       assert.equal(profile.result.profile.workerLifecycleFindAgentTeamWindowTargetConnected, true)
       assert.equal(profile.result.profile.workerLifecycleFindWindowTargetByNameConnected, true)
       assert.equal(profile.result.profile.workerLifecycleSessionExistsConnected, true)
+      assert.equal(profile.result.profile.workerLifecycleMarkWindowAsAgentTeamConnected, true)
       assert.equal(profile.result.profile.tmuxAvailabilityConnected, true)
       assert.equal(profile.result.profile.panelConnected, false)
       assert.equal(profile.result.profile.taskReportPlanRunConnected, false)

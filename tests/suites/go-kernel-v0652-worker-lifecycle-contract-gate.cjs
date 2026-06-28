@@ -33,7 +33,6 @@ const BROAD_GO_LIFECYCLE_COMMANDS = [
   'split-window',
   'new-window',
   'kill-pane',
-  'set-option',
   'set-window-option',
   'select-pane',
   'respawn-pane',

@@ -28,7 +28,6 @@ const FORBIDDEN_GO_TMUX_COMMANDS = Object.freeze([
   'split-window',
   'new-window',
   'kill-pane',
-  'set-option',
   'set-window-option',
   'select-pane',
   'respawn-pane',
