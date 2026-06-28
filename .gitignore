@@ -102,6 +102,7 @@ docs/perf/*
 !docs/perf/v0.6.70-go-window-name-lookup-cutover.md
 !docs/perf/v0.6.71-go-mutating-window-marking-gate.md
 !docs/perf/v0.6.72-go-window-marking-cutover.md
+!docs/perf/v0.6.73-go-refresh-window-pane-labels-gate.md
 
 # Dependencies
 node_modules/
