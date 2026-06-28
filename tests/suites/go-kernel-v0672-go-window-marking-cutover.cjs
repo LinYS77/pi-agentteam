@@ -213,9 +213,10 @@ function assertFacadeAndAdapter(root) {
   assert.equal(markBody.includes('allow-rename'), false, `${TMUX_LABELS} mark body should not keep allow-rename implementation`)
   assert.equal(markBody.includes('@agentteam-window'), false, `${TMUX_LABELS} mark body should not keep marker implementation`)
 
-  assertIncludes(refreshBody, "runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'pane-border-status', 'top']", 'refreshWindowPaneLabels remains TS-owned')
-  assertIncludes(refreshBody, "runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'pane-border-format'", 'refreshWindowPaneLabels remains TS-owned')
-  assert.equal(refreshBody.includes('createAgentTeamKernelAdapter'), false, 'refreshWindowPaneLabels must not migrate in v0.6.72')
+  assertIncludes(refreshBody, 'if (!await windowExists(target, signal)) return', 'refreshWindowPaneLabels keeps window guard after v0.6.74')
+  assertIncludes(refreshBody, 'createAgentTeamKernelAdapter().refreshWindowPaneLabelsAsync(target, signal)', 'refreshWindowPaneLabels is superseded by v0.6.74 Go cutover')
+  assert.equal(refreshBody.includes("runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'pane-border-status', 'top']"), false, 'refreshWindowPaneLabels direct TS pane-border-status fallback removed by v0.6.74')
+  assert.equal(refreshBody.includes("runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'pane-border-format'"), false, 'refreshWindowPaneLabels direct TS pane-border-format fallback removed by v0.6.74')
 
   assertIncludes(kernelSource, 'export type AgentTeamKernelWindowMarking', KERNEL)
   assertIncludes(kernelSource, 'markWindowAsAgentTeamAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowMarking>', KERNEL)
@@ -237,8 +238,9 @@ function assertGoRuntime(root) {
   for (const command of AUTHORIZED_TMUX_COMMANDS) {
     assertIncludes(goSource, `runWindowMarkingSetOption(target, "${command.option}", "${command.value}")`, `${GO_SOURCE} authorized ${command.option}`)
   }
-  assert.equal(goSource.includes('pane-border-status'), false, `${GO_SOURCE} must not migrate refreshWindowPaneLabels pane-border-status`)
-  assert.equal(goSource.includes('pane-border-format'), false, `${GO_SOURCE} must not migrate refreshWindowPaneLabels pane-border-format`)
+  assertIncludes(goSource, 'func refreshWindowPaneLabels(params map[string]any) workerWindowPaneLabelsRefreshResult', `${GO_SOURCE} v0.6.74 refresh runtime implementation`)
+  assertIncludes(goSource, 'runWindowPaneLabelsSetOption(target, "pane-border-status", "top")', `${GO_SOURCE} v0.6.74 authorized pane-border-status`)
+  assertIncludes(goSource, 'runWindowPaneLabelsSetOption(target, "pane-border-format", "#{?@agentteam-name,#{@agentteam-name},#{pane_title}}")', `${GO_SOURCE} v0.6.74 authorized pane-border-format`)
   for (const command of FORBIDDEN_GO_TMUX_COMMANDS) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add forbidden command ${command}`)
 }
 

@@ -239,6 +239,23 @@ type workerWindowMarkingResult struct {
 	TmuxMutation      bool   `json:"tmuxMutation"`
 }
 
+type workerWindowPaneLabelsRefreshResult struct {
+	OK                bool   `json:"ok"`
+	Operation         string `json:"operation"`
+	Capability        string `json:"capability"`
+	Target            string `json:"target"`
+	Refreshed         bool   `json:"refreshed"`
+	Status            string `json:"status,omitempty"`
+	Marker            string `json:"resultMarker,omitempty"`
+	Failure           string `json:"failureKind,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Error             string `json:"error,omitempty"`
+	ReadOnly          bool   `json:"readOnly"`
+	StateFilesRead    bool   `json:"stateFilesRead"`
+	StateFilesWritten bool   `json:"stateFilesWritten"`
+	TmuxMutation      bool   `json:"tmuxMutation"`
+}
+
 type tmuxAvailabilityResult struct {
 	OK                bool   `json:"ok"`
 	Capability        string `json:"capability"`
@@ -288,6 +305,7 @@ func profile(params map[string]any) profileResult {
 			"workerLifecycleFindWindowTargetByNameConnected":    true,
 			"workerLifecycleSessionExistsConnected":             true,
 			"workerLifecycleMarkWindowAsAgentTeamConnected":     true,
+			"workerLifecycleRefreshWindowPaneLabelsConnected":   true,
 			"tmuxAvailabilityConnected":                         true,
 			"panelConnected":                                    false,
 			"taskReportPlanRunConnected":                        false,
@@ -1094,6 +1112,73 @@ func markWindowAsAgentTeam(params map[string]any) workerWindowMarkingResult {
 	}
 }
 
+func unavailableWindowPaneLabelsRefresh(target string, kind string) workerWindowPaneLabelsRefreshResult {
+	safeTarget := compactTmuxWindowTarget(target)
+	reason := "Go worker lifecycle refreshWindowPaneLabels unavailable (" + kind + ")"
+	return workerWindowPaneLabelsRefreshResult{
+		OK:                false,
+		Operation:         "refreshWindowPaneLabels",
+		Capability:        "workerLifecycle",
+		Target:            safeTarget,
+		Refreshed:         false,
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
+func runWindowPaneLabelsSetOption(target string, option string, value string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "set-option", "-w", "-t", target, option, value)
+	cmd.Env = os.Environ()
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "tmux-command-timeout"
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return "tmux-unavailable"
+		}
+		return "tmux-command-failed"
+	}
+	return ""
+}
+
+func refreshWindowPaneLabels(params map[string]any) workerWindowPaneLabelsRefreshResult {
+	target := compactTmuxWindowTarget(stringParam(params, "target"))
+	if target == "" {
+		return unavailableWindowPaneLabelsRefresh("", "invalid-target")
+	}
+	failureKind := ""
+	if kind := runWindowPaneLabelsSetOption(target, "pane-border-status", "top"); kind != "" && failureKind == "" {
+		failureKind = kind
+	}
+	if kind := runWindowPaneLabelsSetOption(target, "pane-border-format", "#{?@agentteam-name,#{@agentteam-name},#{pane_title}}"); kind != "" && failureKind == "" {
+		failureKind = kind
+	}
+	if failureKind != "" {
+		return unavailableWindowPaneLabelsRefresh(target, failureKind)
+	}
+	return workerWindowPaneLabelsRefreshResult{
+		OK:                true,
+		Operation:         "refreshWindowPaneLabels",
+		Capability:        "workerLifecycle",
+		Target:            target,
+		Refreshed:         true,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
 func workerLifecycle(params map[string]any) any {
 	operation := stringParam(params, "operation")
 	switch operation {
@@ -1113,6 +1198,8 @@ func workerLifecycle(params map[string]any) any {
 		return sessionExists(params)
 	case "markWindowAsAgentTeam":
 		return markWindowAsAgentTeam(params)
+	case "refreshWindowPaneLabels":
+		return refreshWindowPaneLabels(params)
 	default:
 		return unavailableWorkerPaneInspection(strings.TrimSpace(stringParam(params, "paneId")), "unsupported-operation")
 	}

@@ -270,14 +270,16 @@ function assertAuthorizedRuntimeCutover(root) {
     assertIncludes(goSource, `"${command.option}"`, `${GO_SOURCE} authorized option ${command.option}`)
     assertIncludes(goSource, `"${command.value}"`, `${GO_SOURCE} authorized value ${command.value}`)
   }
-  assert.equal(goSource.includes('pane-border-status'), false, `${GO_SOURCE} must not migrate refreshWindowPaneLabels pane-border-status`)
-  assert.equal(goSource.includes('pane-border-format'), false, `${GO_SOURCE} must not migrate refreshWindowPaneLabels pane-border-format`)
+  assertIncludes(goSource, 'func refreshWindowPaneLabels(params map[string]any) workerWindowPaneLabelsRefreshResult', `${GO_SOURCE} later v0.6.74 refresh runtime implementation`)
+  assertIncludes(goSource, 'runWindowPaneLabelsSetOption(target, "pane-border-status", "top")', `${GO_SOURCE} later v0.6.74 authorized pane-border-status`)
+  assertIncludes(goSource, 'runWindowPaneLabelsSetOption(target, "pane-border-format", "#{?@agentteam-name,#{@agentteam-name},#{pane_title}}")', `${GO_SOURCE} later v0.6.74 authorized pane-border-format`)
   for (const snippet of REQUIRED_GO_READ_ONLY_COMMAND_SNIPPETS) assertIncludes(goSource, snippet, `${GO_SOURCE} current read-only command surface`)
   for (const command of FORBIDDEN_CURRENT_GO_TMUX_COMMANDS.filter(command => command !== 'set-option')) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add forbidden tmux command ${command}`)
 
-  assertIncludes(refreshBody, "runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'pane-border-status', 'top']", 'refreshWindowPaneLabels remains TS-owned')
-  assertIncludes(refreshBody, "runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'pane-border-format'", 'refreshWindowPaneLabels remains TS-owned')
-  assert.equal(refreshBody.includes('createAgentTeamKernelAdapter'), false, 'refreshWindowPaneLabels must not be migrated by the window-marking gate')
+  assertIncludes(refreshBody, `if (!await ${CURRENT_WINDOW_EXISTENCE_GUARD}) return`, 'refreshWindowPaneLabels keeps window guard after later cutover')
+  assertIncludes(refreshBody, 'createAgentTeamKernelAdapter().refreshWindowPaneLabelsAsync(target, signal)', 'refreshWindowPaneLabels is superseded by v0.6.74 Go cutover')
+  assert.equal(refreshBody.includes("runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'pane-border-status', 'top']"), false, 'refreshWindowPaneLabels direct TS pane-border-status fallback removed after later cutover')
+  assert.equal(refreshBody.includes("runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'pane-border-format'"), false, 'refreshWindowPaneLabels direct TS pane-border-format fallback removed after later cutover')
 }
 
 function assertPackageAndNativeGuards(root) {

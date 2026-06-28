@@ -78,6 +78,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.workerLifecycleFindWindowTargetByNameConnected, true)
   assert.equal(result.profile.workerLifecycleSessionExistsConnected, true)
   assert.equal(result.profile.workerLifecycleMarkWindowAsAgentTeamConnected, true)
+  assert.equal(result.profile.workerLifecycleRefreshWindowPaneLabelsConnected, true)
   assert.equal(result.profile.tmuxAvailabilityConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)

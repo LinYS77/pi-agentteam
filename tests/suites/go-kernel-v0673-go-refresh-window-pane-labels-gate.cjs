@@ -251,36 +251,38 @@ function assertGatePreservesCurrentState(root) {
   const refreshBody = functionBody(labelsSource, FACADE_NAME)
   const markBody = functionBody(labelsSource, 'markWindowAsAgentTeam')
 
-  // refreshWindowPaneLabels is still TS-owned with direct set-option calls
+  // The v0.6.73 fixture/doc remain historical gate-only evidence; current source may include the later v0.6.74 authorized cutover.
   assertIncludes(refreshBody, `if (!await ${CURRENT_WINDOW_EXISTENCE_GUARD}) return`, `${TMUX_LABELS} window guard for refreshWindowPaneLabels`)
+  assertIncludes(refreshBody, FUTURE_ADAPTER_DELEGATION, `${TMUX_LABELS} authorized v0.6.74 adapter delegation`)
   for (const command of CURRENT_TYPESCRIPT_COMMAND_SURFACE) {
-    assertIncludes(refreshBody, command.runTmuxNoThrowAsyncCall, `${TMUX_LABELS} current TS refreshWindowPaneLabels ${command.option}`)
+    assert.equal(refreshBody.includes(command.runTmuxNoThrowAsyncCall), false, `${TMUX_LABELS} direct TS refreshWindowPaneLabels fallback removed after authorized cutover`)
   }
-  assert.equal(refreshBody.includes('createAgentTeamKernelAdapter'), false, 'refreshWindowPaneLabels must not call Go adapter in this gate')
 
   // markWindowAsAgentTeam remains cut over (v0.6.72 state)
   assertIncludes(markBody, `if (!await windowExists(target, signal)) return`, `${TMUX_LABELS} markWindowAsAgentTeam window guard preserved`)
   assertIncludes(markBody, 'createAgentTeamKernelAdapter().markWindowAsAgentTeamAsync(target, signal)', `${TMUX_LABELS} markWindowAsAgentTeam Go delegation preserved`)
   assert.equal(markBody.includes("automatic-rename"), false, `${TMUX_LABELS} markWindowAsAgentTeam should not keep TS fallback`)
 
-  // Go source: still has markWindowAsAgentTeam, not refreshWindowPaneLabels
+  // Go source: markWindowAsAgentTeam plus the later v0.6.74 refreshWindowPaneLabels cutover.
   assert.deepEqual(parseGoCapabilities(goSource), [...ACTIVE_CAPABILITIES])
   for (const operation of ACTIVE_OPERATIONS) assert.match(goSource, new RegExp(`case "${operation}"`), `${GO_SOURCE} should keep active operation ${operation}`)
   assert.match(goSource, /case "markWindowAsAgentTeam"/, `${GO_SOURCE} should keep markWindowAsAgentTeam`)
+  assert.match(goSource, /case "refreshWindowPaneLabels"/, `${GO_SOURCE} should include v0.6.74 refreshWindowPaneLabels`)
   assertIncludes(goSource, 'func markWindowAsAgentTeam(params map[string]any) workerWindowMarkingResult', `${GO_SOURCE} markWindowAsAgentTeam implementation`)
   assertIncludes(goSource, 'func runWindowMarkingSetOption(target string, option string, value string) string', `${GO_SOURCE} runWindowMarkingSetOption implementation`)
-  assert.equal(goSource.includes('refreshWindowPaneLabels'), false, `${GO_SOURCE} must not implement refreshWindowPaneLabels`)
-  assert.equal(goSource.includes('pane-border-status'), false, `${GO_SOURCE} must not contain pane-border-status`)
-  assert.equal(goSource.includes('pane-border-format'), false, `${GO_SOURCE} must not contain pane-border-format`)
+  assertIncludes(goSource, 'func refreshWindowPaneLabels(params map[string]any) workerWindowPaneLabelsRefreshResult', `${GO_SOURCE} refreshWindowPaneLabels implementation`)
+  assertIncludes(goSource, 'runWindowPaneLabelsSetOption(target, "pane-border-status", "top")', `${GO_SOURCE} authorized pane-border-status`)
+  assertIncludes(goSource, 'runWindowPaneLabelsSetOption(target, "pane-border-format", "#{?@agentteam-name,#{@agentteam-name},#{pane_title}}")', `${GO_SOURCE} authorized pane-border-format`)
   for (const snippet of REQUIRED_GO_READ_ONLY_COMMAND_SNIPPETS) assertIncludes(goSource, snippet, `${GO_SOURCE} current read-only command surface`)
   for (const command of FORBIDDEN_CURRENT_GO_TMUX_COMMANDS) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add forbidden command ${command}`)
 
-  // Kernel adapter: has markWindowAsAgentTeamAsync, not refreshWindowPaneLabelsAsync
+  // Kernel adapter: markWindowAsAgentTeamAsync plus v0.6.74 refreshWindowPaneLabelsAsync.
   assertIncludes(kernelSource, 'markWindowAsAgentTeamAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowMarking>', `${KERNEL} markWindowAsAgentTeamAsync adapter`)
   assertIncludes(kernelSource, "operation: 'markWindowAsAgentTeam'", `${KERNEL} markWindowAsAgentTeam operation`)
   assertIncludes(kernelSource, 'workerLifecycleMarkWindowAsAgentTeamConnected', `${KERNEL} markWindowAsAgentTeam profile flag`)
-  assert.equal(kernelSource.includes('refreshWindowPaneLabelsAsync'), false, `${KERNEL} must not have refreshWindowPaneLabelsAsync adapter`)
-  assert.equal(kernelSource.includes("operation: 'refreshWindowPaneLabels'"), false, `${KERNEL} must not have refreshWindowPaneLabels operation`)
+  assertIncludes(kernelSource, 'refreshWindowPaneLabelsAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowPaneLabelsRefresh>', `${KERNEL} refreshWindowPaneLabelsAsync adapter`)
+  assertIncludes(kernelSource, "operation: 'refreshWindowPaneLabels'", `${KERNEL} refreshWindowPaneLabels operation`)
+  assertIncludes(kernelSource, 'workerLifecycleRefreshWindowPaneLabelsConnected', `${KERNEL} refreshWindowPaneLabels profile flag`)
 }
 
 function assertPackageAndNativeGuards(root) {

@@ -72,8 +72,7 @@ async function markWindowAsAgentTeam(target: string, signal?: AbortSignal): Prom
 
 async function refreshWindowPaneLabels(target: string, signal?: AbortSignal): Promise<void> {
   if (!await windowExists(target, signal)) return
-  await runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'pane-border-status', 'top'], undefined, signal)
-  await runTmuxNoThrowAsync(['set-option', '-w', '-t', target, 'pane-border-format', '#{?@agentteam-name,#{@agentteam-name},#{pane_title}}'], undefined, signal)
+  await createAgentTeamKernelAdapter().refreshWindowPaneLabelsAsync(target, signal)
 }
 
 export async function syncPaneLabelsForTeam(team: TeamState, signal?: AbortSignal): Promise<void> {
