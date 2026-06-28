@@ -80,6 +80,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.workerLifecycleMarkWindowAsAgentTeamConnected, true)
   assert.equal(result.profile.workerLifecycleRefreshWindowPaneLabelsConnected, true)
   assert.equal(result.profile.workerLifecycleSetPaneLabelConnected, true)
+  assert.equal(result.profile.workerLifecycleClearPaneLabelConnected, true)
   assert.equal(result.profile.tmuxAvailabilityConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)
@@ -176,8 +177,10 @@ function assertMethodResult(response, request, fingerprintModule) {
               ? 'sessionExists'
               : requestedOperation === 'setPaneLabel'
                 ? 'setPaneLabel'
-                : 'inspectPane'
-    const mutatingOperation = expectedOperation === 'setPaneLabel'
+                : requestedOperation === 'clearPaneLabel'
+                  ? 'clearPaneLabel'
+                  : 'inspectPane'
+    const mutatingOperation = expectedOperation === 'setPaneLabel' || expectedOperation === 'clearPaneLabel'
     assert.equal(response.result.operation, expectedOperation)
     assert.equal(response.result.capability, 'workerLifecycle')
     assert.equal(response.result.readOnly, !mutatingOperation)
@@ -216,6 +219,9 @@ function assertMethodResult(response, request, fingerprintModule) {
     if (expectedOperation === 'setPaneLabel') {
       assert.equal(response.result.labeled, false)
       assert.equal(JSON.stringify(response.result).includes(fixtures.RAW_LABEL_CANARY), false, 'setPaneLabel result must not leak raw label text')
+    }
+    if (expectedOperation === 'clearPaneLabel') {
+      assert.equal(response.result.cleared, false)
     }
     if (response.result.ok === false) {
       if (expectedOperation === 'inspectPane' || expectedOperation === 'findAgentTeamWindowTarget' || expectedOperation === 'findWindowTargetByName' || expectedOperation === 'sessionExists') assert.equal(response.result.exists, false)

@@ -61,7 +61,7 @@ const REQUIRED_DOC = [
   '`clearPaneLabel(paneId, signal)` remains TypeScript-owned',
   '`markWindowAsAgentTeam(target, signal)` remains v0.6.72 Go-backed',
   '`refreshWindowPaneLabels(target, signal)` remains v0.6.74 Go-backed',
-  'No `set-option -up` command is added to Go.',
+  'No `set-option -up` command was added by v0.6.76 itself; v0.6.78 later added the separately gated clear-pane-label command.',
   '`package.json` remains `0.6.8`.',
   '`tests/fixtures/kernel/v0676/goPaneLabelSettingCutover.cjs`',
   '`tests/suites/go-kernel-v0676-go-pane-label-setting-cutover.cjs`',
@@ -228,8 +228,8 @@ function assertRuntimeCutover(root) {
   assert.equal(setPaneBody.includes('runTmuxNoThrowAsync'), false, `${TMUX_LABELS} ${HELPER_NAME} must not keep direct TS fallback`)
   for (const call of DIRECT_TYPESCRIPT_SET_PANE_LABEL_CALLS) assert.equal(setPaneBody.includes(call), false, `${TMUX_LABELS} ${HELPER_NAME} must remove ${call}`)
 
-  for (const call of PRESERVED_CLEAR_PANE_LABEL_CALLS) assertIncludes(clearPaneBody, call, `${TMUX_LABELS} ${CLEAR_HELPER_NAME}`)
-  assert.equal(clearPaneBody.includes('createAgentTeamKernelAdapter'), false, `${TMUX_LABELS} ${CLEAR_HELPER_NAME} must remain TS-owned`)
+  for (const call of PRESERVED_CLEAR_PANE_LABEL_CALLS) assert.equal(clearPaneBody.includes(call), false, `${TMUX_LABELS} ${CLEAR_HELPER_NAME} direct TS fallback removed after later v0.6.78 cutover`)
+  assertIncludes(clearPaneBody, 'createAgentTeamKernelAdapter().clearPaneLabelAsync(paneId, signal)', `${TMUX_LABELS} ${CLEAR_HELPER_NAME} uses later v0.6.78 Go adapter delegation`)
 
   assertIncludes(syncBody, 'await setPaneLabel(member.paneId', `${TMUX_LABELS} ${ORCHESTRATOR_NAME}`)
   assertIncludes(syncBody, 'formatLeaderPaneLabel(team)', `${TMUX_LABELS} leader label formatting`)
@@ -315,8 +315,9 @@ function assertGoRuntime(root) {
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)', `${GO_SOURCE} authorized pane title command`)
   assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "set-option", "-p", "-t", paneID, "@agentteam-name", label\)/g)].length, 1, `${GO_SOURCE} should contain exactly one pane set-option command`)
   assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "select-pane", "-t", paneID, "-T", label\)/g)].length, 1, `${GO_SOURCE} should contain exactly one pane select-pane title command`)
-  assert.equal(goSource.includes('exec.CommandContext(ctx, "tmux", "set-option", "-up"'), false, `${GO_SOURCE} must not migrate clearPaneLabel`)
-  assert.equal(goSource.includes('clearPaneLabel'), false, `${GO_SOURCE} must not implement clearPaneLabel`)
+  assertIncludes(goSource, 'func clearPaneLabel(params map[string]any) workerPaneLabelClearingResult', `${GO_SOURCE} later v0.6.78 clearPaneLabel implementation`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name")', `${GO_SOURCE} later v0.6.78 authorized pane label clearing`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", "")', `${GO_SOURCE} later v0.6.78 authorized pane title clearing`)
   assert.equal(goSource.includes('+ label'), false, `${GO_SOURCE} diagnostics must not concatenate raw label`)
   assert.equal(goSource.includes('label +'), false, `${GO_SOURCE} diagnostics must not concatenate raw label`)
 
@@ -352,6 +353,10 @@ function assertArtifactPipelineAndNative(root) {
   assert.deepEqual(manifest.smoke.workerLifecycleSetPaneLabel.acceptedFailureKinds, ['invalid-pane-id'])
   assert.equal(provenance.smoke.workerLifecycleSetPaneLabel.ok, false)
   assert.deepEqual(provenance.smoke.workerLifecycleSetPaneLabel.acceptedFailureKinds, ['invalid-pane-id'])
+  assert.equal(manifest.smoke.workerLifecycleClearPaneLabel.ok, false)
+  assert.deepEqual(manifest.smoke.workerLifecycleClearPaneLabel.acceptedFailureKinds, ['invalid-pane-id'])
+  assert.equal(provenance.smoke.workerLifecycleClearPaneLabel.ok, false)
+  assert.deepEqual(provenance.smoke.workerLifecycleClearPaneLabel.acceptedFailureKinds, ['invalid-pane-id'])
   assertNoRawLabelLeak(manifest.smoke)
   assertNoRawLabelLeak(provenance.smoke)
   assertIncludes(checksums, `${NATIVE_ROOT}/agentteam-tmuxSnapshotParse`, 'native checksums')

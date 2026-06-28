@@ -6,7 +6,7 @@
   "module": "tmuxSnapshotParse",
   "source": {
     "path": "kernel/go/agentteam-kernel",
-    "revision": "323c983500ea2334c315cb1e189ea87bc0998df7"
+    "revision": "0575f344e980e80cb5e377ebd1bc44564783630f"
   },
   "build": {
     "command": [
@@ -23,7 +23,7 @@
     "cwd": "kernel/go/agentteam-kernel",
     "toolchain": "go version go1.25.10 linux/amd64",
     "runIdentity": "local-reviewer-run",
-    "generatedAt": "2026-06-28T12:20:47.774Z"
+    "generatedAt": "2026-06-28T13:56:01.633Z"
   },
   "smoke": {
     "health": true,
@@ -111,6 +111,12 @@
         "invalid-pane-id"
       ]
     },
+    "workerLifecycleClearPaneLabel": {
+      "ok": false,
+      "acceptedFailureKinds": [
+        "invalid-pane-id"
+      ]
+    },
     "tmuxAvailability": {
       "ok": true,
       "acceptedFailureKinds": [
@@ -120,5 +126,5 @@
       ]
     }
   },
-  "outputRootKind": "repo-ignored-artifacts"
+  "outputRootKind": "os-temp"
 }

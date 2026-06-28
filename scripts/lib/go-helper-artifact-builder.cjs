@@ -488,6 +488,26 @@ function runWorkerLifecycleSetPaneLabelSmoke(helperPath, env, timeoutMs) {
   return { ok: false, acceptedFailureKinds }
 }
 
+function runWorkerLifecycleClearPaneLabelSmoke(helperPath, env, timeoutMs) {
+  const result = runJsonRpc(helperPath, {
+    jsonrpc: '2.0',
+    id: 'workerLifecycleClearPaneLabel',
+    method: 'workerLifecycle',
+    params: {
+      operation: 'clearPaneLabel',
+      paneId: 'agentteam builder smoke invalid pane',
+    },
+  }, env, timeoutMs, 'workerLifecycle')
+  if (result.operation !== 'clearPaneLabel' || result.capability !== 'workerLifecycle' || result.readOnly !== false || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== true) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle clearPaneLabel smoke result', 'workerLifecycle')
+  }
+  const acceptedFailureKinds = ['invalid-pane-id']
+  if (result.ok !== false || result.cleared !== false || !acceptedFailureKinds.includes(result.failureKind)) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle clearPaneLabel failure', 'workerLifecycle')
+  }
+  return { ok: false, acceptedFailureKinds }
+}
+
 function runTmuxAvailabilitySmoke(helperPath, env, timeoutMs) {
   const result = runJsonRpc(helperPath, {
     jsonrpc: '2.0',
@@ -637,6 +657,7 @@ function writeMetadata(input) {
     workerLifecycleMarkWindowAsAgentTeamSmoke,
     workerLifecycleRefreshWindowPaneLabelsSmoke,
     workerLifecycleSetPaneLabelSmoke,
+    workerLifecycleClearPaneLabelSmoke,
     tmuxAvailabilitySmoke,
   } = input
   const artifactDir = path.dirname(helperPath)
@@ -687,6 +708,7 @@ function writeMetadata(input) {
       workerLifecycleMarkWindowAsAgentTeam: workerLifecycleMarkWindowAsAgentTeamSmoke,
       workerLifecycleRefreshWindowPaneLabels: workerLifecycleRefreshWindowPaneLabelsSmoke,
       workerLifecycleSetPaneLabel: workerLifecycleSetPaneLabelSmoke,
+      workerLifecycleClearPaneLabel: workerLifecycleClearPaneLabelSmoke,
       tmuxAvailability: tmuxAvailabilitySmoke,
     },
     outputRootKind,
@@ -779,6 +801,7 @@ function writeMetadata(input) {
       workerLifecycleMarkWindowAsAgentTeam: workerLifecycleMarkWindowAsAgentTeamSmoke,
       workerLifecycleRefreshWindowPaneLabels: workerLifecycleRefreshWindowPaneLabelsSmoke,
       workerLifecycleSetPaneLabel: workerLifecycleSetPaneLabelSmoke,
+      workerLifecycleClearPaneLabel: workerLifecycleClearPaneLabelSmoke,
       tmuxAvailability: tmuxAvailabilitySmoke,
     },
     attestation: {
@@ -843,6 +866,7 @@ function writeMetadata(input) {
         workerLifecycleMarkWindowAsAgentTeam: true,
         workerLifecycleRefreshWindowPaneLabels: true,
         workerLifecycleSetPaneLabel: true,
+        workerLifecycleClearPaneLabel: true,
         tmuxAvailability: true,
       },
       artifact: helperRel,
@@ -896,6 +920,7 @@ function buildGoHelperArtifact(options = {}) {
   const workerLifecycleMarkWindowAsAgentTeamSmoke = runWorkerLifecycleMarkWindowAsAgentTeamSmoke(helperPath, env, timeoutMs)
   const workerLifecycleRefreshWindowPaneLabelsSmoke = runWorkerLifecycleRefreshWindowPaneLabelsSmoke(helperPath, env, timeoutMs)
   const workerLifecycleSetPaneLabelSmoke = runWorkerLifecycleSetPaneLabelSmoke(helperPath, env, timeoutMs)
+  const workerLifecycleClearPaneLabelSmoke = runWorkerLifecycleClearPaneLabelSmoke(helperPath, env, timeoutMs)
   const tmuxAvailabilitySmoke = runTmuxAvailabilitySmoke(helperPath, env, timeoutMs)
 
   const metadata = writeMetadata({
@@ -922,6 +947,7 @@ function buildGoHelperArtifact(options = {}) {
     workerLifecycleMarkWindowAsAgentTeamSmoke,
     workerLifecycleRefreshWindowPaneLabelsSmoke,
     workerLifecycleSetPaneLabelSmoke,
+    workerLifecycleClearPaneLabelSmoke,
     tmuxAvailabilitySmoke,
   })
   const result = {

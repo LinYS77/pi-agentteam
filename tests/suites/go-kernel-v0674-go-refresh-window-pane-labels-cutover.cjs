@@ -225,8 +225,9 @@ function assertFacadeAndAdapter(root) {
   assertIncludes(setPaneBody, 'createAgentTeamKernelAdapter().setPaneLabelAsync(paneId, label, signal)', `${TMUX_LABELS} pane label setting superseded by v0.6.76 Go cutover`)
   assert.equal(setPaneBody.includes("runTmuxNoThrowAsync(['set-option', '-p'"), false, `${TMUX_LABELS} setPaneLabel direct TS set-option fallback removed by v0.6.76`)
   assert.equal(setPaneBody.includes("runTmuxNoThrowAsync(['select-pane', '-t', paneId, '-T', label]"), false, `${TMUX_LABELS} setPaneLabel direct TS select-pane fallback removed by v0.6.76`)
-  assertIncludes(clearPaneBody, "runTmuxNoThrowAsync(['set-option', '-up'", `${TMUX_LABELS} pane label clear remains TS-owned`)
-  assertIncludes(clearPaneBody, "runTmuxNoThrowAsync(['select-pane'", `${TMUX_LABELS} pane title clear remains TS-owned`)
+  assert.equal(clearPaneBody.includes("runTmuxNoThrowAsync(['set-option', '-up'"), false, `${TMUX_LABELS} pane label clear direct TS fallback removed by later v0.6.78`)
+  assert.equal(clearPaneBody.includes("runTmuxNoThrowAsync(['select-pane'"), false, `${TMUX_LABELS} pane title clear direct TS fallback removed by later v0.6.78`)
+  assertIncludes(clearPaneBody, 'createAgentTeamKernelAdapter().clearPaneLabelAsync(paneId, signal)', `${TMUX_LABELS} clearPaneLabel later v0.6.78 Go-backed`)
 
   assertIncludes(kernelSource, 'export type AgentTeamKernelWindowPaneLabelsRefresh', KERNEL)
   assertIncludes(kernelSource, 'refreshWindowPaneLabelsAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowPaneLabelsRefresh>', KERNEL)
@@ -258,7 +259,8 @@ function assertGoRuntime(root) {
 
   for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => command !== 'select-pane')) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add forbidden command ${command}`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-p", "-t", paneID, "@agentteam-name", label)', `${GO_SOURCE} later v0.6.76 authorized pane label set-option`)
-  assert.equal(goSource.includes('set-option", "-up"'), false, `${GO_SOURCE} must not migrate pane label clear`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name")', `${GO_SOURCE} later v0.6.78 authorized pane label clearing`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", "")', `${GO_SOURCE} later v0.6.78 authorized pane title clearing`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)', `${GO_SOURCE} later v0.6.76 authorized pane title set`)
 }
 

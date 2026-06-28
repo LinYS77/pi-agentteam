@@ -276,7 +276,8 @@ function assertAuthorizedRuntimeCutover(root) {
   for (const snippet of REQUIRED_GO_READ_ONLY_COMMAND_SNIPPETS) assertIncludes(goSource, snippet, `${GO_SOURCE} current read-only command surface`)
   for (const command of FORBIDDEN_CURRENT_GO_TMUX_COMMANDS.filter(command => command !== 'set-option' && command !== 'select-pane')) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add forbidden tmux command ${command}`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)', `${GO_SOURCE} later v0.6.76 authorized pane-title command`)
-  assert.equal(goSource.includes('exec.CommandContext(ctx, "tmux", "set-option", "-up"'), false, `${GO_SOURCE} must not migrate pane label clearing`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name")', `${GO_SOURCE} later v0.6.78 authorized pane label clearing`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", "")', `${GO_SOURCE} later v0.6.78 authorized pane title clearing`)
 
   assertIncludes(refreshBody, `if (!await ${CURRENT_WINDOW_EXISTENCE_GUARD}) return`, 'refreshWindowPaneLabels keeps window guard after later cutover')
   assertIncludes(refreshBody, 'createAgentTeamKernelAdapter().refreshWindowPaneLabelsAsync(target, signal)', 'refreshWindowPaneLabels is superseded by v0.6.74 Go cutover')

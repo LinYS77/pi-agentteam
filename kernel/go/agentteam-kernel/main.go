@@ -274,6 +274,23 @@ type workerPaneLabelSettingResult struct {
 	TmuxMutation      bool   `json:"tmuxMutation"`
 }
 
+type workerPaneLabelClearingResult struct {
+	OK                bool   `json:"ok"`
+	Operation         string `json:"operation"`
+	Capability        string `json:"capability"`
+	PaneID            string `json:"paneId"`
+	Cleared           bool   `json:"cleared"`
+	Status            string `json:"status,omitempty"`
+	Marker            string `json:"resultMarker,omitempty"`
+	Failure           string `json:"failureKind,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Error             string `json:"error,omitempty"`
+	ReadOnly          bool   `json:"readOnly"`
+	StateFilesRead    bool   `json:"stateFilesRead"`
+	StateFilesWritten bool   `json:"stateFilesWritten"`
+	TmuxMutation      bool   `json:"tmuxMutation"`
+}
+
 type tmuxAvailabilityResult struct {
 	OK                bool   `json:"ok"`
 	Capability        string `json:"capability"`
@@ -325,6 +342,7 @@ func profile(params map[string]any) profileResult {
 			"workerLifecycleMarkWindowAsAgentTeamConnected":     true,
 			"workerLifecycleRefreshWindowPaneLabelsConnected":   true,
 			"workerLifecycleSetPaneLabelConnected":              true,
+			"workerLifecycleClearPaneLabelConnected":            true,
 			"tmuxAvailabilityConnected":                         true,
 			"panelConnected":                                    false,
 			"taskReportPlanRunConnected":                        false,
@@ -1318,6 +1336,91 @@ func setPaneLabel(params map[string]any) workerPaneLabelSettingResult {
 	}
 }
 
+func unavailablePaneLabelClearing(paneID string, kind string) workerPaneLabelClearingResult {
+	safePaneID := compactTmuxPaneID(paneID)
+	reason := "Go worker lifecycle clearPaneLabel unavailable (" + kind + ")"
+	return workerPaneLabelClearingResult{
+		OK:                false,
+		Operation:         "clearPaneLabel",
+		Capability:        "workerLifecycle",
+		PaneID:            safePaneID,
+		Cleared:           false,
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
+func runPaneLabelUnsetOption(paneID string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name")
+	cmd.Env = os.Environ()
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "tmux-command-timeout"
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return "tmux-unavailable"
+		}
+		return "tmux-command-failed"
+	}
+	return ""
+}
+
+func runPaneLabelClearPaneTitle(paneID string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", "")
+	cmd.Env = os.Environ()
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "tmux-command-timeout"
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return "tmux-unavailable"
+		}
+		return "tmux-command-failed"
+	}
+	return ""
+}
+
+func clearPaneLabel(params map[string]any) workerPaneLabelClearingResult {
+	paneID := compactTmuxPaneID(stringParam(params, "paneId"))
+	if paneID == "" {
+		return unavailablePaneLabelClearing("", "invalid-pane-id")
+	}
+	failureKind := ""
+	if kind := runPaneLabelUnsetOption(paneID); kind != "" && failureKind == "" {
+		failureKind = kind
+	}
+	if kind := runPaneLabelClearPaneTitle(paneID); kind != "" && failureKind == "" {
+		failureKind = kind
+	}
+	if failureKind != "" {
+		return unavailablePaneLabelClearing(paneID, failureKind)
+	}
+	return workerPaneLabelClearingResult{
+		OK:                true,
+		Operation:         "clearPaneLabel",
+		Capability:        "workerLifecycle",
+		PaneID:            paneID,
+		Cleared:           true,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
 func workerLifecycle(params map[string]any) any {
 	operation := stringParam(params, "operation")
 	switch operation {
@@ -1341,6 +1444,8 @@ func workerLifecycle(params map[string]any) any {
 		return refreshWindowPaneLabels(params)
 	case "setPaneLabel":
 		return setPaneLabel(params)
+	case "clearPaneLabel":
+		return clearPaneLabel(params)
 	default:
 		return unavailableWorkerPaneInspection(strings.TrimSpace(stringParam(params, "paneId")), "unsupported-operation")
 	}

@@ -277,10 +277,9 @@ function assertCurrentTypescriptState(root) {
   assertIncludes(setPaneBody, 'createAgentTeamKernelAdapter().setPaneLabelAsync(paneId, label, signal)', `${TMUX_LABELS} ${HELPER_NAME} uses v0.6.76 Go adapter delegation`)
   assert.equal([...setPaneBody.matchAll(/runTmuxNoThrowAsync\(/g)].length, 0, `${TMUX_LABELS} ${HELPER_NAME} should not keep same-behavior direct TS no-throw calls after v0.6.76`)
 
-  for (const call of EXPECTED_CLEAR_PANE_LABEL_CALLS) assertIncludes(clearPaneBody, call, `${TMUX_LABELS} ${CLEAR_HELPER_NAME}`)
-  assert.equal(clearPaneBody.includes('createAgentTeamKernelAdapter'), false, `${TMUX_LABELS} ${CLEAR_HELPER_NAME} must not call Go`)
-  assert.equal(clearPaneBody.includes('workerLifecycle'), false, `${TMUX_LABELS} ${CLEAR_HELPER_NAME} must not mention workerLifecycle`)
-  assert.equal([...clearPaneBody.matchAll(/runTmuxNoThrowAsync\(/g)].length, 2, `${TMUX_LABELS} ${CLEAR_HELPER_NAME} should keep exactly two direct no-throw calls`)
+  for (const call of EXPECTED_CLEAR_PANE_LABEL_CALLS) assert.equal(clearPaneBody.includes(call), false, `${TMUX_LABELS} ${CLEAR_HELPER_NAME} direct TS fallback removed after later authorized v0.6.78 cutover`)
+  assertIncludes(clearPaneBody, 'createAgentTeamKernelAdapter().clearPaneLabelAsync(paneId, signal)', `${TMUX_LABELS} ${CLEAR_HELPER_NAME} uses later v0.6.78 Go adapter delegation`)
+  assert.equal([...clearPaneBody.matchAll(/runTmuxNoThrowAsync\(/g)].length, 0, `${TMUX_LABELS} ${CLEAR_HELPER_NAME} should not keep same-behavior direct TS no-throw calls after v0.6.78`)
 
   assertIncludes(syncBody, 'await setPaneLabel(member.paneId', `${TMUX_LABELS} ${ORCHESTRATOR_NAME}`)
   assertIncludes(syncBody, 'formatLeaderPaneLabel(team)', `${TMUX_LABELS} ${ORCHESTRATOR_NAME} leader labels`)
@@ -299,7 +298,7 @@ function assertGoRuntimeAndCommandSurface(root) {
   assert.deepEqual(parseGoCapabilities(goSource), [...ACTIVE_CAPABILITIES])
   for (const operation of ACTIVE_OPERATIONS) assert.match(goSource, new RegExp(`case "${operation}"`), `${GO_SOURCE} should keep current operation ${operation}`)
   assert.match(goSource, /case "setPaneLabel"/, `${GO_SOURCE} should include later v0.6.76 setPaneLabel`)
-  assert.equal(goSource.includes('exec.CommandContext(ctx, "tmux", "set-option", "-up"'), false, `${GO_SOURCE} must not migrate pane label clearing`)
+  assert.match(goSource, /case "clearPaneLabel"/, `${GO_SOURCE} should include later v0.6.78 clearPaneLabel`)
 
   assertIncludes(goSource, 'func markWindowAsAgentTeam(params map[string]any) workerWindowMarkingResult', `${GO_SOURCE} markWindowAsAgentTeam preserved`)
   assertIncludes(goSource, 'runWindowMarkingSetOption(target, "automatic-rename", "off")', `${GO_SOURCE} automatic-rename mark command`)
@@ -315,7 +314,9 @@ function assertGoRuntimeAndCommandSurface(root) {
   assertIncludes(goSource, 'func setPaneLabel(params map[string]any) workerPaneLabelSettingResult', `${GO_SOURCE} later v0.6.76 setPaneLabel implementation`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-p", "-t", paneID, "@agentteam-name", label)', `${GO_SOURCE} later v0.6.76 pane label set-option`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)', `${GO_SOURCE} later v0.6.76 pane title setting`)
-  assert.equal(goSource.includes('exec.CommandContext(ctx, "tmux", "set-option", "-up"'), false, `${GO_SOURCE} must not migrate pane label clearing`)
+  assertIncludes(goSource, 'func clearPaneLabel(params map[string]any) workerPaneLabelClearingResult', `${GO_SOURCE} later v0.6.78 clearPaneLabel implementation`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name")', `${GO_SOURCE} later v0.6.78 pane label clearing`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", "")', `${GO_SOURCE} later v0.6.78 pane title clearing`)
 }
 
 function assertNativeArtifactUnchanged(root) {
@@ -330,6 +331,9 @@ function assertNativeArtifactUnchanged(root) {
   assert.equal(manifest.smoke.workerLifecycleSetPaneLabel.ok, false, 'v0.6.76 native manifest includes setPaneLabel smoke')
   assert.deepEqual(manifest.smoke.workerLifecycleSetPaneLabel.acceptedFailureKinds, ['invalid-pane-id'])
   assert.equal(provenance.smoke.workerLifecycleSetPaneLabel.ok, false, 'v0.6.76 native provenance includes setPaneLabel smoke')
+  assert.equal(manifest.smoke.workerLifecycleClearPaneLabel.ok, false, 'v0.6.78 native manifest includes clearPaneLabel smoke')
+  assert.deepEqual(manifest.smoke.workerLifecycleClearPaneLabel.acceptedFailureKinds, ['invalid-pane-id'])
+  assert.equal(provenance.smoke.workerLifecycleClearPaneLabel.ok, false, 'v0.6.78 native provenance includes clearPaneLabel smoke')
   assertIncludes(checksums, `${NATIVE_ROOT}/agentteam-tmuxSnapshotParse`, `${NATIVE_ROOT}/SHA256SUMS`)
 }
 

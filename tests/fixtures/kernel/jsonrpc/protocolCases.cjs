@@ -129,6 +129,10 @@ function validMethodCases() {
       request: request('workerLifecycle', { operation: 'setPaneLabel', paneId: 'invalid fixture pane', label: RAW_LABEL_CANARY }, 'worker-lifecycle-set-pane-label-string-id'),
     },
     {
+      name: 'worker lifecycle clearPaneLabel invalid pane',
+      request: request('workerLifecycle', { operation: 'clearPaneLabel', paneId: 'invalid fixture pane' }, 'worker-lifecycle-clear-pane-label-string-id'),
+    },
+    {
       name: 'tmux availability',
       request: request('tmuxAvailability', undefined, 'tmux-availability-string-id'),
     },
@@ -240,6 +244,7 @@ function multipleRequestBatch() {
     request('workerLifecycle', { operation: 'findWindowTargetByName', sessionName: 'missing-batch-session', windowName: 'agentteam' }, 'batch-worker-lifecycle-window-name-target'),
     request('workerLifecycle', { operation: 'sessionExists', sessionName: 'missing-batch-session' }, 'batch-worker-lifecycle-session-exists'),
     request('workerLifecycle', { operation: 'setPaneLabel', paneId: 'invalid batch pane', label: RAW_LABEL_CANARY }, 'batch-worker-lifecycle-set-pane-label'),
+    request('workerLifecycle', { operation: 'clearPaneLabel', paneId: 'invalid batch pane' }, 'batch-worker-lifecycle-clear-pane-label'),
     request('tmuxAvailability', undefined, 'batch-tmux-availability'),
     { jsonrpc: '2.0', id: 'batch-unknown', method: 'unknownMethod' },
   ]
