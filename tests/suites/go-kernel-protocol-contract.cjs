@@ -81,6 +81,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.workerLifecycleRefreshWindowPaneLabelsConnected, true)
   assert.equal(result.profile.workerLifecycleSetPaneLabelConnected, true)
   assert.equal(result.profile.workerLifecycleClearPaneLabelConnected, true)
+  assert.equal(result.profile.workerLifecycleKillPaneConnected, true)
   assert.equal(result.profile.workerLifecycleCreateTeammatePaneConnected, true)
   assert.equal(result.profile.workerLifecycleCreateDetachedSwarmSessionConnected, true)
   assert.equal(result.profile.workerLifecycleCreateDetachedSwarmWindowConnected, true)
@@ -182,14 +183,16 @@ function assertMethodResult(response, request, fingerprintModule) {
                 ? 'setPaneLabel'
                 : requestedOperation === 'clearPaneLabel'
                   ? 'clearPaneLabel'
-                  : requestedOperation === 'createTeammatePane'
+                  : requestedOperation === 'killPane'
+                    ? 'killPane'
+                    : requestedOperation === 'createTeammatePane'
                     ? 'createTeammatePane'
                     : requestedOperation === 'createDetachedSwarmSession'
                       ? 'createDetachedSwarmSession'
                       : requestedOperation === 'createDetachedSwarmWindow'
                         ? 'createDetachedSwarmWindow'
                         : 'inspectPane'
-    const mutatingOperation = expectedOperation === 'setPaneLabel' || expectedOperation === 'clearPaneLabel' || expectedOperation === 'createTeammatePane' || expectedOperation === 'createDetachedSwarmSession' || expectedOperation === 'createDetachedSwarmWindow'
+    const mutatingOperation = expectedOperation === 'setPaneLabel' || expectedOperation === 'clearPaneLabel' || expectedOperation === 'killPane' || expectedOperation === 'createTeammatePane' || expectedOperation === 'createDetachedSwarmSession' || expectedOperation === 'createDetachedSwarmWindow'
     assert.equal(response.result.operation, expectedOperation)
     assert.equal(response.result.capability, 'workerLifecycle')
     assert.equal(response.result.readOnly, !mutatingOperation)
@@ -231,6 +234,9 @@ function assertMethodResult(response, request, fingerprintModule) {
     }
     if (expectedOperation === 'clearPaneLabel') {
       assert.equal(response.result.cleared, false)
+    }
+    if (expectedOperation === 'killPane') {
+      assert.equal(response.result.killed, false)
     }
     if (expectedOperation === 'createTeammatePane') {
       assert.equal(response.result.created, false)

@@ -337,7 +337,7 @@ function assertCurrentGoSurfaceWithLaterNewWindow(root) {
   assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName\)/g)].length, 1, `${GO_SOURCE_FILE} should contain exactly one authorized detached new-session command`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.84 detached new-window`)
   assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName\)/g)].length, 1, `${GO_SOURCE_FILE} should contain exactly one authorized detached new-window command`)
-  for (const forbiddenCommand of ['send-keys', 'kill-pane', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
+  for (const forbiddenCommand of ['send-keys', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
     assert.equal(goSource.includes(`"${forbiddenCommand}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${forbiddenCommand}`)
   }
 }

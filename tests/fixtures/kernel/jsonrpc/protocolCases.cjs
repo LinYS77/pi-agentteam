@@ -186,7 +186,7 @@ function paramsCases() {
     },
     {
       name: 'worker lifecycle unsupported operation fails closed',
-      request: request('workerLifecycle', { operation: 'killPane', paneId: '%unsupported-fixture-pane' }, 'worker-lifecycle-unsupported'),
+      request: request('workerLifecycle', { operation: 'respawnPane', paneId: '%unsupported-fixture-pane' }, 'worker-lifecycle-unsupported'),
     },
   ]
 }

@@ -230,7 +230,10 @@ function collectRepoInvariants(repoRoot) {
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat)', 'go-tmux-capture-command')
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat)', 'go-current-pane-binding-command')
   if (/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource)) fail('repo-invariant-changed', 'go-authority:target-display-message')
-  for (const forbidden of ['kill-pane', 'send-keys', 'PI_AGENTTEAM_HOME', 'team.json', 'os.Open', 'os.ReadFile', 'os.WriteFile', 'os.Create']) {
+  const allowedKillPaneCommand = 'exec.CommandContext(ctx, "tmux", "kill-pane", "-t", paneID)'
+  const killPaneRemainder = goSource.replace(allowedKillPaneCommand, '')
+  if (killPaneRemainder.includes('kill-pane')) fail('repo-invariant-changed', 'go-authority:kill-pane')
+  for (const forbidden of ['send-keys', 'PI_AGENTTEAM_HOME', 'team.json', 'os.Open', 'os.ReadFile', 'os.WriteFile', 'os.Create']) {
     if (goSource.includes(forbidden)) fail('repo-invariant-changed', `go-authority:${forbidden}`)
   }
 

@@ -90,9 +90,11 @@ function assertGoHelperBoundaries(root) {
   assert.match(source, /case\s+"listAgentTeamPanes"/, 'Go workerLifecycle must include read-only listAgentTeamPanes')
   assert.match(source, /case\s+"captureCurrentPaneBinding"/, 'Go workerLifecycle must include narrow current-pane binding')
   assert.match(source, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'Go may use only narrow current-pane binding display-message')
+  assert.match(source, /exec\.CommandContext\(ctx, "tmux", "kill-pane", "-t", paneID\)/, 'Go may use only narrow argv killPane command')
   const sourceWithoutAllowedDisplayMessage = source
     .replace(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/g, '')
     .replace(/exec\.CommandContext\(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName\)/g, '')
+    .replace(/exec\.CommandContext\(ctx, "tmux", "kill-pane", "-t", paneID\)/g, '')
   assertNoMatches(GO_HELPER, sourceWithoutAllowedDisplayMessage, [
     ['broad tmux subprocess command', /display-message|send-keys|kill-pane|new-window/],
     ['shell execution API', /\bexec\.Command\s*\(|\b(?:sh|bash|zsh|fish)\b/],

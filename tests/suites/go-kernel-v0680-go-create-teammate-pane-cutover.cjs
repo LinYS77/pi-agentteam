@@ -249,7 +249,8 @@ function assertRuntimeCutover(root) {
   assert.equal(createBody.includes('runTmuxAsync'), false, `${RUNTIME_FILE} ${HELPER_NAME} must not retain runTmuxAsync fallback`)
   assert.equal(createBody.includes('runTmuxNoThrowAsync'), false, `${RUNTIME_FILE} ${HELPER_NAME} must not retain direct label no-throw fallback`)
 
-  assertIncludes(killBody, "runTmuxNoThrow(['kill-pane', '-t', paneId])", `${RUNTIME_FILE} killPane remains TS-owned`)
+  assertIncludes(killBody, 'createAgentTeamKernelAdapter().killPane(paneId)', `${RUNTIME_FILE} later v0.6.86 killPane adapter cutover`)
+  assert.equal(killBody.includes("runTmuxNoThrow(['kill-pane', '-t', paneId])"), false, `${RUNTIME_FILE} later v0.6.86 removes direct killPane fallback`)
   assertIncludes(clearSyncBody, "runTmuxNoThrow(['set-option', '-up', '-t', paneId, '@agentteam-name'])", `${RUNTIME_FILE} clearPaneLabelSync remains TS-owned`)
   assertIncludes(clearSyncBody, "runTmuxNoThrow(['select-pane', '-t', paneId, '-T', ''])", `${RUNTIME_FILE} clearPaneLabelSync remains TS-owned`)
 
@@ -353,7 +354,7 @@ function assertGoRuntime(root) {
   assertIncludes(goSource, 'runWindowPaneLabelsSetOption(target, "pane-border-status", "top")', `${GO_SOURCE_FILE} existing refresh preserved`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.82 authorized detached new-session`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.84 authorized detached new-window`)
-  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => !['new-session', 'new-window'].includes(command))) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${command}`)
+  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => !['new-session', 'new-window', 'kill-pane'].includes(command))) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${command}`)
   assert.equal(/exec\.Command\s*\(/.test(goSource), false, `${GO_SOURCE_FILE} must not use shell-capable exec.Command`)
   assert.equal(/"(?:sh|bash|zsh|fish)"/.test(goSource), false, `${GO_SOURCE_FILE} must not invoke shells`)
 }

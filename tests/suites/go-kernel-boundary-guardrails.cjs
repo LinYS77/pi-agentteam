@@ -99,6 +99,7 @@ function sourceWithoutAllowedCurrentPaneDisplayMessage(source) {
   return source
     .replace(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/g, '')
     .replace(/exec\.CommandContext\(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName\)/g, '')
+    .replace(/exec\.CommandContext\(ctx, "tmux", "kill-pane", "-t", paneID\)/g, '')
 }
 
 function walkFiles(root, out = []) {
@@ -128,6 +129,7 @@ module.exports = {
     assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux command authority must include list-panes snapshot capture')
     assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", workerLifecycleInspectPaneFormat\)/, 'Go worker lifecycle authority must include read-only inspectPane')
     assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'Go worker lifecycle may include only the narrow current-pane binding display-message')
+    assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "kill-pane", "-t", paneID\)/, 'Go worker lifecycle may include only the narrow argv killPane command')
     assert.match(goSource, /case\s+"inspectPane"/, 'Go worker lifecycle must keep inspectPane read-only')
     assert.match(goSource, /case\s+"listAgentTeamPanes"/, 'Go worker lifecycle must include read-only listAgentTeamPanes')
     assert.match(goSource, /case\s+"captureCurrentPaneBinding"/, 'Go worker lifecycle must include narrow current-pane binding')

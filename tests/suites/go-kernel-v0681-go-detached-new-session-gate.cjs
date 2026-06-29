@@ -315,7 +315,7 @@ function assertCurrentGoSurfaceAndNoNewSession(root) {
   assertIncludes(goSource, 'runCreateTeammatePaneTmux("resize-pane", "-t", leaderPaneID, "-x", "66%")', `${GO_SOURCE_FILE} createTeammatePane resize-pane`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.82 authorized detached new-session`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.84 authorized detached new-window`)
-  for (const forbiddenCommand of ['send-keys', 'kill-pane', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
+  for (const forbiddenCommand of ['send-keys', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
     assert.equal(goSource.includes(`"${forbiddenCommand}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${forbiddenCommand}`)
   }
 }

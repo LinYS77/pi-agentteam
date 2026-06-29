@@ -346,8 +346,10 @@ function assertNoBroadGoControlPlane(root) {
   assert.equal(/registerCommand|registerTool|registerMessageRenderer|registerProvider|ExtensionAPI|pi\.register/i.test(goSource), false, 'Go helper must not register pi surfaces')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'post-v0.6.49 Go helper may execute narrow tmux snapshot capture')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'post-v0.6.60 Go helper may execute narrow current-pane binding display-message')
-  assert.equal(/send-keys|kill-pane|exec\.Command\s*\(/i.test(goSource), false, 'Go helper must not execute broad tmux lifecycle commands or shells')
+  const goSourceWithoutAllowedKillPane = goSource.replace(/exec\.CommandContext\(ctx, "tmux", "kill-pane", "-t", paneID\)/g, '')
+  assert.equal(/send-keys|kill-pane|exec\.Command\s*\(/i.test(goSourceWithoutAllowedKillPane), false, 'Go helper must not execute broad tmux lifecycle commands or shells')
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName)', 'later v0.6.84 permits only detached swarm new-window')
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "kill-pane", "-t", paneID)', 'later v0.6.86 permits only argv killPane')
   assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/i.test(goSource), false, 'Go helper must not execute target-based display-message')
   assert.equal(/PI_AGENTTEAM_HOME|team\.json|inboxes|outbox|mailbox|taskReports|taskReportBody|planRuns|activePlanRunId|package\.json|npm\s+(?:publish|version|pack)|gh\s+release|cosign|slsa/i.test(goSource), false, 'Go helper must not own state/package/release/control-plane authority')
 

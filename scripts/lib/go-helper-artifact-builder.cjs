@@ -508,6 +508,26 @@ function runWorkerLifecycleClearPaneLabelSmoke(helperPath, env, timeoutMs) {
   return { ok: false, acceptedFailureKinds }
 }
 
+function runWorkerLifecycleKillPaneSmoke(helperPath, env, timeoutMs) {
+  const result = runJsonRpc(helperPath, {
+    jsonrpc: '2.0',
+    id: 'workerLifecycleKillPane',
+    method: 'workerLifecycle',
+    params: {
+      operation: 'killPane',
+      paneId: 'agentteam builder smoke invalid pane',
+    },
+  }, env, timeoutMs, 'workerLifecycle')
+  if (result.operation !== 'killPane' || result.capability !== 'workerLifecycle' || result.readOnly !== false || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== true) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle killPane smoke result', 'workerLifecycle')
+  }
+  const acceptedFailureKinds = ['invalid-pane-id']
+  if (result.ok !== false || result.killed !== false || !acceptedFailureKinds.includes(result.failureKind)) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle killPane failure', 'workerLifecycle')
+  }
+  return { ok: false, acceptedFailureKinds }
+}
+
 function runWorkerLifecycleCreateTeammatePaneSmoke(helperPath, env, timeoutMs) {
   const rawCreateCanary = 'agentteam raw create pane canary 🚫'
   const result = runJsonRpc(helperPath, {
@@ -736,6 +756,7 @@ function writeMetadata(input) {
     workerLifecycleRefreshWindowPaneLabelsSmoke,
     workerLifecycleSetPaneLabelSmoke,
     workerLifecycleClearPaneLabelSmoke,
+    workerLifecycleKillPaneSmoke,
     workerLifecycleCreateTeammatePaneSmoke,
     workerLifecycleCreateDetachedSwarmSessionSmoke,
     workerLifecycleCreateDetachedSwarmWindowSmoke,
@@ -790,6 +811,7 @@ function writeMetadata(input) {
       workerLifecycleRefreshWindowPaneLabels: workerLifecycleRefreshWindowPaneLabelsSmoke,
       workerLifecycleSetPaneLabel: workerLifecycleSetPaneLabelSmoke,
       workerLifecycleClearPaneLabel: workerLifecycleClearPaneLabelSmoke,
+      workerLifecycleKillPane: workerLifecycleKillPaneSmoke,
       workerLifecycleCreateTeammatePane: workerLifecycleCreateTeammatePaneSmoke,
       workerLifecycleCreateDetachedSwarmSession: workerLifecycleCreateDetachedSwarmSessionSmoke,
       workerLifecycleCreateDetachedSwarmWindow: workerLifecycleCreateDetachedSwarmWindowSmoke,
@@ -886,6 +908,7 @@ function writeMetadata(input) {
       workerLifecycleRefreshWindowPaneLabels: workerLifecycleRefreshWindowPaneLabelsSmoke,
       workerLifecycleSetPaneLabel: workerLifecycleSetPaneLabelSmoke,
       workerLifecycleClearPaneLabel: workerLifecycleClearPaneLabelSmoke,
+      workerLifecycleKillPane: workerLifecycleKillPaneSmoke,
       workerLifecycleCreateTeammatePane: workerLifecycleCreateTeammatePaneSmoke,
       workerLifecycleCreateDetachedSwarmSession: workerLifecycleCreateDetachedSwarmSessionSmoke,
       workerLifecycleCreateDetachedSwarmWindow: workerLifecycleCreateDetachedSwarmWindowSmoke,
@@ -954,6 +977,7 @@ function writeMetadata(input) {
         workerLifecycleRefreshWindowPaneLabels: true,
         workerLifecycleSetPaneLabel: true,
         workerLifecycleClearPaneLabel: true,
+        workerLifecycleKillPane: true,
         workerLifecycleCreateTeammatePane: true,
         workerLifecycleCreateDetachedSwarmSession: true,
         workerLifecycleCreateDetachedSwarmWindow: true,
@@ -1011,6 +1035,7 @@ function buildGoHelperArtifact(options = {}) {
   const workerLifecycleRefreshWindowPaneLabelsSmoke = runWorkerLifecycleRefreshWindowPaneLabelsSmoke(helperPath, env, timeoutMs)
   const workerLifecycleSetPaneLabelSmoke = runWorkerLifecycleSetPaneLabelSmoke(helperPath, env, timeoutMs)
   const workerLifecycleClearPaneLabelSmoke = runWorkerLifecycleClearPaneLabelSmoke(helperPath, env, timeoutMs)
+  const workerLifecycleKillPaneSmoke = runWorkerLifecycleKillPaneSmoke(helperPath, env, timeoutMs)
   const workerLifecycleCreateTeammatePaneSmoke = runWorkerLifecycleCreateTeammatePaneSmoke(helperPath, env, timeoutMs)
   const workerLifecycleCreateDetachedSwarmSessionSmoke = runWorkerLifecycleCreateDetachedSwarmSessionSmoke(helperPath, env, timeoutMs)
   const workerLifecycleCreateDetachedSwarmWindowSmoke = runWorkerLifecycleCreateDetachedSwarmWindowSmoke(helperPath, env, timeoutMs)
@@ -1041,6 +1066,7 @@ function buildGoHelperArtifact(options = {}) {
     workerLifecycleRefreshWindowPaneLabelsSmoke,
     workerLifecycleSetPaneLabelSmoke,
     workerLifecycleClearPaneLabelSmoke,
+    workerLifecycleKillPaneSmoke,
     workerLifecycleCreateTeammatePaneSmoke,
     workerLifecycleCreateDetachedSwarmSessionSmoke,
     workerLifecycleCreateDetachedSwarmWindowSmoke,

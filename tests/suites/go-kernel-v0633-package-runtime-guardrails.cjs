@@ -340,8 +340,10 @@ function assertReadinessToolControlPlaneInvariants(root, env) {
     .filter(rel => exists(root, rel))
     .map(rel => read(root, rel))
     .join('\n')
-  assert.equal(/capturePane|capture-pane|tmux\s+capture|send-keys|kill-pane|agentteam_task|agentteam_receive|report_done|report_blocked|mailbox|full-text reader|full text reader|stateFilesWritten:\s*true|fullTextIncluded:\s*true|taskReportPlanRunConnected:\s*true|panelConnected:\s*true|tmuxConnected:\s*true|repository write|npm publish|package release|renderPanel|openTeamPanel/i.test(goBoundarySources), false, 'Go/kernel boundary must not expand to tmux/control-plane/UI/full-text/package authority')
+  const goBoundarySourcesWithoutAllowedKillPane = goBoundarySources.replace(/exec\.CommandContext\(ctx, "tmux", "kill-pane", "-t", paneID\)/g, '')
+  assert.equal(/capturePane|capture-pane|tmux\s+capture|send-keys|kill-pane|agentteam_task|agentteam_receive|report_done|report_blocked|mailbox|full-text reader|full text reader|stateFilesWritten:\s*true|fullTextIncluded:\s*true|taskReportPlanRunConnected:\s*true|panelConnected:\s*true|tmuxConnected:\s*true|repository write|npm publish|package release|renderPanel|openTeamPanel/i.test(goBoundarySourcesWithoutAllowedKillPane), false, 'Go/kernel boundary must not expand to tmux/control-plane/UI/full-text/package authority')
   assertIncludes(goBoundarySources, 'exec.CommandContext(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName)', 'later v0.6.84 permits only detached swarm new-window')
+  assertIncludes(goBoundarySources, 'exec.CommandContext(ctx, "tmux", "kill-pane", "-t", paneID)', 'later v0.6.86 permits only argv killPane')
 }
 
 function assertDocsConsistency(root) {

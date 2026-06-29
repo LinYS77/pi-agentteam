@@ -322,7 +322,8 @@ function assertGoRuntime(root) {
   assertIncludes(goSource, 'windowName := compactTmuxWindowName(stringParam(params, "windowName"))', `${GO_SOURCE_FILE} compact window validation`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} v0.6.82 new-session preserved`)
   assertIncludes(goSource, 'runCreateTeammatePaneTmuxOutput("list-panes", "-t", target, "-F", workerLifecycleWindowPaneFormat)', `${GO_SOURCE_FILE} v0.6.80 createTeammatePane preserved`)
-  for (const command of FORBIDDEN_GO_TMUX_COMMANDS) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${command}`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "kill-pane", "-t", paneID)', `${GO_SOURCE_FILE} later v0.6.86 authorized killPane`)
+  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => command !== 'kill-pane')) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${command}`)
   assert.equal(/exec\.Command\s*\(/.test(goSource), false, `${GO_SOURCE_FILE} must not use shell-capable exec.Command`)
   assert.equal(/"(?:sh|bash|zsh|fish)"/.test(goSource), false, `${GO_SOURCE_FILE} must not invoke shells`)
 }

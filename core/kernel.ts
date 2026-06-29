@@ -139,6 +139,7 @@ export type AgentTeamKernelProfile = AgentTeamKernelHealth & {
     workerLifecycleRefreshWindowPaneLabelsConnected?: boolean
     workerLifecycleSetPaneLabelConnected?: boolean
     workerLifecycleClearPaneLabelConnected?: boolean
+    workerLifecycleKillPaneConnected?: boolean
     workerLifecycleCreateTeammatePaneConnected?: boolean
     workerLifecycleCreateDetachedSwarmSessionConnected?: boolean
     workerLifecycleCreateDetachedSwarmWindowConnected?: boolean
@@ -427,6 +428,23 @@ export type AgentTeamKernelPaneLabelClearing = {
   tmuxMutation: true
 }
 
+export type AgentTeamKernelPaneKill = {
+  ok: boolean
+  operation: 'killPane'
+  capability: 'workerLifecycle'
+  paneId: string
+  killed: boolean
+  status?: 'unknown'
+  resultMarker?: 'stale'
+  failureKind?: AgentTeamKernelWorkerLifecycleFailureKind
+  reason?: string
+  error?: string
+  readOnly: false
+  stateFilesRead: false
+  stateFilesWritten: false
+  tmuxMutation: true
+}
+
 export type AgentTeamKernelCreateTeammatePaneInput = {
   target: string
   leaderPaneId: string
@@ -489,6 +507,7 @@ export type AgentTeamKernelAdapter = {
   refreshWindowPaneLabelsAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowPaneLabelsRefresh>
   setPaneLabelAsync(paneId: string, label: string, signal?: AbortSignal): Promise<AgentTeamKernelPaneLabelSetting>
   clearPaneLabelAsync(paneId: string, signal?: AbortSignal): Promise<AgentTeamKernelPaneLabelClearing>
+  killPane(paneId: string): AgentTeamKernelPaneKill
   createTeammatePaneAsync(input: AgentTeamKernelCreateTeammatePaneInput, signal?: AbortSignal): Promise<AgentTeamKernelTeammatePaneCreation>
   checkTmuxAvailableAsync(signal?: AbortSignal): Promise<AgentTeamKernelTmuxAvailability>
   compactReadModelFingerprint(input: unknown, fallback?: (input: unknown) => AgentTeamKernelCompactReadModelResult): AgentTeamKernelCompactReadModelResult
@@ -719,6 +738,7 @@ function fallbackProfile(metadata: AgentTeamKernelMetadata, params: Record<strin
       workerLifecycleRefreshWindowPaneLabelsConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleSetPaneLabelConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleClearPaneLabelConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
+      workerLifecycleKillPaneConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleCreateTeammatePaneConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleCreateDetachedSwarmSessionConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleCreateDetachedSwarmWindowConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
@@ -895,6 +915,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     if (profile.workerLifecycleRefreshWindowPaneLabelsConnected !== undefined && profile.workerLifecycleRefreshWindowPaneLabelsConnected !== true) return undefined
     if (profile.workerLifecycleSetPaneLabelConnected !== undefined && profile.workerLifecycleSetPaneLabelConnected !== true) return undefined
     if (profile.workerLifecycleClearPaneLabelConnected !== undefined && profile.workerLifecycleClearPaneLabelConnected !== true) return undefined
+    if (profile.workerLifecycleKillPaneConnected !== undefined && profile.workerLifecycleKillPaneConnected !== true) return undefined
     if (profile.workerLifecycleCreateTeammatePaneConnected !== undefined && profile.workerLifecycleCreateTeammatePaneConnected !== true) return undefined
     if (profile.workerLifecycleCreateDetachedSwarmSessionConnected !== undefined && profile.workerLifecycleCreateDetachedSwarmSessionConnected !== true) return undefined
     if (profile.workerLifecycleCreateDetachedSwarmWindowConnected !== undefined && profile.workerLifecycleCreateDetachedSwarmWindowConnected !== true) return undefined
@@ -921,6 +942,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         workerLifecycleRefreshWindowPaneLabelsConnected: profile.workerLifecycleRefreshWindowPaneLabelsConnected === true,
         workerLifecycleSetPaneLabelConnected: profile.workerLifecycleSetPaneLabelConnected === true,
         workerLifecycleClearPaneLabelConnected: profile.workerLifecycleClearPaneLabelConnected === true,
+        workerLifecycleKillPaneConnected: profile.workerLifecycleKillPaneConnected === true,
         workerLifecycleCreateTeammatePaneConnected: profile.workerLifecycleCreateTeammatePaneConnected === true,
         workerLifecycleCreateDetachedSwarmSessionConnected: profile.workerLifecycleCreateDetachedSwarmSessionConnected === true,
         workerLifecycleCreateDetachedSwarmWindowConnected: profile.workerLifecycleCreateDetachedSwarmWindowConnected === true,
@@ -1355,6 +1377,27 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       failureKind: kind,
       reason: safeReason,
       error: safeReason,
+      readOnly: false,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: true,
+    }
+  }
+
+  function workerLifecycleUnavailablePaneKill(paneId: string, kind: AgentTeamKernelWorkerLifecycleFailureKind): AgentTeamKernelPaneKill {
+    const safePaneId = compactTmuxPaneId(paneId)
+    const reason = compactKernelText(`Go worker lifecycle killPane unavailable (${kind})`, 'Go worker lifecycle killPane unavailable (previous-helper-failure)')
+    return {
+      ok: false,
+      operation: 'killPane',
+      capability: 'workerLifecycle',
+      paneId: safePaneId,
+      killed: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind: kind,
+      reason,
+      error: reason,
       readOnly: false,
       stateFilesRead: false,
       stateFilesWritten: false,
@@ -2016,6 +2059,49 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     }
   }
 
+  function validatePaneKillResult(value: unknown, requestedPaneId: string): AgentTeamKernelPaneKill | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const result = value as Partial<AgentTeamKernelPaneKill>
+    if (result.operation !== 'killPane' || result.capability !== 'workerLifecycle') return undefined
+    if (result.readOnly !== false || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== true) return undefined
+    const paneId = compactTmuxPaneId(result.paneId || requestedPaneId)
+    if (result.ok === true) {
+      if (!paneId || result.killed !== true) return undefined
+      return {
+        ok: true,
+        operation: 'killPane',
+        capability: 'workerLifecycle',
+        paneId,
+        killed: true,
+        readOnly: false,
+        stateFilesRead: false,
+        stateFilesWritten: false,
+        tmuxMutation: true,
+      }
+    }
+    if (result.ok !== false || result.killed !== false) return undefined
+    const failureKind = typeof result.failureKind === 'string' && ['unsupported-operation', 'pane-not-found', 'invalid-pane-id', ...AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS].includes(result.failureKind)
+      ? result.failureKind as AgentTeamKernelWorkerLifecycleFailureKind
+      : 'previous-helper-failure'
+    const reason = compactKernelText(`Go worker lifecycle killPane unavailable (${failureKind})`, 'Go worker lifecycle killPane unavailable (previous-helper-failure)')
+    return {
+      ok: false,
+      operation: 'killPane',
+      capability: 'workerLifecycle',
+      paneId,
+      killed: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind,
+      reason,
+      error: reason,
+      readOnly: false,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: true,
+    }
+  }
+
   function validateTeammatePaneCreationResult(value: unknown, requestedTarget: string): AgentTeamKernelTeammatePaneCreation | undefined {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
     const result = value as Partial<AgentTeamKernelTeammatePaneCreation>
@@ -2545,6 +2631,17 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle clearPaneLabel async result shape')
       }
       return workerLifecycleUnavailablePaneLabelClearing(requestedPaneId, cutoverFailureKind ?? 'previous-helper-failure')
+    },
+    killPane(paneId) {
+      const requestedPaneId = compactTmuxPaneId(paneId)
+      if (!requestedPaneId) return workerLifecycleUnavailablePaneKill(paneId, 'invalid-pane-id')
+      const helperResult = callHelper<unknown>('workerLifecycle', { operation: 'killPane', paneId: requestedPaneId })
+      const parsed = validatePaneKillResult(helperResult, requestedPaneId)
+      if (parsed) return parsed
+      if (helperResult !== undefined) {
+        recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle killPane result shape')
+      }
+      return workerLifecycleUnavailablePaneKill(requestedPaneId, cutoverFailureKind ?? 'previous-helper-failure')
     },
     async createTeammatePaneAsync(input, signal) {
       const requestedTarget = compactTmuxWindowTarget(input?.target)

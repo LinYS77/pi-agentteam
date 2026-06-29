@@ -328,6 +328,23 @@ type workerPaneLabelClearingResult struct {
 	TmuxMutation      bool   `json:"tmuxMutation"`
 }
 
+type workerPaneKillResult struct {
+	OK                bool   `json:"ok"`
+	Operation         string `json:"operation"`
+	Capability        string `json:"capability"`
+	PaneID            string `json:"paneId"`
+	Killed            bool   `json:"killed"`
+	Status            string `json:"status,omitempty"`
+	Marker            string `json:"resultMarker,omitempty"`
+	Failure           string `json:"failureKind,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Error             string `json:"error,omitempty"`
+	ReadOnly          bool   `json:"readOnly"`
+	StateFilesRead    bool   `json:"stateFilesRead"`
+	StateFilesWritten bool   `json:"stateFilesWritten"`
+	TmuxMutation      bool   `json:"tmuxMutation"`
+}
+
 type workerTeammatePaneCreationResult struct {
 	OK                bool   `json:"ok"`
 	Operation         string `json:"operation"`
@@ -398,6 +415,7 @@ func profile(params map[string]any) profileResult {
 			"workerLifecycleRefreshWindowPaneLabelsConnected":    true,
 			"workerLifecycleSetPaneLabelConnected":               true,
 			"workerLifecycleClearPaneLabelConnected":             true,
+			"workerLifecycleKillPaneConnected":                   true,
 			"workerLifecycleCreateTeammatePaneConnected":         true,
 			"workerLifecycleCreateDetachedSwarmSessionConnected": true,
 			"workerLifecycleCreateDetachedSwarmWindowConnected":  true,
@@ -1640,6 +1658,66 @@ func clearPaneLabel(params map[string]any) workerPaneLabelClearingResult {
 	}
 }
 
+func unavailablePaneKill(paneID string, kind string) workerPaneKillResult {
+	safePaneID := compactTmuxPaneID(paneID)
+	reason := "Go worker lifecycle killPane unavailable (" + kind + ")"
+	return workerPaneKillResult{
+		OK:                false,
+		Operation:         "killPane",
+		Capability:        "workerLifecycle",
+		PaneID:            safePaneID,
+		Killed:            false,
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
+func runPaneKill(paneID string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "kill-pane", "-t", paneID)
+	cmd.Env = os.Environ()
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "tmux-command-timeout"
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return "tmux-unavailable"
+		}
+		return "tmux-command-failed"
+	}
+	return ""
+}
+
+func killPane(params map[string]any) workerPaneKillResult {
+	paneID := compactTmuxPaneID(stringParam(params, "paneId"))
+	if paneID == "" {
+		return unavailablePaneKill("", "invalid-pane-id")
+	}
+	if failureKind := runPaneKill(paneID); failureKind != "" {
+		return unavailablePaneKill(paneID, failureKind)
+	}
+	return workerPaneKillResult{
+		OK:                true,
+		Operation:         "killPane",
+		Capability:        "workerLifecycle",
+		PaneID:            paneID,
+		Killed:            true,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
 func unavailableTeammatePaneCreation(target string, paneID string, kind string) workerTeammatePaneCreationResult {
 	safeTarget := compactTmuxWindowTarget(target)
 	safePaneID := compactTmuxPaneID(paneID)
@@ -1804,6 +1882,8 @@ func workerLifecycle(params map[string]any) any {
 		return setPaneLabel(params)
 	case "clearPaneLabel":
 		return clearPaneLabel(params)
+	case "killPane":
+		return killPane(params)
 	case "createTeammatePane":
 		return createTeammatePane(params)
 	default:

@@ -224,8 +224,11 @@ function assertGoAuthorityBounded(root) {
   assert.equal(GO_FORBIDDEN_TERMS.test(goSource), false, 'Go helper must not own pi/control-plane/package/release/full-text authority')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'Go workerLifecycle may use only narrow current-pane binding display-message')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "-V"\)/, 'Go tmuxAvailability may use only exact tmux -V')
-  const goSourceWithoutAllowedDetachedNewWindow = goSource.replace(/exec\.CommandContext\(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName\)/g, '')
-  assert.equal(/send-keys|kill-pane|new-window|capture-pane/.test(goSourceWithoutAllowedDetachedNewWindow), false, 'Go workerLifecycle must not add unauthorized mutating tmux lifecycle commands')
+  const goSourceWithoutAllowedDetachedNewWindow = goSource
+    .replace(/exec\.CommandContext\(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName\)/g, '')
+    .replace(/exec\.CommandContext\(ctx, "tmux", "kill-pane", "-t", paneID\)/g, '')
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "kill-pane", "-t", paneID)', 'later v0.6.86 permits only argv killPane')
+  assert.equal(/send-keys|kill-pane|new-window|capture-pane/.test(goSourceWithoutAllowedDetachedNewWindow), false, 'Go workerLifecycle must not add unauthorized mutating tmux lifecycle commands beyond exact killPane')
   assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, 'Go workerLifecycle must not add target-based display-message')
   assert.equal(/os\.Stdin|os\.Stdout/.test(goSource), true, 'Go helper should remain stdio JSON-RPC')
 }

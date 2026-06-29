@@ -254,12 +254,11 @@ function assertCurrentTypescriptPaneState(root) {
   const clearBody = functionBody(panesSource, 'clearPaneLabelSync')
   const createBody = functionBody(panesSource, 'createTeammatePane')
 
-  assertIncludes(panesSource, CURRENT_TYPESCRIPT_KILL_PANE_SURFACE.runTmuxNoThrowImport, `${RUNTIME_FILE} runTmuxNoThrow import`)
+  assertIncludes(panesSource, CURRENT_TYPESCRIPT_KILL_PANE_SURFACE.runTmuxNoThrowImport, `${RUNTIME_FILE} runTmuxNoThrow import for clearPaneLabelSync`)
   assertIncludes(killBody, CURRENT_TYPESCRIPT_KILL_PANE_SURFACE.signature, `${RUNTIME_FILE} killPane signature`)
-  assertIncludes(killBody, CURRENT_TYPESCRIPT_KILL_PANE_SURFACE.killPaneCall, `${RUNTIME_FILE} killPane current no-throw call`)
-  assert.equal([...killBody.matchAll(/runTmuxNoThrow\(\['kill-pane', '-t', paneId\]\)/g)].length, 1, `${RUNTIME_FILE} killPane should keep exactly one direct no-throw kill-pane call`)
-  assert.equal(killBody.includes('createAgentTeamKernelAdapter'), false, `${RUNTIME_FILE} killPane must not call Go adapter in this gate`)
-  assert.equal(killBody.includes('killPaneAsync'), false, `${RUNTIME_FILE} killPane must not call future adapter method in this gate`)
+  assertIncludes(killBody, 'createAgentTeamKernelAdapter().killPane(paneId)', `${RUNTIME_FILE} later v0.6.86 killPane adapter cutover`)
+  assert.equal([...killBody.matchAll(/runTmuxNoThrow\(\['kill-pane', '-t', paneId\]\)/g)].length, 0, `${RUNTIME_FILE} later v0.6.86 removes direct no-throw kill-pane fallback`)
+  assert.equal(killBody.includes('killPaneAsync'), false, `${RUNTIME_FILE} killPane remains synchronous, not async`)
   assert.equal(killBody.includes('await '), false, `${RUNTIME_FILE} killPane must remain synchronous`)
   assert.equal(killBody.includes('throw '), false, `${RUNTIME_FILE} killPane must preserve no-throw facade`)
   assert.equal(killBody.includes('return '), false, `${RUNTIME_FILE} killPane must remain void/no return value`)
@@ -281,14 +280,11 @@ function assertNoKillPaneRuntimeCutover(root) {
   const windowsSource = read(root, WINDOWS_FILE)
   const labelsSource = read(root, LABELS_FILE)
 
-  for (const forbidden of FORBIDDEN_RUNTIME_CUTOVER_SNIPPETS) {
-    assert.equal(kernelSource.includes(forbidden), false, `${KERNEL_FILE} must not add killPane runtime cutover snippet: ${forbidden}`)
-  }
-  for (const forbidden of FORBIDDEN_GO_CUTOVER_SNIPPETS) {
-    assert.equal(goSource.includes(forbidden), false, `${GO_SOURCE_FILE} must not add killPane Go cutover snippet: ${forbidden}`)
-  }
-  assert.equal(goSource.includes('kill-pane'), false, `${GO_SOURCE_FILE} must not add kill-pane command text`)
-  assert.equal(kernelSource.includes('kill-pane'), false, `${KERNEL_FILE} must not add kill-pane adapter command text`)
+  assertIncludes(kernelSource, "operation: 'killPane'", `${KERNEL_FILE} later v0.6.86 killPane operation`)
+  assertIncludes(kernelSource, 'killPane(paneId: string): AgentTeamKernelPaneKill', `${KERNEL_FILE} later v0.6.86 sync adapter method`)
+  assertIncludes(goSource, 'case "killPane":', `${GO_SOURCE_FILE} later v0.6.86 killPane case`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "kill-pane", "-t", paneID)', `${GO_SOURCE_FILE} later v0.6.86 exact argv kill-pane command`)
+  assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "kill-pane", "-t", paneID\)/g)].length, 1, `${GO_SOURCE_FILE} should contain exactly one authorized kill-pane command`)
   assert.equal(windowsSource.includes('kill-pane'), false, `${WINDOWS_FILE} must remain unrelated to kill-pane`)
   assert.equal(labelsSource.includes('kill-pane'), false, `${LABELS_FILE} must remain unrelated to kill-pane`)
 }
@@ -366,7 +362,8 @@ function assertNativeArtifactCurrentAndSelfConsistent(root) {
   assert.deepEqual(manifest.smoke.workerLifecycleCreateTeammatePane, NATIVE_ARTIFACT_SNAPSHOT.createTeammatePaneSmoke)
   assert.deepEqual(manifest.smoke.workerLifecycleCreateDetachedSwarmSession, NATIVE_ARTIFACT_SNAPSHOT.createDetachedSwarmSessionSmoke)
   assert.deepEqual(manifest.smoke.workerLifecycleCreateDetachedSwarmWindow, NATIVE_ARTIFACT_SNAPSHOT.createDetachedSwarmWindowSmoke)
-  assert.equal(Object.prototype.hasOwnProperty.call(manifest.smoke, 'workerLifecycleKillPane'), false, 'native smoke must not include future killPane gate')
+  assert.equal(Object.prototype.hasOwnProperty.call(manifest.smoke, 'workerLifecycleKillPane'), true, 'later v0.6.86 native smoke includes killPane')
+  assert.deepEqual(manifest.smoke.workerLifecycleKillPane, { ok: false, acceptedFailureKinds: ['invalid-pane-id'] })
 }
 
 function assertPackageAndReleaseGuards(root) {

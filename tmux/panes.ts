@@ -30,7 +30,9 @@ export async function createTeammatePane(
 }
 
 export function killPane(paneId: string): void {
-  runTmuxNoThrow(['kill-pane', '-t', paneId])
+  try {
+    createAgentTeamKernelAdapter().killPane(paneId)
+  } catch (_) {}
 }
 
 export function clearPaneLabelSync(paneId: string): void {
