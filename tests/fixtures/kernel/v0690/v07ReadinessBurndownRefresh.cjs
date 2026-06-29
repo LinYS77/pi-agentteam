@@ -1,0 +1,240 @@
+const V07_READINESS_BURNDOWN_REFRESH_SCHEMA_VERSION = 1
+const V07_READINESS_BURNDOWN_REFRESH_THEME = 'v0.6.90-v07-readiness-burndown-refresh'
+const RELEASE_TARGET = 'v0.7.0 = core refactor + performance baseline + bug burn-down release'
+const PACKAGE_VERSION = '0.6.8'
+const STATUS = 'not-release-ready-readiness-inventory-only'
+const HELPER_VERSION = '0.3.0-read-model-shadow'
+const PROTOCOL_VERSION = 1
+const DOC = 'docs/perf/v0.6.90-v07-readiness-burndown-refresh.md'
+const ROADMAP = 'docs/agentteam方案书.md'
+const V0688_DOC = 'docs/perf/v0.6.88-go-clear-pane-label-sync-cutover.md'
+const V0689_DOC = 'docs/perf/v0.6.89-go-worker-delivery-boundary-gate.md'
+const DELIVERY_POLICY_FILE = 'deliveryPolicy.ts'
+const GO_SOURCE_FILE = 'kernel/go/agentteam-kernel/main.go'
+const KERNEL_FILE = 'core/kernel.ts'
+const NATIVE_ROOT = 'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc'
+const ACCEPTED_RECENT_CHECKPOINTS = Object.freeze([
+  Object.freeze({
+    id: 'v0.6.88-clearPaneLabelSync-cutover',
+    status: 'accepted',
+    doc: V0688_DOC,
+    fact: 'clearPaneLabelSync cutover is accepted; synchronous public no-throw/void facade delegates to Go-backed workerLifecycle.clearPaneLabel.',
+  }),
+  Object.freeze({
+    id: 'v0.6.89-worker-delivery-boundary-gate',
+    status: 'accepted',
+    doc: V0689_DOC,
+    fact: 'worker delivery boundary gate is accepted; delivery remains bridge-only TypeScript-owned outbox/bridge orchestration.',
+  }),
+])
+const CURRENT_STATE = Object.freeze({
+  releaseTarget: RELEASE_TARGET,
+  packageVersion: PACKAGE_VERSION,
+  status: STATUS,
+  ready: false,
+  releaseReadyClaim: false,
+  packageReleaseApproved: false,
+  npmPublished: false,
+  tagCreated: false,
+  githubReleaseCreated: false,
+  acceptedRecentCheckpoints: ACCEPTED_RECENT_CHECKPOINTS,
+  workerDelivery: 'bridge-only TypeScript-owned outbox/bridge orchestration',
+  goSendKeysAuthorized: false,
+  activeWakePaneAuthorized: false,
+  typescriptPiFacadeBoundary: 'TypeScript/pi remains facade/compliance boundary; Go owns only explicit helper/kernel slices.',
+})
+const REMAINING_V07_GATES = Object.freeze([
+  Object.freeze({
+    id: 'clean-temp-pi-agentteam-home-p95-refresh',
+    required: true,
+    status: 'required-not-run-in-this-slice',
+    evidencePolicy: 'Run fresh p95 evidence in a clean temporary PI_AGENTTEAM_HOME and record sanitized summaries/checksums only.',
+  }),
+  Object.freeze({
+    id: 'clean-temp-manual-rc-operator-evidence',
+    required: true,
+    status: 'required-not-run-in-this-slice',
+    evidencePolicy: 'Run true operator/manual RC in a clean temporary PI_AGENTTEAM_HOME and record sanitized compact observations only.',
+  }),
+  Object.freeze({
+    id: 'bug-burndown-ledger',
+    required: true,
+    status: 'required-not-created-in-this-slice',
+    evidencePolicy: 'Classify P0/P1/P2 or equivalent, with deferred/non-goal rows and owner/reviewer decisions.',
+  }),
+  Object.freeze({
+    id: 'release-checklist-governance-review',
+    required: true,
+    status: 'required-not-started-in-this-slice',
+    evidencePolicy: 'Review release checklist, package/tag/npm/native/default resolver governance, rollback, and no-go conditions.',
+  }),
+  Object.freeze({
+    id: 'evidence-reconciliation',
+    required: true,
+    status: 'required-not-started-in-this-slice',
+    evidencePolicy: 'Reconcile docs/tests/roadmap/actual behavior and close stale or superseded blockers before release decision.',
+  }),
+  Object.freeze({
+    id: 'no-raw-artifact-check-ins',
+    required: true,
+    status: 'required-continuous',
+    evidencePolicy: 'No raw benchmark JSON, smoke logs, terminal logs, screenshots, mailbox/report bodies, worker transcripts, state archives, secrets, raw hosted records, tarballs, or raw p95/manual RC output in repo.',
+  }),
+])
+const RAW_ARTIFACT_NO_CHECKIN_POLICY = Object.freeze([
+  'raw benchmark JSON',
+  'raw smoke logs',
+  'terminal logs',
+  'screenshots',
+  'raw mailbox/report bodies',
+  'worker transcripts',
+  'state archives',
+  'secrets',
+  'raw hosted records',
+  'tarballs',
+  'raw p95/manual RC output',
+])
+const STILL_UNAUTHORIZED = Object.freeze([
+  'release-ready claim',
+  'npm version',
+  'npm publish',
+  'tag creation/push',
+  'GitHub release/assets',
+  'native rebuild/path rename',
+  'Go source changes',
+  'tmux runtime changes',
+  'state/task/PlanRun/mailbox/governance migration',
+  'team panel/UI migration',
+  'release/package control-plane runtime migration',
+  'default resolver/package/native delivery changes',
+  'Go send-keys',
+  'active Go wakePane',
+  'terminal transport revival',
+])
+const BLOCKED_WITHOUT_FUTURE_DESIGN_GATES = Object.freeze([
+  'state/task/PlanRun/mailbox/governance',
+  'team panel/UI',
+  'release/package control-plane runtime',
+  'terminal/tmux worker wake/send-keys',
+])
+const ACTIVE_CAPABILITIES = Object.freeze(['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'])
+const ACTIVE_WORKER_LIFECYCLE_OPERATIONS = Object.freeze([
+  'inspectPane',
+  'listAgentTeamPanes',
+  'captureCurrentPaneBinding',
+  'listPanesInWindow',
+  'findAgentTeamWindowTarget',
+  'findWindowTargetByName',
+  'sessionExists',
+  'createDetachedSwarmSession',
+  'createDetachedSwarmWindow',
+  'markWindowAsAgentTeam',
+  'refreshWindowPaneLabels',
+  'setPaneLabel',
+  'clearPaneLabel',
+  'killPane',
+  'createTeammatePane',
+])
+const NATIVE_ARTIFACT_SNAPSHOT = Object.freeze({
+  root: NATIVE_ROOT,
+  helperPath: 'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/agentteam-tmuxSnapshotParse',
+  helperSha256: 'a654e58ff5a2c61b6c03d2fa5e05bc3d888243c49eecdd745f10c24d82f4f2a9',
+  helperSize: 3521170,
+  manifestSha256: '1eb45fb80806940f164a7c4e0a54cd063018fd943856a640897fa3dc11b90b6d',
+  provenanceSha256: '69598eff59490feb76d48c325ebc6ee9022951832ee52935cd3f12cd5fb594b1',
+  attestationSha256: 'c00b8ad0c65a66957609c6a2449d162a0eb447239ca8f9a5b3406f2ff3d71a83',
+  checksumsSha256: '7879455dfc22823b86185c19d829d33e3bdb8651f75320f5d4b65421a3aabdbd',
+  sourceRevision: '6603982e9c0130b9298a43b8214fd6887d7a125b',
+  forbiddenSmokeKeys: Object.freeze(['workerLifecycleWakePane']),
+})
+const RELEASE_PACKAGE_GUARDS = Object.freeze([
+  'package.json remains 0.6.8',
+  'no npm version',
+  'no npm publish',
+  'no release tag or GitHub release asset',
+  'no package lockfiles',
+  'no go.mod or go.sum',
+  'no lifecycle hooks or postinstall downloads',
+  'no package-manager native dependency/download flow',
+  'no native artifact rebuild',
+  'no native artifact rename',
+])
+const v07ReadinessBurndownRefresh = Object.freeze({
+  schemaVersion: V07_READINESS_BURNDOWN_REFRESH_SCHEMA_VERSION,
+  theme: V07_READINESS_BURNDOWN_REFRESH_THEME,
+  releaseTarget: RELEASE_TARGET,
+  packageVersion: PACKAGE_VERSION,
+  helperVersion: HELPER_VERSION,
+  protocolVersion: PROTOCOL_VERSION,
+  status: STATUS,
+  ready: false,
+  releaseReadyClaim: false,
+  docsTestsOnly: true,
+  runtimeBehaviorChanged: false,
+  sourceBehaviorChanged: false,
+  goSourceChanged: false,
+  tmuxRuntimeChanged: false,
+  nativeHelperRebuilt: false,
+  nativePathRenamed: false,
+  packageVersionChanged: false,
+  npmPublished: false,
+  tagCreated: false,
+  githubReleaseCreated: false,
+  releaseAssetsCreated: false,
+  rawArtifactsCheckedIn: false,
+  manualRcRunPerformed: false,
+  p95RunPerformed: false,
+  workerDeliveryBridgeOnly: true,
+  goSendKeysAuthorized: false,
+  activeWakePaneAuthorized: false,
+  terminalDeliveryAuthorized: false,
+  stateTaskMailboxGovernanceMigrated: false,
+  teamPanelUiMigrated: false,
+  releasePackageControlPlaneMigrated: false,
+  defaultResolverPackageNativeChanged: false,
+  doc: DOC,
+  roadmap: ROADMAP,
+  deliveryPolicyFile: DELIVERY_POLICY_FILE,
+  goSourceFile: GO_SOURCE_FILE,
+  kernelFile: KERNEL_FILE,
+  nativeRoot: NATIVE_ROOT,
+  acceptedRecentCheckpoints: ACCEPTED_RECENT_CHECKPOINTS,
+  currentState: CURRENT_STATE,
+  remainingV07Gates: REMAINING_V07_GATES,
+  rawArtifactNoCheckinPolicy: RAW_ARTIFACT_NO_CHECKIN_POLICY,
+  stillUnauthorized: STILL_UNAUTHORIZED,
+  blockedWithoutFutureDesignGates: BLOCKED_WITHOUT_FUTURE_DESIGN_GATES,
+  activeCapabilities: ACTIVE_CAPABILITIES,
+  activeWorkerLifecycleOperations: ACTIVE_WORKER_LIFECYCLE_OPERATIONS,
+  nativeArtifactSnapshot: NATIVE_ARTIFACT_SNAPSHOT,
+  releasePackageGuards: RELEASE_PACKAGE_GUARDS,
+})
+
+module.exports = {
+  ACCEPTED_RECENT_CHECKPOINTS,
+  ACTIVE_CAPABILITIES,
+  ACTIVE_WORKER_LIFECYCLE_OPERATIONS,
+  BLOCKED_WITHOUT_FUTURE_DESIGN_GATES,
+  CURRENT_STATE,
+  DELIVERY_POLICY_FILE,
+  DOC,
+  GO_SOURCE_FILE,
+  HELPER_VERSION,
+  KERNEL_FILE,
+  NATIVE_ARTIFACT_SNAPSHOT,
+  NATIVE_ROOT,
+  PACKAGE_VERSION,
+  PROTOCOL_VERSION,
+  RAW_ARTIFACT_NO_CHECKIN_POLICY,
+  RELEASE_PACKAGE_GUARDS,
+  RELEASE_TARGET,
+  REMAINING_V07_GATES,
+  ROADMAP,
+  STATUS,
+  STILL_UNAUTHORIZED,
+  V0688_DOC,
+  V0689_DOC,
+  V07_READINESS_BURNDOWN_REFRESH_SCHEMA_VERSION,
+  V07_READINESS_BURNDOWN_REFRESH_THEME,
+  v07ReadinessBurndownRefresh,
+}
