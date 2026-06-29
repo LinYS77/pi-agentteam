@@ -114,6 +114,7 @@ docs/perf/*
 !docs/perf/v0.6.82-go-detached-new-session-cutover.md
 !docs/perf/v0.6.83-go-detached-new-window-gate.md
 !docs/perf/v0.6.84-go-detached-new-window-cutover.md
+!docs/perf/v0.6.85-go-kill-pane-gate.md
 
 # Dependencies
 node_modules/
