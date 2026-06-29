@@ -242,9 +242,9 @@ function assertRuntimeCutover(root) {
   assert.equal(killBody.includes('return '), false, `${RUNTIME_FILE} killPane must remain void/no return`)
   assert.equal(killBody.includes('killPaneAsync'), false, `${RUNTIME_FILE} killPane must use sync adapter`)
 
-  assertIncludes(clearBody, "runTmuxNoThrow(['set-option', '-up', '-t', paneId, '@agentteam-name'])", `${RUNTIME_FILE} clearPaneLabelSync remains TS-owned`)
-  assertIncludes(clearBody, "runTmuxNoThrow(['select-pane', '-t', paneId, '-T', ''])", `${RUNTIME_FILE} clearPaneLabelSync remains TS-owned`)
-  assert.equal(clearBody.includes('createAgentTeamKernelAdapter'), false, `${RUNTIME_FILE} clearPaneLabelSync must not migrate in this slice`)
+  assertIncludes(clearBody, 'createAgentTeamKernelAdapter().clearPaneLabel(paneId)', `${RUNTIME_FILE} later v0.6.88 clearPaneLabelSync adapter cutover`)
+  assert.equal(clearBody.includes("runTmuxNoThrow(['set-option', '-up', '-t', paneId, '@agentteam-name'])"), false, `${RUNTIME_FILE} later v0.6.88 removes direct clearPaneLabelSync set-option fallback`)
+  assert.equal(clearBody.includes("runTmuxNoThrow(['select-pane', '-t', paneId, '-T', ''])"), false, `${RUNTIME_FILE} later v0.6.88 removes direct clearPaneLabelSync select-pane fallback`)
   assertIncludes(createBody, 'createAgentTeamKernelAdapter().createTeammatePaneAsync({', `${RUNTIME_FILE} createTeammatePane remains existing Go cutover`)
   assert.equal(windowsSource.includes('kill-pane'), false, `${WINDOWS_FILE} must remain unrelated to killPane`)
   assert.equal(labelsSource.includes('kill-pane'), false, `${LABELS_FILE} must remain unrelated to killPane`)

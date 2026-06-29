@@ -232,7 +232,7 @@ function assertRuntimeCutover(root) {
   const clearSyncBody = functionBody(panesSource, 'clearPaneLabelSync')
 
   assertIncludes(panesSource, "import { createAgentTeamKernelAdapter } from '../core/kernel.js'", RUNTIME_FILE)
-  assertIncludes(panesSource, "import { runTmuxNoThrow } from './client.js'", RUNTIME_FILE)
+  assert.equal(panesSource.includes("import { runTmuxNoThrow } from './client.js'"), false, `${RUNTIME_FILE} later v0.6.88 removes direct sync clear fallback import`)
   assertIncludes(panesSource, "import { refreshWindowPaneLabels, setPaneLabel } from './labels.js'", RUNTIME_FILE)
   assertIncludes(createBody, 'const swarm = await ensureSwarmWindow(input.preferred, signal)', `${RUNTIME_FILE} ${HELPER_NAME}`)
   assertIncludes(createBody, ADAPTER_DELEGATION, `${RUNTIME_FILE} ${HELPER_NAME}`)
@@ -251,8 +251,9 @@ function assertRuntimeCutover(root) {
 
   assertIncludes(killBody, 'createAgentTeamKernelAdapter().killPane(paneId)', `${RUNTIME_FILE} later v0.6.86 killPane adapter cutover`)
   assert.equal(killBody.includes("runTmuxNoThrow(['kill-pane', '-t', paneId])"), false, `${RUNTIME_FILE} later v0.6.86 removes direct killPane fallback`)
-  assertIncludes(clearSyncBody, "runTmuxNoThrow(['set-option', '-up', '-t', paneId, '@agentteam-name'])", `${RUNTIME_FILE} clearPaneLabelSync remains TS-owned`)
-  assertIncludes(clearSyncBody, "runTmuxNoThrow(['select-pane', '-t', paneId, '-T', ''])", `${RUNTIME_FILE} clearPaneLabelSync remains TS-owned`)
+  assertIncludes(clearSyncBody, 'createAgentTeamKernelAdapter().clearPaneLabel(paneId)', `${RUNTIME_FILE} later v0.6.88 clearPaneLabelSync adapter cutover`)
+  assert.equal(clearSyncBody.includes("runTmuxNoThrow(['set-option', '-up', '-t', paneId, '@agentteam-name'])"), false, `${RUNTIME_FILE} later v0.6.88 removes direct clearPaneLabelSync set-option fallback`)
+  assert.equal(clearSyncBody.includes("runTmuxNoThrow(['select-pane', '-t', paneId, '-T', ''])"), false, `${RUNTIME_FILE} later v0.6.88 removes direct clearPaneLabelSync select-pane fallback`)
 
   assertIncludes(labelsSource, 'export async function setPaneLabel(paneId: string, label: string, signal?: AbortSignal): Promise<void>', `${LABELS_FILE} exported setPaneLabel`)
   assertIncludes(labelsSource, 'createAgentTeamKernelAdapter().setPaneLabelAsync(paneId, label, signal)', `${LABELS_FILE} ${LABEL_HELPER_NAME}`)

@@ -254,7 +254,7 @@ function assertCurrentTypescriptPaneState(root) {
   const clearBody = functionBody(panesSource, 'clearPaneLabelSync')
   const createBody = functionBody(panesSource, 'createTeammatePane')
 
-  assertIncludes(panesSource, CURRENT_TYPESCRIPT_KILL_PANE_SURFACE.runTmuxNoThrowImport, `${RUNTIME_FILE} runTmuxNoThrow import for clearPaneLabelSync`)
+  assert.equal(panesSource.includes(CURRENT_TYPESCRIPT_KILL_PANE_SURFACE.runTmuxNoThrowImport), false, `${RUNTIME_FILE} later v0.6.88 removes runTmuxNoThrow import after clearPaneLabelSync cutover`)
   assertIncludes(killBody, CURRENT_TYPESCRIPT_KILL_PANE_SURFACE.signature, `${RUNTIME_FILE} killPane signature`)
   assertIncludes(killBody, 'createAgentTeamKernelAdapter().killPane(paneId)', `${RUNTIME_FILE} later v0.6.86 killPane adapter cutover`)
   assert.equal([...killBody.matchAll(/runTmuxNoThrow\(\['kill-pane', '-t', paneId\]\)/g)].length, 0, `${RUNTIME_FILE} later v0.6.86 removes direct no-throw kill-pane fallback`)
@@ -264,10 +264,10 @@ function assertCurrentTypescriptPaneState(root) {
   assert.equal(killBody.includes('return '), false, `${RUNTIME_FILE} killPane must remain void/no return value`)
 
   assertIncludes(clearBody, CURRENT_TYPESCRIPT_CLEAR_PANE_LABEL_SYNC_SURFACE.signature, `${RUNTIME_FILE} clearPaneLabelSync signature`)
-  assertIncludes(clearBody, CURRENT_TYPESCRIPT_CLEAR_PANE_LABEL_SYNC_SURFACE.unsetLabelCall, `${RUNTIME_FILE} clearPaneLabelSync unset call`)
-  assertIncludes(clearBody, CURRENT_TYPESCRIPT_CLEAR_PANE_LABEL_SYNC_SURFACE.clearTitleCall, `${RUNTIME_FILE} clearPaneLabelSync title clear call`)
-  assert.equal([...clearBody.matchAll(/runTmuxNoThrow\(/g)].length, 2, `${RUNTIME_FILE} clearPaneLabelSync should keep exactly two no-throw calls`)
-  assert.equal(clearBody.includes('createAgentTeamKernelAdapter'), false, `${RUNTIME_FILE} clearPaneLabelSync remains TS-owned`)
+  assertIncludes(clearBody, 'createAgentTeamKernelAdapter().clearPaneLabel(paneId)', `${RUNTIME_FILE} later v0.6.88 clearPaneLabelSync adapter cutover`)
+  assert.equal(clearBody.includes(CURRENT_TYPESCRIPT_CLEAR_PANE_LABEL_SYNC_SURFACE.unsetLabelCall), false, `${RUNTIME_FILE} later v0.6.88 removes clearPaneLabelSync unset fallback`)
+  assert.equal(clearBody.includes(CURRENT_TYPESCRIPT_CLEAR_PANE_LABEL_SYNC_SURFACE.clearTitleCall), false, `${RUNTIME_FILE} later v0.6.88 removes clearPaneLabelSync title clear fallback`)
+  assert.equal([...clearBody.matchAll(/runTmuxNoThrow\(/g)].length, 0, `${RUNTIME_FILE} clearPaneLabelSync should not keep direct no-throw calls after later v0.6.88`)
 
   assertIncludes(createBody, CURRENT_V0680_CREATE_TEAMMATE_PANE_SURFACE.runtimeDelegation, `${RUNTIME_FILE} createTeammatePane v0.6.80 delegation remains`)
   assertIncludes(createBody, 'await setPaneLabel(created.paneId, input.name, signal)', `${RUNTIME_FILE} post-create label remains`)

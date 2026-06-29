@@ -235,7 +235,7 @@ function assertCurrentTypescriptPaneState(root) {
 
   assert.equal(CURRENT_TYPESCRIPT_CREATE_TEAMMATE_PANE_SURFACE.paneDiscoveryCall.includes("runTmuxAsync(['list-panes'"), true, 'v0.6.79 fixture preserves the historical gate-time TypeScript surface')
   assertIncludes(panesSource, "import { createAgentTeamKernelAdapter } from '../core/kernel.js'", `${RUNTIME_FILE} later v0.6.80 cutover seam`)
-  assertIncludes(panesSource, "import { runTmuxNoThrow } from './client.js'", `${RUNTIME_FILE} kill/clear sync helpers remain TS-owned`)
+  assert.equal(panesSource.includes("import { runTmuxNoThrow } from './client.js'"), false, `${RUNTIME_FILE} later v0.6.88 removes sync clear TypeScript tmux fallback import`)
   assertIncludes(panesSource, "import { refreshWindowPaneLabels, setPaneLabel } from './labels.js'", `${RUNTIME_FILE} later v0.6.80 reuses label helpers`)
   assertIncludes(panesSource, "import { ensureSwarmWindow } from './windows.js'", RUNTIME_FILE)
   assertIncludes(createBody, 'const swarm = await ensureSwarmWindow(input.preferred, signal)', `${RUNTIME_FILE} createTeammatePane`)
@@ -250,8 +250,9 @@ function assertCurrentTypescriptPaneState(root) {
 
   assertIncludes(killBody, 'createAgentTeamKernelAdapter().killPane(paneId)', `${RUNTIME_FILE} later v0.6.86 killPane adapter cutover`)
   assert.equal(killBody.includes("runTmuxNoThrow(['kill-pane', '-t', paneId])"), false, `${RUNTIME_FILE} later v0.6.86 removes direct killPane fallback`)
-  assertIncludes(clearSyncBody, "runTmuxNoThrow(['set-option', '-up', '-t', paneId, '@agentteam-name'])", `${RUNTIME_FILE} clearPaneLabelSync remains TS-owned sync helper`)
-  assertIncludes(clearSyncBody, "runTmuxNoThrow(['select-pane', '-t', paneId, '-T', ''])", `${RUNTIME_FILE} clearPaneLabelSync remains TS-owned sync helper`)
+  assertIncludes(clearSyncBody, 'createAgentTeamKernelAdapter().clearPaneLabel(paneId)', `${RUNTIME_FILE} later v0.6.88 clearPaneLabelSync adapter cutover`)
+  assert.equal(clearSyncBody.includes("runTmuxNoThrow(['set-option', '-up', '-t', paneId, '@agentteam-name'])"), false, `${RUNTIME_FILE} later v0.6.88 removes direct clearPaneLabelSync set-option fallback`)
+  assert.equal(clearSyncBody.includes("runTmuxNoThrow(['select-pane', '-t', paneId, '-T', ''])"), false, `${RUNTIME_FILE} later v0.6.88 removes direct clearPaneLabelSync select-pane fallback`)
 
   assertIncludes(windowsSource, 'export async function ensureSwarmWindow', `${TMUX_WINDOWS} ensureSwarmWindow remains TS-owned`)
   assert.equal(windowsSource.includes("runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]"), false, `${TMUX_WINDOWS} later v0.6.82 removes direct detached new-session fallback`)

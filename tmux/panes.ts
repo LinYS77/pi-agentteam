@@ -1,5 +1,4 @@
 import { createAgentTeamKernelAdapter } from '../core/kernel.js'
-import { runTmuxNoThrow } from './client.js'
 import { refreshWindowPaneLabels, setPaneLabel } from './labels.js'
 import { ensureSwarmWindow } from './windows.js'
 
@@ -36,6 +35,7 @@ export function killPane(paneId: string): void {
 }
 
 export function clearPaneLabelSync(paneId: string): void {
-  runTmuxNoThrow(['set-option', '-up', '-t', paneId, '@agentteam-name'])
-  runTmuxNoThrow(['select-pane', '-t', paneId, '-T', ''])
+  try {
+    createAgentTeamKernelAdapter().clearPaneLabel(paneId)
+  } catch (_) {}
 }

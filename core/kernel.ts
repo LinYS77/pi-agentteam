@@ -507,6 +507,7 @@ export type AgentTeamKernelAdapter = {
   refreshWindowPaneLabelsAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowPaneLabelsRefresh>
   setPaneLabelAsync(paneId: string, label: string, signal?: AbortSignal): Promise<AgentTeamKernelPaneLabelSetting>
   clearPaneLabelAsync(paneId: string, signal?: AbortSignal): Promise<AgentTeamKernelPaneLabelClearing>
+  clearPaneLabel(paneId: string): AgentTeamKernelPaneLabelClearing
   killPane(paneId: string): AgentTeamKernelPaneKill
   createTeammatePaneAsync(input: AgentTeamKernelCreateTeammatePaneInput, signal?: AbortSignal): Promise<AgentTeamKernelTeammatePaneCreation>
   checkTmuxAvailableAsync(signal?: AbortSignal): Promise<AgentTeamKernelTmuxAvailability>
@@ -2629,6 +2630,17 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       if (parsed) return parsed
       if (helperResult !== undefined) {
         recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle clearPaneLabel async result shape')
+      }
+      return workerLifecycleUnavailablePaneLabelClearing(requestedPaneId, cutoverFailureKind ?? 'previous-helper-failure')
+    },
+    clearPaneLabel(paneId) {
+      const requestedPaneId = compactTmuxPaneId(paneId)
+      if (!requestedPaneId) return workerLifecycleUnavailablePaneLabelClearing(paneId, 'invalid-pane-id')
+      const helperResult = callHelper<unknown>('workerLifecycle', { operation: 'clearPaneLabel', paneId: requestedPaneId })
+      const parsed = validatePaneLabelClearingResult(helperResult, requestedPaneId)
+      if (parsed) return parsed
+      if (helperResult !== undefined) {
+        recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle clearPaneLabel result shape')
       }
       return workerLifecycleUnavailablePaneLabelClearing(requestedPaneId, cutoverFailureKind ?? 'previous-helper-failure')
     },
