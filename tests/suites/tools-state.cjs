@@ -23,7 +23,19 @@ module.exports = {
       assert.deepEqual(deliveryRequestsForMember(memberName), before, message)
     }
     const legacyNotes = task => Array.isArray(task?.notes) ? task.notes : []
+    // This suite uses an in-memory fake tmux pane set. Keep snapshot capture in
+    // the same fake universe so host tmux pane IDs cannot collide with fixture
+    // pane IDs during debounced leader mailbox refresh reconciliation.
+    const originalCaptureTmuxSnapshot = modules.tmux.captureTmuxSnapshot
+    modules.tmux.captureTmuxSnapshot = (capturedAt = Date.now()) => ({
+      capturedAt,
+      panes: [],
+      byPaneId: {},
+      ok: false,
+      error: 'test tmux snapshot unavailable',
+    })
 
+    try {
     const configPath = modules.state.getConfigPath()
     modules.state.ensureDir(path.dirname(configPath))
     fs.writeFileSync(configPath, JSON.stringify({
@@ -2063,5 +2075,8 @@ module.exports = {
     modules.state.deleteTeamState('storage-cache-suite')
     modules.state.deleteTeamState('reconcile-invalidate-suite')
     modules.state.deleteTeamState('transaction-suite')
+    } finally {
+      modules.tmux.captureTmuxSnapshot = originalCaptureTmuxSnapshot
+    }
   },
 }
