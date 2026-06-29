@@ -118,6 +118,7 @@ docs/perf/*
 !docs/perf/v0.6.86-go-kill-pane-cutover.md
 !docs/perf/v0.6.87-go-clear-pane-label-sync-gate.md
 !docs/perf/v0.6.88-go-clear-pane-label-sync-cutover.md
+!docs/perf/v0.6.89-go-worker-delivery-boundary-gate.md
 
 # Dependencies
 node_modules/
