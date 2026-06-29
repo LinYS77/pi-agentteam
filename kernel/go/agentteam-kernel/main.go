@@ -17,6 +17,7 @@ import (
 const protocolVersion = 1
 const helperVersion = "0.3.0-read-model-shadow"
 const paneLabelArgumentLimit = 4096
+const tmuxOpaqueArgumentLimit = 4096
 
 var capabilities = []string{"health", "profile", "tmuxSnapshotParse", "tmuxSnapshotCapture", "compactReadModelFingerprint", "workerLifecycle", "tmuxAvailability"}
 
@@ -291,6 +292,24 @@ type workerPaneLabelClearingResult struct {
 	TmuxMutation      bool   `json:"tmuxMutation"`
 }
 
+type workerTeammatePaneCreationResult struct {
+	OK                bool   `json:"ok"`
+	Operation         string `json:"operation"`
+	Capability        string `json:"capability"`
+	Target            string `json:"target"`
+	PaneID            string `json:"paneId"`
+	Created           bool   `json:"created"`
+	Status            string `json:"status,omitempty"`
+	Marker            string `json:"resultMarker,omitempty"`
+	Failure           string `json:"failureKind,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Error             string `json:"error,omitempty"`
+	ReadOnly          bool   `json:"readOnly"`
+	StateFilesRead    bool   `json:"stateFilesRead"`
+	StateFilesWritten bool   `json:"stateFilesWritten"`
+	TmuxMutation      bool   `json:"tmuxMutation"`
+}
+
 type tmuxAvailabilityResult struct {
 	OK                bool   `json:"ok"`
 	Capability        string `json:"capability"`
@@ -343,6 +362,7 @@ func profile(params map[string]any) profileResult {
 			"workerLifecycleRefreshWindowPaneLabelsConnected":   true,
 			"workerLifecycleSetPaneLabelConnected":              true,
 			"workerLifecycleClearPaneLabelConnected":            true,
+			"workerLifecycleCreateTeammatePaneConnected":        true,
 			"tmuxAvailabilityConnected":                         true,
 			"panelConnected":                                    false,
 			"taskReportPlanRunConnected":                        false,
@@ -359,6 +379,33 @@ func stringParam(params map[string]any, key string) string {
 		return ""
 	}
 	return fmt.Sprint(value)
+}
+
+func boolParam(params map[string]any, key string) (bool, bool) {
+	if params == nil {
+		return false, false
+	}
+	value, ok := params[key]
+	if !ok || value == nil {
+		return false, false
+	}
+	boolValue, ok := value.(bool)
+	return boolValue, ok
+}
+
+func optionalOpaqueStringParam(params map[string]any, key string) (string, bool) {
+	if params == nil {
+		return "", true
+	}
+	value, ok := params[key]
+	if !ok || value == nil {
+		return "", true
+	}
+	text, ok := value.(string)
+	if !ok || len(text) > tmuxOpaqueArgumentLimit || strings.ContainsRune(text, '\x00') {
+		return "", false
+	}
+	return text, true
 }
 
 func int64Param(params map[string]any, key string) int64 {
@@ -1421,6 +1468,141 @@ func clearPaneLabel(params map[string]any) workerPaneLabelClearingResult {
 	}
 }
 
+func unavailableTeammatePaneCreation(target string, paneID string, kind string) workerTeammatePaneCreationResult {
+	safeTarget := compactTmuxWindowTarget(target)
+	safePaneID := compactTmuxPaneID(paneID)
+	reason := "Go worker lifecycle createTeammatePane unavailable (" + kind + ")"
+	return workerTeammatePaneCreationResult{
+		OK:                false,
+		Operation:         "createTeammatePane",
+		Capability:        "workerLifecycle",
+		Target:            safeTarget,
+		PaneID:            safePaneID,
+		Created:           false,
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
+func runCreateTeammatePaneTmuxOutput(args ...string) (string, string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", args...)
+	cmd.Env = os.Environ()
+	output, err := cmd.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "", "tmux-command-timeout"
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return "", "tmux-unavailable"
+		}
+		return "", "tmux-command-failed"
+	}
+	return strings.TrimSpace(string(output)), ""
+}
+
+func runCreateTeammatePaneTmux(args ...string) string {
+	_, kind := runCreateTeammatePaneTmuxOutput(args...)
+	return kind
+}
+
+func createTeammatePane(params map[string]any) workerTeammatePaneCreationResult {
+	target := compactTmuxWindowTarget(stringParam(params, "target"))
+	if target == "" {
+		return unavailableTeammatePaneCreation("", "", "invalid-target")
+	}
+	leaderPaneID := compactTmuxPaneID(stringParam(params, "leaderPaneId"))
+	if leaderPaneID == "" {
+		return unavailableTeammatePaneCreation(target, "", "invalid-pane-id")
+	}
+	hasLeaderLayout, ok := boolParam(params, "hasLeaderLayout")
+	if !ok {
+		return unavailableTeammatePaneCreation(target, leaderPaneID, "helper-incompatible-response")
+	}
+	cwd, ok := optionalOpaqueStringParam(params, "cwd")
+	if !ok {
+		return unavailableTeammatePaneCreation(target, leaderPaneID, "invalid-cwd")
+	}
+	startCommand, ok := optionalOpaqueStringParam(params, "startCommand")
+	if !ok {
+		return unavailableTeammatePaneCreation(target, leaderPaneID, "invalid-start-command")
+	}
+
+	paneOutput, kind := runCreateTeammatePaneTmuxOutput("list-panes", "-t", target, "-F", workerLifecycleWindowPaneFormat)
+	if kind != "" {
+		return unavailableTeammatePaneCreation(target, leaderPaneID, kind)
+	}
+	panes := []string{}
+	for _, line := range strings.Split(paneOutput, "\n") {
+		paneID := compactTmuxPaneID(line)
+		if paneID != "" {
+			panes = append(panes, paneID)
+		}
+	}
+	if len(panes) == 0 {
+		return unavailableTeammatePaneCreation(target, leaderPaneID, "pane-not-found")
+	}
+
+	splitArgs := []string{"split-window"}
+	if hasLeaderLayout && len(panes) == 1 {
+		splitArgs = append(splitArgs, "-t", leaderPaneID, "-h", "-p", "34")
+	} else {
+		splitArgs = append(splitArgs, "-t", panes[len(panes)-1], "-v")
+	}
+	if cwd != "" {
+		splitArgs = append(splitArgs, "-c", cwd)
+	}
+	splitArgs = append(splitArgs, "-P", "-F", workerLifecycleWindowPaneFormat)
+	if startCommand != "" {
+		splitArgs = append(splitArgs, startCommand)
+	}
+	paneIDRaw, kind := runCreateTeammatePaneTmuxOutput(splitArgs...)
+	if kind != "" {
+		return unavailableTeammatePaneCreation(target, leaderPaneID, kind)
+	}
+	paneID := compactTmuxPaneID(paneIDRaw)
+	if paneID == "" {
+		return unavailableTeammatePaneCreation(target, leaderPaneID, "pane-not-found")
+	}
+
+	layout := "tiled"
+	if hasLeaderLayout {
+		layout = "main-vertical"
+	}
+	if hasLeaderLayout && len(panes) == 1 {
+		layout = "main-vertical"
+	}
+	if kind := runCreateTeammatePaneTmux("select-layout", "-t", target, layout); kind != "" {
+		return unavailableTeammatePaneCreation(target, paneID, kind)
+	}
+	if hasLeaderLayout {
+		if kind := runCreateTeammatePaneTmux("resize-pane", "-t", leaderPaneID, "-x", "66%"); kind != "" {
+			return unavailableTeammatePaneCreation(target, paneID, kind)
+		}
+	}
+
+	return workerTeammatePaneCreationResult{
+		OK:                true,
+		Operation:         "createTeammatePane",
+		Capability:        "workerLifecycle",
+		Target:            target,
+		PaneID:            paneID,
+		Created:           true,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
 func workerLifecycle(params map[string]any) any {
 	operation := stringParam(params, "operation")
 	switch operation {
@@ -1446,6 +1628,8 @@ func workerLifecycle(params map[string]any) any {
 		return setPaneLabel(params)
 	case "clearPaneLabel":
 		return clearPaneLabel(params)
+	case "createTeammatePane":
+		return createTeammatePane(params)
 	default:
 		return unavailableWorkerPaneInspection(strings.TrimSpace(stringParam(params, "paneId")), "unsupported-operation")
 	}

@@ -606,7 +606,7 @@ function exerciseSourceGuardrails(input) {
   pushIfMissing(failures, /dryRun/.test(combined), 'PlanRun production modules should include dryRun preview support')
   pushIfMissing(failures, /nextAction/.test(combined), 'PlanRun compact show/list/panel surfaces should expose nextAction hints')
   for (const { rel, source } of sources) {
-    if (/setInterval|setTimeout|cron|\bscheduler\b|autoAdvance|autopilot|createTeammatePane|agentteam_spawn|executeSpawnMember/.test(source)) {
+    if (/setInterval|setTimeout|cron|\bscheduler\b|autoAdvance|autopilot|agentteam_spawn|executeSpawnMember/.test(source)) {
       failures.push(`${rel} should not implement hidden scheduler/timer/default autopilot/worker-spawns-worker behavior`)
     }
     if (/\.text\b/.test(source) && !/action\s*[=:]\s*['"]report['"]|explicit/i.test(source)) {

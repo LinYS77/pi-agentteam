@@ -326,9 +326,12 @@ function assertGoRuntimeAndCommandSurface(root) {
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name")', `${GO_SOURCE} later v0.6.78 pane label unset`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", "")', `${GO_SOURCE} later v0.6.78 pane title clearing`)
 
-  for (const forbiddenCommand of ['new-session', 'new-window', 'split-window', 'select-layout', 'resize-pane', 'send-keys', 'kill-pane', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
+  for (const forbiddenCommand of ['new-session', 'new-window', 'send-keys', 'kill-pane', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
     assert.equal(goSource.includes(`"${forbiddenCommand}"`), false, `${GO_SOURCE} must not add forbidden command ${forbiddenCommand}`)
   }
+  assertIncludes(goSource, 'splitArgs := []string{"split-window"}', `${GO_SOURCE} later v0.6.80 authorized createTeammatePane split-window`)
+  assertIncludes(goSource, 'runCreateTeammatePaneTmux("select-layout", "-t", target, layout)', `${GO_SOURCE} later v0.6.80 authorized createTeammatePane select-layout`)
+  assertIncludes(goSource, 'runCreateTeammatePaneTmux("resize-pane", "-t", leaderPaneID, "-x", "66%")', `${GO_SOURCE} later v0.6.80 authorized createTeammatePane resize-pane`)
 }
 
 function assertNativeArtifactUnchanged(root) {

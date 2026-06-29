@@ -47,7 +47,6 @@ const GO_FORBIDDEN_RUNTIME_PATTERNS = [
   ['target-based display-message', /"display-message",\s*"-p",\s*"-t"/],
   ['kill-pane', /kill-pane/],
   ['new-window', /new-window/],
-  ['split-window', /split-window/],
   ['worker spawn', /\bworker\s+spawn\b|\bspawnWorker\b|\bWorkerSpawn\b|\bworkerSpawn\b/],
   ['worker spawn mutation', /\bworker\s+spawn\b|\bspawnWorker\b|\bWorkerSpawn\b|\bworkerSpawn\b/],
   ['force reconcile', /\bforce\s+reconcile\b|forceReconcile/],

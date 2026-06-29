@@ -92,7 +92,7 @@ function assertGoHelperBoundaries(root) {
   assert.match(source, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'Go may use only narrow current-pane binding display-message')
   const sourceWithoutAllowedDisplayMessage = source.replace(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/g, '')
   assertNoMatches(GO_HELPER, sourceWithoutAllowedDisplayMessage, [
-    ['broad tmux subprocess command', /display-message|send-keys|kill-pane|split-window|new-window/],
+    ['broad tmux subprocess command', /display-message|send-keys|kill-pane|new-window/],
     ['shell execution API', /\bexec\.Command\s*\(|\b(?:sh|bash|zsh|fish)\b/],
     ['worker spawn/mutating lifecycle authority', /worker\s*spawn|spawnWorker|WorkerSpawn|paneLost|forceReconcile|lightReconcile/],
     ['network/listener authority', /"net"|"net\/http"|\b(?:Listen|ListenAndServe|Accept|Dial|Serve)\s*\(/],

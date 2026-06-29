@@ -233,27 +233,28 @@ function assertCurrentTypescriptPaneState(root) {
   const killBody = functionBody(panesSource, 'killPane')
   const clearSyncBody = functionBody(panesSource, 'clearPaneLabelSync')
 
-  assertIncludes(panesSource, "import { runTmuxAsync, runTmuxNoThrow, runTmuxNoThrowAsync } from './client.js'", RUNTIME_FILE)
-  assertIncludes(panesSource, "import { refreshWindowPaneLabels } from './labels.js'", RUNTIME_FILE)
+  assert.equal(CURRENT_TYPESCRIPT_CREATE_TEAMMATE_PANE_SURFACE.paneDiscoveryCall.includes("runTmuxAsync(['list-panes'"), true, 'v0.6.79 fixture preserves the historical gate-time TypeScript surface')
+  assertIncludes(panesSource, "import { createAgentTeamKernelAdapter } from '../core/kernel.js'", `${RUNTIME_FILE} later v0.6.80 cutover seam`)
+  assertIncludes(panesSource, "import { runTmuxNoThrow } from './client.js'", `${RUNTIME_FILE} kill/clear sync helpers remain TS-owned`)
+  assertIncludes(panesSource, "import { refreshWindowPaneLabels, setPaneLabel } from './labels.js'", `${RUNTIME_FILE} later v0.6.80 reuses label helpers`)
   assertIncludes(panesSource, "import { ensureSwarmWindow } from './windows.js'", RUNTIME_FILE)
-  for (const value of Object.values(CURRENT_TYPESCRIPT_CREATE_TEAMMATE_PANE_SURFACE)) {
-    if (typeof value === 'string') assertIncludes(createBody, value, `${RUNTIME_FILE} createTeammatePane`)
-  }
-  assert.equal([...createBody.matchAll(/runTmuxAsync\(\['list-panes'/g)].length, 1, `${RUNTIME_FILE} should keep exactly one createTeammatePane list-panes discovery`)
-  assert.equal([...createBody.matchAll(/runTmuxAsync\(\['split-window'/g)].length, 2, `${RUNTIME_FILE} should keep exactly two split-window shapes`)
-  assert.equal([...createBody.matchAll(/runTmuxAsync\(\['select-layout'/g)].length, 2, `${RUNTIME_FILE} should keep exactly two select-layout calls`)
-  assert.equal([...createBody.matchAll(/runTmuxAsync\(\['resize-pane'/g)].length, 2, `${RUNTIME_FILE} should keep leader resize in both leader-layout branches`)
-  assert.equal(createBody.includes('createAgentTeamKernelAdapter'), false, `${RUNTIME_FILE} createTeammatePane must not call Go adapter in this gate`)
-  assert.equal(createBody.includes('workerLifecycle'), false, `${RUNTIME_FILE} createTeammatePane must not mention workerLifecycle in this gate`)
-  assert.equal(createBody.includes('createTeammatePaneAsync'), false, `${RUNTIME_FILE} createTeammatePane must not add adapter method in this gate`)
+  assertIncludes(createBody, 'const swarm = await ensureSwarmWindow(input.preferred, signal)', `${RUNTIME_FILE} createTeammatePane`)
+  assertIncludes(createBody, 'createAgentTeamKernelAdapter().createTeammatePaneAsync({', `${RUNTIME_FILE} later v0.6.80 createTeammatePane cutover`)
+  assertIncludes(createBody, 'hasLeaderLayout: Boolean(process.env.TMUX)', `${RUNTIME_FILE} preserves leader-layout input`)
+  assertIncludes(createBody, 'cwd: input.cwd', `${RUNTIME_FILE} passes cwd as opaque helper param`)
+  assertIncludes(createBody, 'startCommand: input.startCommand', `${RUNTIME_FILE} passes startCommand as opaque helper param`)
+  assertIncludes(createBody, 'await setPaneLabel(created.paneId, input.name, signal)', `${RUNTIME_FILE} later v0.6.80 reuses setPaneLabel`)
+  assertIncludes(createBody, 'await refreshWindowPaneLabels(created.target, signal)', `${RUNTIME_FILE} refresh preserved`)
+  assert.equal(createBody.includes('runTmuxAsync'), false, `${RUNTIME_FILE} later v0.6.80 must not keep direct createTeammatePane runTmuxAsync fallback`)
+  assert.equal(createBody.includes('runTmuxNoThrowAsync'), false, `${RUNTIME_FILE} later v0.6.80 must not keep direct post-create label fallback`)
 
   assertIncludes(killBody, "runTmuxNoThrow(['kill-pane', '-t', paneId])", `${RUNTIME_FILE} killPane remains TS-owned`)
   assertIncludes(clearSyncBody, "runTmuxNoThrow(['set-option', '-up', '-t', paneId, '@agentteam-name'])", `${RUNTIME_FILE} clearPaneLabelSync remains TS-owned sync helper`)
   assertIncludes(clearSyncBody, "runTmuxNoThrow(['select-pane', '-t', paneId, '-T', ''])", `${RUNTIME_FILE} clearPaneLabelSync remains TS-owned sync helper`)
 
   assertIncludes(windowsSource, 'export async function ensureSwarmWindow', `${TMUX_WINDOWS} ensureSwarmWindow remains TS-owned`)
-  assertIncludes(windowsSource, "runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]", `${TMUX_WINDOWS} new-session remains outside this gate`)
-  assertIncludes(windowsSource, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", `${TMUX_WINDOWS} new-window remains outside this gate`)
+  assertIncludes(windowsSource, "runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]", `${TMUX_WINDOWS} new-session remains outside this gate and later cutover`)
+  assertIncludes(windowsSource, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", `${TMUX_WINDOWS} new-window remains outside this gate and later cutover`)
   assertIncludes(labelsSource, 'createAgentTeamKernelAdapter().setPaneLabelAsync(paneId, label, signal)', `${TMUX_LABELS} v0.6.76 setPaneLabel helper preserved`)
   assertIncludes(labelsSource, 'createAgentTeamKernelAdapter().refreshWindowPaneLabelsAsync(target, signal)', `${TMUX_LABELS} v0.6.74 refresh helper preserved`)
 }
@@ -262,14 +263,16 @@ function assertNoRuntimeCutover(root) {
   const kernelSource = read(root, KERNEL_FILE)
   const goSource = read(root, GO_SOURCE_FILE)
   const panesSource = read(root, RUNTIME_FILE)
-  for (const snippet of FORBIDDEN_RUNTIME_CUTOVER_SNIPPETS) {
-    assert.equal(kernelSource.includes(snippet), false, `${KERNEL_FILE} must not add ${snippet}`)
-    assert.equal(panesSource.includes(snippet), false, `${RUNTIME_FILE} must not add ${snippet}`)
-  }
-  for (const snippet of FORBIDDEN_GO_CUTOVER_SNIPPETS) assert.equal(goSource.includes(snippet), false, `${GO_SOURCE_FILE} must not add ${snippet}`)
+  assert.deepEqual(FORBIDDEN_RUNTIME_CUTOVER_SNIPPETS, ['createTeammatePaneAsync', "operation: 'createTeammatePane'", 'workerLifecycleCreateTeammatePaneConnected'])
+  assert.deepEqual(FORBIDDEN_GO_CUTOVER_SNIPPETS, ['case "createTeammatePane"', 'func createTeammatePane', 'split-window', 'select-layout', 'resize-pane'])
+  assertIncludes(kernelSource, 'createTeammatePaneAsync(input: AgentTeamKernelCreateTeammatePaneInput, signal?: AbortSignal)', `${KERNEL_FILE} later v0.6.80 adapter method`)
+  assertIncludes(kernelSource, "operation: 'createTeammatePane'", `${KERNEL_FILE} later v0.6.80 operation`)
+  assertIncludes(kernelSource, 'workerLifecycleCreateTeammatePaneConnected', `${KERNEL_FILE} later v0.6.80 profile flag`)
+  assertIncludes(panesSource, 'createAgentTeamKernelAdapter().createTeammatePaneAsync({', `${RUNTIME_FILE} later v0.6.80 facade cutover`)
   assert.deepEqual(parseGoCapabilities(goSource), [...ACTIVE_CAPABILITIES])
   for (const operation of ACTIVE_OPERATIONS) assert.match(goSource, new RegExp(`case "${operation}"`), `${GO_SOURCE_FILE} should keep existing operation ${operation}`)
-  assert.equal(/case "createTeammatePane"/.test(goSource), false, `${GO_SOURCE_FILE} must not add createTeammatePane handler in this gate`)
+  assert.match(goSource, /case "createTeammatePane"/, `${GO_SOURCE_FILE} later v0.6.80 adds authorized createTeammatePane handler`)
+  assert.match(goSource, /func createTeammatePane/, `${GO_SOURCE_FILE} later v0.6.80 adds authorized createTeammatePane implementation`)
 }
 
 function assertExistingGoCommandSurface(root) {
@@ -282,7 +285,11 @@ function assertExistingGoCommandSurface(root) {
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)', `${GO_SOURCE_FILE} v0.6.76 setPaneLabel select-pane`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name")', `${GO_SOURCE_FILE} v0.6.78 clearPaneLabel set-option unset`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", "")', `${GO_SOURCE_FILE} v0.6.78 clearPaneLabel select-pane clear`)
-  for (const forbidden of ['new-session', 'new-window', 'split-window', 'select-layout', 'resize-pane', 'send-keys', 'kill-pane', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
+  assertIncludes(goSource, 'runCreateTeammatePaneTmuxOutput("list-panes", "-t", target, "-F", workerLifecycleWindowPaneFormat)', `${GO_SOURCE_FILE} later v0.6.80 authorized list-panes`)
+  assertIncludes(goSource, 'splitArgs := []string{"split-window"}', `${GO_SOURCE_FILE} later v0.6.80 authorized split-window`)
+  assertIncludes(goSource, 'runCreateTeammatePaneTmux("select-layout", "-t", target, layout)', `${GO_SOURCE_FILE} later v0.6.80 authorized select-layout`)
+  assertIncludes(goSource, 'runCreateTeammatePaneTmux("resize-pane", "-t", leaderPaneID, "-x", "66%")', `${GO_SOURCE_FILE} later v0.6.80 authorized resize-pane`)
+  for (const forbidden of ['new-session', 'new-window', 'send-keys', 'kill-pane', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
     assert.equal(goSource.includes(`"${forbidden}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${forbidden}`)
   }
 }
@@ -291,21 +298,21 @@ function assertNativeArtifactUnchanged(root) {
   const manifest = JSON.parse(read(root, `${NATIVE_ROOT}/manifest.json`))
   const provenance = JSON.parse(read(root, `${NATIVE_ROOT}/provenance.json`))
   assert.equal(exists(root, NATIVE_ARTIFACT_SNAPSHOT.helperPath), true, 'existing native helper should remain present')
-  assert.equal(sha256(root, NATIVE_ARTIFACT_SNAPSHOT.helperPath), NATIVE_ARTIFACT_SNAPSHOT.helperSha256)
-  assert.equal(fs.statSync(path.join(root, ...NATIVE_ARTIFACT_SNAPSHOT.helperPath.split('/'))).size, NATIVE_ARTIFACT_SNAPSHOT.helperSize)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/manifest.json`), NATIVE_ARTIFACT_SNAPSHOT.manifestSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/provenance.json`), NATIVE_ARTIFACT_SNAPSHOT.provenanceSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/attestation.intoto.jsonl`), NATIVE_ARTIFACT_SNAPSHOT.attestationSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/SHA256SUMS`), NATIVE_ARTIFACT_SNAPSHOT.checksumsSha256)
   assert.equal(manifest.artifact.path, NATIVE_ARTIFACT_SNAPSHOT.helperPath)
   assert.equal(manifest.artifact.filename, 'agentteam-tmuxSnapshotParse')
-  assert.equal(manifest.artifact.size, NATIVE_ARTIFACT_SNAPSHOT.helperSize)
-  assert.equal(manifest.artifact.sha256, NATIVE_ARTIFACT_SNAPSHOT.helperSha256)
+  assert.equal(manifest.artifact.executable, true)
   assert.deepEqual(manifest.capabilities, [...ACTIVE_CAPABILITIES])
-  assert.equal(manifest.source.revision, NATIVE_ARTIFACT_SNAPSHOT.sourceRevision)
-  assert.equal(provenance.source.revision, NATIVE_ARTIFACT_SNAPSHOT.sourceRevision)
-  assert.equal(Object.prototype.hasOwnProperty.call(manifest.smoke, 'workerLifecycleCreateTeammatePane'), false, 'gate must not add createTeammatePane native smoke')
-  assert.equal(Object.prototype.hasOwnProperty.call(provenance.smoke, 'workerLifecycleCreateTeammatePane'), false, 'gate must not add createTeammatePane provenance smoke')
+  assert.equal(manifest.packageVersion, PACKAGE_VERSION)
+  assert.equal(manifest.helperVersion, HELPER_VERSION)
+  assert.equal(manifest.protocolVersion, PROTOCOL_VERSION)
+  assert.equal(typeof manifest.artifact.sha256, 'string')
+  assert.equal(sha256(root, NATIVE_ARTIFACT_SNAPSHOT.helperPath), manifest.artifact.sha256)
+  assert.equal(fs.statSync(path.join(root, ...NATIVE_ARTIFACT_SNAPSHOT.helperPath.split('/'))).size, manifest.artifact.size)
+  assert.equal(typeof manifest.source.revision, 'string')
+  assert.equal(provenance.source.revision, manifest.source.revision)
+  assert.equal(Object.prototype.hasOwnProperty.call(manifest.smoke, 'workerLifecycleCreateTeammatePane'), true, 'later v0.6.80 cutover adds createTeammatePane native smoke')
+  assert.deepEqual(manifest.smoke.workerLifecycleCreateTeammatePane, { ok: false, acceptedFailureKinds: ['invalid-target'] })
+  assert.deepEqual(provenance.smoke.workerLifecycleCreateTeammatePane, { ok: false, acceptedFailureKinds: ['invalid-target'] })
 }
 
 function assertPackageAndReleaseGuards(root) {

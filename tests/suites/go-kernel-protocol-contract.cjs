@@ -81,6 +81,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.workerLifecycleRefreshWindowPaneLabelsConnected, true)
   assert.equal(result.profile.workerLifecycleSetPaneLabelConnected, true)
   assert.equal(result.profile.workerLifecycleClearPaneLabelConnected, true)
+  assert.equal(result.profile.workerLifecycleCreateTeammatePaneConnected, true)
   assert.equal(result.profile.tmuxAvailabilityConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)
@@ -179,8 +180,10 @@ function assertMethodResult(response, request, fingerprintModule) {
                 ? 'setPaneLabel'
                 : requestedOperation === 'clearPaneLabel'
                   ? 'clearPaneLabel'
-                  : 'inspectPane'
-    const mutatingOperation = expectedOperation === 'setPaneLabel' || expectedOperation === 'clearPaneLabel'
+                  : requestedOperation === 'createTeammatePane'
+                    ? 'createTeammatePane'
+                    : 'inspectPane'
+    const mutatingOperation = expectedOperation === 'setPaneLabel' || expectedOperation === 'clearPaneLabel' || expectedOperation === 'createTeammatePane'
     assert.equal(response.result.operation, expectedOperation)
     assert.equal(response.result.capability, 'workerLifecycle')
     assert.equal(response.result.readOnly, !mutatingOperation)
@@ -223,11 +226,15 @@ function assertMethodResult(response, request, fingerprintModule) {
     if (expectedOperation === 'clearPaneLabel') {
       assert.equal(response.result.cleared, false)
     }
+    if (expectedOperation === 'createTeammatePane') {
+      assert.equal(response.result.created, false)
+      assert.equal(JSON.stringify(response.result).includes(fixtures.RAW_CREATE_CANARY), false, 'createTeammatePane result must not leak raw cwd/startCommand text')
+    }
     if (response.result.ok === false) {
       if (expectedOperation === 'inspectPane' || expectedOperation === 'findAgentTeamWindowTarget' || expectedOperation === 'findWindowTargetByName' || expectedOperation === 'sessionExists') assert.equal(response.result.exists, false)
       assert.equal(response.result.status, 'unknown')
       assert.equal(response.result.resultMarker, 'stale')
-      assert.ok(['pane-not-found', 'unsupported-operation', 'tmux-command-timeout', 'tmux-command-failed', 'tmux-unavailable', 'invalid-session', 'invalid-window-name', 'invalid-pane-id', 'invalid-label'].includes(response.result.failureKind))
+      assert.ok(['pane-not-found', 'unsupported-operation', 'tmux-command-timeout', 'tmux-command-failed', 'tmux-unavailable', 'invalid-session', 'invalid-window-name', 'invalid-pane-id', 'invalid-label', 'invalid-target', 'invalid-cwd', 'invalid-start-command'].includes(response.result.failureKind))
       assert.equal(/stdout|stderr|stack|MAILBOX_BODY|REPORT_BODY|worker transcript|rawState/i.test(JSON.stringify(response.result)), false)
     }
     return

@@ -1,5 +1,6 @@
-import { runTmuxAsync, runTmuxNoThrow, runTmuxNoThrowAsync } from './client.js'
-import { refreshWindowPaneLabels } from './labels.js'
+import { createAgentTeamKernelAdapter } from '../core/kernel.js'
+import { runTmuxNoThrow } from './client.js'
+import { refreshWindowPaneLabels, setPaneLabel } from './labels.js'
 import { ensureSwarmWindow } from './windows.js'
 
 export async function createTeammatePane(
@@ -12,30 +13,20 @@ export async function createTeammatePane(
   signal?: AbortSignal,
 ): Promise<{ paneId: string; target: string }> {
   const swarm = await ensureSwarmWindow(input.preferred, signal)
-  const panes = (await runTmuxAsync(['list-panes', '-t', swarm.target, '-F', '#{pane_id}'], undefined, signal)).split('\n').filter(Boolean)
-  const hasLeaderLayout = Boolean(process.env.TMUX)
-
-  const commandArgs = input.startCommand ? [input.startCommand] : []
-  const cwdArgs = input.cwd ? ['-c', input.cwd] : []
-
-  let paneId = ''
-  if (hasLeaderLayout && panes.length === 1) {
-    paneId = await runTmuxAsync(['split-window', '-t', swarm.leaderPaneId, '-h', '-p', '34', ...cwdArgs, '-P', '-F', '#{pane_id}', ...commandArgs], undefined, signal)
-    await runTmuxAsync(['select-layout', '-t', swarm.target, 'main-vertical'], undefined, signal)
-    await runTmuxAsync(['resize-pane', '-t', swarm.leaderPaneId, '-x', '66%'], undefined, signal)
-  } else {
-    const splitTarget = panes[panes.length - 1]!
-    paneId = await runTmuxAsync(['split-window', '-t', splitTarget, '-v', ...cwdArgs, '-P', '-F', '#{pane_id}', ...commandArgs], undefined, signal)
-    await runTmuxAsync(['select-layout', '-t', swarm.target, hasLeaderLayout ? 'main-vertical' : 'tiled'], undefined, signal)
-    if (hasLeaderLayout) {
-      await runTmuxAsync(['resize-pane', '-t', swarm.leaderPaneId, '-x', '66%'], undefined, signal)
-    }
+  const created = await createAgentTeamKernelAdapter().createTeammatePaneAsync({
+    target: swarm.target,
+    leaderPaneId: swarm.leaderPaneId,
+    hasLeaderLayout: Boolean(process.env.TMUX),
+    cwd: input.cwd,
+    startCommand: input.startCommand,
+  }, signal)
+  if (!created.ok) {
+    throw new Error(created.reason || 'Go worker lifecycle createTeammatePane unavailable (previous-helper-failure)')
   }
 
-  await runTmuxNoThrowAsync(['set-option', '-p', '-t', paneId, '@agentteam-name', input.name], undefined, signal)
-  await runTmuxNoThrowAsync(['select-pane', '-t', paneId, '-T', input.name], undefined, signal)
-  await refreshWindowPaneLabels(swarm.target, signal)
-  return { paneId, target: swarm.target }
+  await setPaneLabel(created.paneId, input.name, signal)
+  await refreshWindowPaneLabels(created.target, signal)
+  return { paneId: created.paneId, target: created.target }
 }
 
 export function killPane(paneId: string): void {

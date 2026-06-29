@@ -139,6 +139,7 @@ export type AgentTeamKernelProfile = AgentTeamKernelHealth & {
     workerLifecycleRefreshWindowPaneLabelsConnected?: boolean
     workerLifecycleSetPaneLabelConnected?: boolean
     workerLifecycleClearPaneLabelConnected?: boolean
+    workerLifecycleCreateTeammatePaneConnected?: boolean
     tmuxAvailabilityConnected?: boolean
     panelConnected: false
     taskReportPlanRunConnected: false
@@ -186,6 +187,8 @@ export type AgentTeamKernelWorkerLifecycleFailureKind =
   | 'invalid-session'
   | 'invalid-window-name'
   | 'invalid-label'
+  | 'invalid-cwd'
+  | 'invalid-start-command'
 
 export type AgentTeamKernelWorkerPaneInspection = {
   ok: boolean
@@ -386,6 +389,32 @@ export type AgentTeamKernelPaneLabelClearing = {
   tmuxMutation: true
 }
 
+export type AgentTeamKernelCreateTeammatePaneInput = {
+  target: string
+  leaderPaneId: string
+  hasLeaderLayout: boolean
+  cwd?: string
+  startCommand?: string
+}
+
+export type AgentTeamKernelTeammatePaneCreation = {
+  ok: boolean
+  operation: 'createTeammatePane'
+  capability: 'workerLifecycle'
+  target: string
+  paneId: string
+  created: boolean
+  status?: 'unknown'
+  resultMarker?: 'stale'
+  failureKind?: AgentTeamKernelWorkerLifecycleFailureKind
+  reason?: string
+  error?: string
+  readOnly: false
+  stateFilesRead: false
+  stateFilesWritten: false
+  tmuxMutation: true
+}
+
 export type AgentTeamKernelTmuxAvailability = {
   ok: boolean
   capability: 'tmuxAvailability'
@@ -420,6 +449,7 @@ export type AgentTeamKernelAdapter = {
   refreshWindowPaneLabelsAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowPaneLabelsRefresh>
   setPaneLabelAsync(paneId: string, label: string, signal?: AbortSignal): Promise<AgentTeamKernelPaneLabelSetting>
   clearPaneLabelAsync(paneId: string, signal?: AbortSignal): Promise<AgentTeamKernelPaneLabelClearing>
+  createTeammatePaneAsync(input: AgentTeamKernelCreateTeammatePaneInput, signal?: AbortSignal): Promise<AgentTeamKernelTeammatePaneCreation>
   checkTmuxAvailableAsync(signal?: AbortSignal): Promise<AgentTeamKernelTmuxAvailability>
   compactReadModelFingerprint(input: unknown, fallback?: (input: unknown) => AgentTeamKernelCompactReadModelResult): AgentTeamKernelCompactReadModelResult
 }
@@ -441,6 +471,7 @@ const KNOWN_MODES = new Set(['default', 'disabled', 'typescript', 'go', 'auto', 
 const DEFAULT_EMBEDDED_HELPER_MANIFEST_PATH = AGENTTEAM_KERNEL_EMBEDDED_HELPER_MANIFEST_PATH
 const KERNEL_DIAGNOSTIC_TEXT_LIMIT = 160
 const PANE_LABEL_ARGUMENT_LIMIT = 4096
+const TMUX_OPAQUE_ARGUMENT_LIMIT = 4096
 
 function compactKernelText(value: unknown, fallback = ''): string {
   const text = String(value ?? '').trim()
@@ -462,6 +493,10 @@ function compactTmuxPaneId(value: unknown): string {
 
 function isValidPaneLabelArgument(value: unknown): value is string {
   return typeof value === 'string' && value.length <= PANE_LABEL_ARGUMENT_LIMIT
+}
+
+function isValidOptionalTmuxOpaqueArgument(value: unknown): value is string | undefined {
+  return value === undefined || (typeof value === 'string' && value.length <= TMUX_OPAQUE_ARGUMENT_LIMIT && !value.includes('\0'))
 }
 
 function compactTmuxSessionName(value: unknown): string {
@@ -644,6 +679,7 @@ function fallbackProfile(metadata: AgentTeamKernelMetadata, params: Record<strin
       workerLifecycleRefreshWindowPaneLabelsConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleSetPaneLabelConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleClearPaneLabelConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
+      workerLifecycleCreateTeammatePaneConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       tmuxAvailabilityConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('tmuxAvailability'),
       panelConnected: false,
       taskReportPlanRunConnected: false,
@@ -817,6 +853,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     if (profile.workerLifecycleRefreshWindowPaneLabelsConnected !== undefined && profile.workerLifecycleRefreshWindowPaneLabelsConnected !== true) return undefined
     if (profile.workerLifecycleSetPaneLabelConnected !== undefined && profile.workerLifecycleSetPaneLabelConnected !== true) return undefined
     if (profile.workerLifecycleClearPaneLabelConnected !== undefined && profile.workerLifecycleClearPaneLabelConnected !== true) return undefined
+    if (profile.workerLifecycleCreateTeammatePaneConnected !== undefined && profile.workerLifecycleCreateTeammatePaneConnected !== true) return undefined
     if (profile.tmuxAvailabilityConnected !== undefined && profile.tmuxAvailabilityConnected !== true) return undefined
     if (profile.panelConnected !== false || profile.taskReportPlanRunConnected !== false) return undefined
     return {
@@ -840,6 +877,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         workerLifecycleRefreshWindowPaneLabelsConnected: profile.workerLifecycleRefreshWindowPaneLabelsConnected === true,
         workerLifecycleSetPaneLabelConnected: profile.workerLifecycleSetPaneLabelConnected === true,
         workerLifecycleClearPaneLabelConnected: profile.workerLifecycleClearPaneLabelConnected === true,
+        workerLifecycleCreateTeammatePaneConnected: profile.workerLifecycleCreateTeammatePaneConnected === true,
         tmuxAvailabilityConnected: profile.tmuxAvailabilityConnected === true,
         panelConnected: false,
         taskReportPlanRunConnected: false,
@@ -1225,6 +1263,29 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       failureKind: kind,
       reason: safeReason,
       error: safeReason,
+      readOnly: false,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: true,
+    }
+  }
+
+  function workerLifecycleUnavailableTeammatePaneCreation(target: string, paneId: string, kind: AgentTeamKernelWorkerLifecycleFailureKind): AgentTeamKernelTeammatePaneCreation {
+    const safeTarget = compactTmuxWindowTarget(target)
+    const safePaneId = compactTmuxPaneId(paneId)
+    const reason = compactKernelText(`Go worker lifecycle createTeammatePane unavailable (${kind})`, 'Go worker lifecycle createTeammatePane unavailable (previous-helper-failure)')
+    return {
+      ok: false,
+      operation: 'createTeammatePane',
+      capability: 'workerLifecycle',
+      target: safeTarget,
+      paneId: safePaneId,
+      created: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind: kind,
+      reason,
+      error: reason,
       readOnly: false,
       stateFilesRead: false,
       stateFilesWritten: false,
@@ -1771,6 +1832,52 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     }
   }
 
+  function validateTeammatePaneCreationResult(value: unknown, requestedTarget: string): AgentTeamKernelTeammatePaneCreation | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const result = value as Partial<AgentTeamKernelTeammatePaneCreation>
+    if (result.operation !== 'createTeammatePane' || result.capability !== 'workerLifecycle') return undefined
+    if (result.readOnly !== false || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== true) return undefined
+    const target = compactTmuxWindowTarget(result.target || requestedTarget)
+    const paneId = compactTmuxPaneId(result.paneId)
+    if (result.ok === true) {
+      if (!target || !paneId || result.created !== true) return undefined
+      return {
+        ok: true,
+        operation: 'createTeammatePane',
+        capability: 'workerLifecycle',
+        target,
+        paneId,
+        created: true,
+        readOnly: false,
+        stateFilesRead: false,
+        stateFilesWritten: false,
+        tmuxMutation: true,
+      }
+    }
+    if (result.ok !== false || result.created !== false) return undefined
+    const failureKind = typeof result.failureKind === 'string' && ['unsupported-operation', 'pane-not-found', 'invalid-pane-id', 'invalid-target', 'invalid-cwd', 'invalid-start-command', ...AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS].includes(result.failureKind)
+      ? result.failureKind as AgentTeamKernelWorkerLifecycleFailureKind
+      : 'previous-helper-failure'
+    const reason = compactKernelText(`Go worker lifecycle createTeammatePane unavailable (${failureKind})`, 'Go worker lifecycle createTeammatePane unavailable (previous-helper-failure)')
+    return {
+      ok: false,
+      operation: 'createTeammatePane',
+      capability: 'workerLifecycle',
+      target,
+      paneId,
+      created: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind,
+      reason,
+      error: reason,
+      readOnly: false,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: true,
+    }
+  }
+
   function validateCompactReadModelResult(value: unknown): AgentTeamKernelCompactReadModelResult | undefined {
     if (!value || typeof value !== 'object') return undefined
     const result = value as AgentTeamKernelCompactReadModelResult
@@ -2228,6 +2335,30 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle clearPaneLabel async result shape')
       }
       return workerLifecycleUnavailablePaneLabelClearing(requestedPaneId, cutoverFailureKind ?? 'previous-helper-failure')
+    },
+    async createTeammatePaneAsync(input, signal) {
+      const requestedTarget = compactTmuxWindowTarget(input?.target)
+      if (!requestedTarget) return workerLifecycleUnavailableTeammatePaneCreation(input?.target, input?.leaderPaneId, 'invalid-target')
+      const requestedLeaderPaneId = compactTmuxPaneId(input?.leaderPaneId)
+      if (!requestedLeaderPaneId) return workerLifecycleUnavailableTeammatePaneCreation(requestedTarget, input?.leaderPaneId, 'invalid-pane-id')
+      if (typeof input?.hasLeaderLayout !== 'boolean') return workerLifecycleUnavailableTeammatePaneCreation(requestedTarget, requestedLeaderPaneId, 'helper-incompatible-response')
+      if (!isValidOptionalTmuxOpaqueArgument(input.cwd)) return workerLifecycleUnavailableTeammatePaneCreation(requestedTarget, requestedLeaderPaneId, 'invalid-cwd')
+      if (!isValidOptionalTmuxOpaqueArgument(input.startCommand)) return workerLifecycleUnavailableTeammatePaneCreation(requestedTarget, requestedLeaderPaneId, 'invalid-start-command')
+      const params: Record<string, unknown> = {
+        operation: 'createTeammatePane',
+        target: requestedTarget,
+        leaderPaneId: requestedLeaderPaneId,
+        hasLeaderLayout: input.hasLeaderLayout,
+      }
+      if (input.cwd) params.cwd = input.cwd
+      if (input.startCommand) params.startCommand = input.startCommand
+      const helperResult = await callHelperAsync<unknown>('workerLifecycle', params, signal)
+      const parsed = validateTeammatePaneCreationResult(helperResult, requestedTarget)
+      if (parsed) return parsed
+      if (helperResult !== undefined) {
+        recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle createTeammatePane async result shape')
+      }
+      return workerLifecycleUnavailableTeammatePaneCreation(requestedTarget, requestedLeaderPaneId, cutoverFailureKind ?? 'previous-helper-failure')
     },
     async checkTmuxAvailableAsync(signal) {
       const helperResult = await callHelperAsync<unknown>('tmuxAvailability', undefined, signal)

@@ -54,7 +54,7 @@ export function formatLeaderPaneLabel(team: TeamState): string {
   return bits ? `👑 leader · ${bits}` : '👑 leader · ready'
 }
 
-async function setPaneLabel(paneId: string, label: string, signal?: AbortSignal): Promise<void> {
+export async function setPaneLabel(paneId: string, label: string, signal?: AbortSignal): Promise<void> {
   await createAgentTeamKernelAdapter().setPaneLabelAsync(paneId, label, signal)
 }
 

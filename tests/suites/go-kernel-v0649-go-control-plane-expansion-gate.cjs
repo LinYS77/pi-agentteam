@@ -227,7 +227,7 @@ function assertRuntimeNotMigratedYet(root) {
   assert.match(goSource, /case "tmuxSnapshotCapture"/, 'post-v0.6.49 first slice should add Go tmux capture runtime')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go tmux capture must retain list-panes snapshot capture')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'later v0.6.60 permits only narrow current-pane binding display-message')
-  assert.equal(/createTeammatePane|kill-pane|send-keys|PI_AGENTTEAM_HOME|team\.json|os\.ReadFile|os\.WriteFile|os\.Create/.test(goSource), false, 'post-v0.6.49 slices must not migrate mutating lifecycle/state/task/UI runtime yet')
+  assert.equal(/kill-pane|send-keys|PI_AGENTTEAM_HOME|team\.json|os\.ReadFile|os\.WriteFile|os\.Create/.test(goSource), false, 'post-v0.6.49 slices must not migrate mutating lifecycle/state/task/UI runtime yet')
   assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, 'Go must not add target-based display-message')
 }
 

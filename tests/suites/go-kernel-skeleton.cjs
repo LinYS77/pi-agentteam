@@ -104,6 +104,7 @@ module.exports = {
     assert.equal(defaultProfile.profile.workerLifecycleRefreshWindowPaneLabelsConnected, true)
     assert.equal(defaultProfile.profile.workerLifecycleSetPaneLabelConnected, true)
     assert.equal(defaultProfile.profile.workerLifecycleClearPaneLabelConnected, true)
+    assert.equal(defaultProfile.profile.workerLifecycleCreateTeammatePaneConnected, true)
     assert.equal(defaultProfile.profile.tmuxAvailabilityConnected, true)
     assert.equal(defaultProfile.profile.panelConnected, false)
     assert.equal(defaultProfile.profile.taskReportPlanRunConnected, false)
@@ -194,6 +195,14 @@ module.exports = {
             assert.equal((text.match(/core\/kernel\.js/g) || []).length, 1, `${rel} must not add more Go kernel imports`)
             continue
           }
+          if (rel === 'tmux/panes.ts') {
+            assert.equal(text.includes("import { createAgentTeamKernelAdapter } from '../core/kernel.js'"), true, `${rel} must keep only the approved createTeammatePane seam`)
+            assert.equal(text.includes('createAgentTeamKernelAdapter().createTeammatePaneAsync({'), true, `${rel} must use the approved createTeammatePane seam`)
+            assert.equal(text.includes('await ensureSwarmWindow(input.preferred, signal)'), true, `${rel} must keep ensureSwarmWindow TS-owned`)
+            assert.equal(text.includes('runTmuxAsync'), false, `${rel} must not retain direct createTeammatePane tmux fallback`)
+            assert.equal((text.match(/core\/kernel\.js/g) || []).length, 1, `${rel} must not add more Go kernel imports`)
+            continue
+          }
           assert.equal(text.includes('core/kernel.js'), false, `${rel} must not import Go kernel skeleton`)
           assert.equal(text.includes('../core/kernel.js'), false, `${rel} must not import Go kernel skeleton`)
           assert.equal(text.includes('../../core/kernel.js'), false, `${rel} must not import Go kernel skeleton`)
@@ -219,6 +228,7 @@ module.exports = {
     assert.match(goSource, /case "refreshWindowPaneLabels"/)
     assert.match(goSource, /case "setPaneLabel"/)
     assert.match(goSource, /case "clearPaneLabel"/)
+    assert.match(goSource, /case "createTeammatePane"/)
     assert.match(goSource, /BusinessPathsConnected: false/)
 
     if (hasGoToolchain()) {
@@ -259,6 +269,7 @@ module.exports = {
       assert.equal(profile.result.profile.workerLifecycleRefreshWindowPaneLabelsConnected, true)
       assert.equal(profile.result.profile.workerLifecycleSetPaneLabelConnected, true)
       assert.equal(profile.result.profile.workerLifecycleClearPaneLabelConnected, true)
+      assert.equal(profile.result.profile.workerLifecycleCreateTeammatePaneConnected, true)
       assert.equal(profile.result.profile.tmuxAvailabilityConnected, true)
       assert.equal(profile.result.profile.panelConnected, false)
       assert.equal(profile.result.profile.taskReportPlanRunConnected, false)

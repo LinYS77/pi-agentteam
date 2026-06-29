@@ -508,6 +508,34 @@ function runWorkerLifecycleClearPaneLabelSmoke(helperPath, env, timeoutMs) {
   return { ok: false, acceptedFailureKinds }
 }
 
+function runWorkerLifecycleCreateTeammatePaneSmoke(helperPath, env, timeoutMs) {
+  const rawCreateCanary = 'agentteam raw create pane canary 🚫'
+  const result = runJsonRpc(helperPath, {
+    jsonrpc: '2.0',
+    id: 'workerLifecycleCreateTeammatePane',
+    method: 'workerLifecycle',
+    params: {
+      operation: 'createTeammatePane',
+      target: 'agentteam builder smoke invalid target!',
+      leaderPaneId: '%123',
+      hasLeaderLayout: true,
+      cwd: rawCreateCanary,
+      startCommand: rawCreateCanary,
+    },
+  }, env, timeoutMs, 'workerLifecycle')
+  if (JSON.stringify(result).includes(rawCreateCanary)) {
+    fail('go-health-failed', 'reject helper artifact with raw cwd/startCommand leakage in workerLifecycle createTeammatePane smoke result', 'workerLifecycle')
+  }
+  if (result.operation !== 'createTeammatePane' || result.capability !== 'workerLifecycle' || result.readOnly !== false || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== true) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle createTeammatePane smoke result', 'workerLifecycle')
+  }
+  const acceptedFailureKinds = ['invalid-target']
+  if (result.ok !== false || result.created !== false || !acceptedFailureKinds.includes(result.failureKind)) {
+    fail('go-health-failed', 'reject helper artifact with invalid workerLifecycle createTeammatePane failure', 'workerLifecycle')
+  }
+  return { ok: false, acceptedFailureKinds }
+}
+
 function runTmuxAvailabilitySmoke(helperPath, env, timeoutMs) {
   const result = runJsonRpc(helperPath, {
     jsonrpc: '2.0',
@@ -658,6 +686,7 @@ function writeMetadata(input) {
     workerLifecycleRefreshWindowPaneLabelsSmoke,
     workerLifecycleSetPaneLabelSmoke,
     workerLifecycleClearPaneLabelSmoke,
+    workerLifecycleCreateTeammatePaneSmoke,
     tmuxAvailabilitySmoke,
   } = input
   const artifactDir = path.dirname(helperPath)
@@ -709,6 +738,7 @@ function writeMetadata(input) {
       workerLifecycleRefreshWindowPaneLabels: workerLifecycleRefreshWindowPaneLabelsSmoke,
       workerLifecycleSetPaneLabel: workerLifecycleSetPaneLabelSmoke,
       workerLifecycleClearPaneLabel: workerLifecycleClearPaneLabelSmoke,
+      workerLifecycleCreateTeammatePane: workerLifecycleCreateTeammatePaneSmoke,
       tmuxAvailability: tmuxAvailabilitySmoke,
     },
     outputRootKind,
@@ -802,6 +832,7 @@ function writeMetadata(input) {
       workerLifecycleRefreshWindowPaneLabels: workerLifecycleRefreshWindowPaneLabelsSmoke,
       workerLifecycleSetPaneLabel: workerLifecycleSetPaneLabelSmoke,
       workerLifecycleClearPaneLabel: workerLifecycleClearPaneLabelSmoke,
+      workerLifecycleCreateTeammatePane: workerLifecycleCreateTeammatePaneSmoke,
       tmuxAvailability: tmuxAvailabilitySmoke,
     },
     attestation: {
@@ -867,6 +898,7 @@ function writeMetadata(input) {
         workerLifecycleRefreshWindowPaneLabels: true,
         workerLifecycleSetPaneLabel: true,
         workerLifecycleClearPaneLabel: true,
+        workerLifecycleCreateTeammatePane: true,
         tmuxAvailability: true,
       },
       artifact: helperRel,
@@ -921,6 +953,7 @@ function buildGoHelperArtifact(options = {}) {
   const workerLifecycleRefreshWindowPaneLabelsSmoke = runWorkerLifecycleRefreshWindowPaneLabelsSmoke(helperPath, env, timeoutMs)
   const workerLifecycleSetPaneLabelSmoke = runWorkerLifecycleSetPaneLabelSmoke(helperPath, env, timeoutMs)
   const workerLifecycleClearPaneLabelSmoke = runWorkerLifecycleClearPaneLabelSmoke(helperPath, env, timeoutMs)
+  const workerLifecycleCreateTeammatePaneSmoke = runWorkerLifecycleCreateTeammatePaneSmoke(helperPath, env, timeoutMs)
   const tmuxAvailabilitySmoke = runTmuxAvailabilitySmoke(helperPath, env, timeoutMs)
 
   const metadata = writeMetadata({
@@ -948,6 +981,7 @@ function buildGoHelperArtifact(options = {}) {
     workerLifecycleRefreshWindowPaneLabelsSmoke,
     workerLifecycleSetPaneLabelSmoke,
     workerLifecycleClearPaneLabelSmoke,
+    workerLifecycleCreateTeammatePaneSmoke,
     tmuxAvailabilitySmoke,
   })
   const result = {

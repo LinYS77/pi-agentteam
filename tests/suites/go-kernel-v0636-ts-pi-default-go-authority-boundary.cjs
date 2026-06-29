@@ -224,7 +224,7 @@ function assertGoAuthorityBounded(root) {
   assert.equal(GO_FORBIDDEN_TERMS.test(goSource), false, 'Go helper must not own pi/control-plane/package/release/full-text authority')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'Go workerLifecycle may use only narrow current-pane binding display-message')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "-V"\)/, 'Go tmuxAvailability may use only exact tmux -V')
-  assert.equal(/send-keys|kill-pane|split-window|new-window|capture-pane/.test(goSource), false, 'Go workerLifecycle must not add mutating tmux lifecycle commands')
+  assert.equal(/send-keys|kill-pane|new-window|capture-pane/.test(goSource), false, 'Go workerLifecycle must not add mutating tmux lifecycle commands')
   assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, 'Go workerLifecycle must not add target-based display-message')
   assert.equal(/os\.Stdin|os\.Stdout/.test(goSource), true, 'Go helper should remain stdio JSON-RPC')
 }

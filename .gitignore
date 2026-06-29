@@ -109,6 +109,7 @@ docs/perf/*
 !docs/perf/v0.6.77-go-pane-label-clearing-gate.md
 !docs/perf/v0.6.78-go-pane-label-clearing-cutover.md
 !docs/perf/v0.6.79-go-create-teammate-pane-gate.md
+!docs/perf/v0.6.80-go-create-teammate-pane-cutover.md
 
 # Dependencies
 node_modules/

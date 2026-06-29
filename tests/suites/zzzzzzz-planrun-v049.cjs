@@ -464,7 +464,7 @@ module.exports = {
     }
 
     for (const { rel, source } of planRunSources) {
-      if (/setInterval|setTimeout|cron|\bscheduler\b|autoAdvance|autopilot|createTeammatePane|agentteam_spawn|executeSpawnMember/.test(source)) {
+      if (/setInterval|setTimeout|cron|\bscheduler\b|autoAdvance|autopilot|agentteam_spawn|executeSpawnMember/.test(source)) {
         failures.push(`${rel} should not implement hidden scheduler/default autopilot/worker-spawns-worker behavior`)
       }
       if (/from ['"]\.\.\/state\/(teamStore|mailboxStore|taskStore|taskHistory)\.js/.test(source)) {
