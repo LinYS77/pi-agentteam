@@ -112,6 +112,7 @@ docs/perf/*
 !docs/perf/v0.6.80-go-create-teammate-pane-cutover.md
 !docs/perf/v0.6.81-go-detached-new-session-gate.md
 !docs/perf/v0.6.82-go-detached-new-session-cutover.md
+!docs/perf/v0.6.83-go-detached-new-window-gate.md
 
 # Dependencies
 node_modules/
