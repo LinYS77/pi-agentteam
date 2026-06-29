@@ -122,6 +122,7 @@ docs/perf/*
 !docs/perf/v0.6.90-v07-readiness-burndown-refresh.md
 !docs/perf/v0.6.91-v07-clean-temp-p95-refresh.md
 !docs/perf/v0.6.92-v07-clean-temp-manual-rc-refresh.md
+!docs/perf/v0.6.93-v07-bug-burndown-ledger.md
 
 # Dependencies
 node_modules/
