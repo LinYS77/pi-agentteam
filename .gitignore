@@ -113,6 +113,7 @@ docs/perf/*
 !docs/perf/v0.6.81-go-detached-new-session-gate.md
 !docs/perf/v0.6.82-go-detached-new-session-cutover.md
 !docs/perf/v0.6.83-go-detached-new-window-gate.md
+!docs/perf/v0.6.84-go-detached-new-window-cutover.md
 
 # Dependencies
 node_modules/

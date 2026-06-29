@@ -83,6 +83,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.workerLifecycleClearPaneLabelConnected, true)
   assert.equal(result.profile.workerLifecycleCreateTeammatePaneConnected, true)
   assert.equal(result.profile.workerLifecycleCreateDetachedSwarmSessionConnected, true)
+  assert.equal(result.profile.workerLifecycleCreateDetachedSwarmWindowConnected, true)
   assert.equal(result.profile.tmuxAvailabilityConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)
@@ -185,8 +186,10 @@ function assertMethodResult(response, request, fingerprintModule) {
                     ? 'createTeammatePane'
                     : requestedOperation === 'createDetachedSwarmSession'
                       ? 'createDetachedSwarmSession'
-                      : 'inspectPane'
-    const mutatingOperation = expectedOperation === 'setPaneLabel' || expectedOperation === 'clearPaneLabel' || expectedOperation === 'createTeammatePane' || expectedOperation === 'createDetachedSwarmSession'
+                      : requestedOperation === 'createDetachedSwarmWindow'
+                        ? 'createDetachedSwarmWindow'
+                        : 'inspectPane'
+    const mutatingOperation = expectedOperation === 'setPaneLabel' || expectedOperation === 'clearPaneLabel' || expectedOperation === 'createTeammatePane' || expectedOperation === 'createDetachedSwarmSession' || expectedOperation === 'createDetachedSwarmWindow'
     assert.equal(response.result.operation, expectedOperation)
     assert.equal(response.result.capability, 'workerLifecycle')
     assert.equal(response.result.readOnly, !mutatingOperation)
@@ -236,6 +239,10 @@ function assertMethodResult(response, request, fingerprintModule) {
     if (expectedOperation === 'createDetachedSwarmSession') {
       assert.equal(response.result.created, false)
       assert.equal(JSON.stringify(response.result).includes(fixtures.RAW_SESSION_CREATE_CANARY), false, 'createDetachedSwarmSession result must not leak raw session/window text')
+    }
+    if (expectedOperation === 'createDetachedSwarmWindow') {
+      assert.equal(response.result.created, false)
+      assert.equal(JSON.stringify(response.result).includes(fixtures.RAW_WINDOW_CREATE_CANARY), false, 'createDetachedSwarmWindow result must not leak raw session/window text')
     }
     if (response.result.ok === false) {
       if (expectedOperation === 'inspectPane' || expectedOperation === 'findAgentTeamWindowTarget' || expectedOperation === 'findWindowTargetByName' || expectedOperation === 'sessionExists') assert.equal(response.result.exists, false)

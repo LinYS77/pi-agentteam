@@ -259,7 +259,8 @@ function assertRuntimeCutover(root) {
   assertIncludes(windowsSource, 'export async function ensureSwarmWindow', `${WINDOWS_FILE} ensureSwarmWindow remains TS-owned`)
   assert.equal(windowsSource.includes("runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]"), false, `${WINDOWS_FILE} later v0.6.82 removes direct detached new-session fallback`)
   assertIncludes(windowsSource, 'createAgentTeamKernelAdapter().createDetachedSwarmSessionAsync(SWARM_SESSION, SWARM_WINDOW, signal)', `${WINDOWS_FILE} later v0.6.82 detached new-session cutover`)
-  assertIncludes(windowsSource, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", `${WINDOWS_FILE} new-window remains TS-owned`)
+  assert.equal(windowsSource.includes("runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]"), false, `${WINDOWS_FILE} later v0.6.84 removes direct detached new-window fallback`)
+  assertIncludes(windowsSource, 'createAgentTeamKernelAdapter().createDetachedSwarmWindowAsync(SWARM_SESSION, SWARM_WINDOW, signal)', `${WINDOWS_FILE} later v0.6.84 detached new-window cutover`)
 }
 
 async function assertAdapterNoLeakAndCompactFailures(distRoot) {
@@ -351,7 +352,8 @@ function assertGoRuntime(root) {
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name")', `${GO_SOURCE_FILE} existing clearPaneLabel preserved`)
   assertIncludes(goSource, 'runWindowPaneLabelsSetOption(target, "pane-border-status", "top")', `${GO_SOURCE_FILE} existing refresh preserved`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.82 authorized detached new-session`)
-  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => command !== 'new-session')) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${command}`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.84 authorized detached new-window`)
+  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => !['new-session', 'new-window'].includes(command))) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${command}`)
   assert.equal(/exec\.Command\s*\(/.test(goSource), false, `${GO_SOURCE_FILE} must not use shell-capable exec.Command`)
   assert.equal(/"(?:sh|bash|zsh|fish)"/.test(goSource), false, `${GO_SOURCE_FILE} must not invoke shells`)
 }

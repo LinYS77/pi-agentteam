@@ -1,5 +1,4 @@
 import { createAgentTeamKernelAdapter } from '../core/kernel.js'
-import { runTmuxAsync } from './client.js'
 import {
   ensureTmuxAvailable,
   captureCurrentPaneBinding,
@@ -69,7 +68,10 @@ export async function ensureSwarmWindow(
 
   let initialTarget = await findAgentTeamWindowTarget(SWARM_SESSION, signal)
   if (!initialTarget) {
-    await runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW], undefined, signal)
+    const createdWindow = await createAgentTeamKernelAdapter().createDetachedSwarmWindowAsync(SWARM_SESSION, SWARM_WINDOW, signal)
+    if (!createdWindow.ok) {
+      throw new Error(createdWindow.reason || 'Go worker lifecycle createDetachedSwarmWindow unavailable (previous-helper-failure)')
+    }
     initialTarget = await findWindowTargetByName(SWARM_SESSION, SWARM_WINDOW, signal)
     if (!initialTarget) {
       throw new Error('Failed to locate agentteam tmux window after creation')

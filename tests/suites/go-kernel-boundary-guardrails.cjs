@@ -96,7 +96,9 @@ function assertNoMatches(label, source, patterns) {
 }
 
 function sourceWithoutAllowedCurrentPaneDisplayMessage(source) {
-  return source.replace(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/g, '')
+  return source
+    .replace(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/g, '')
+    .replace(/exec\.CommandContext\(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName\)/g, '')
 }
 
 function walkFiles(root, out = []) {

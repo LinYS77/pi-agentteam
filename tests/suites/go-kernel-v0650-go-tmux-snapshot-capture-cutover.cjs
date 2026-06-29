@@ -143,10 +143,11 @@ function assertRuntimeSources(root) {
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-a", "-F", tmuxPaneSnapshotFormat\)/, 'Go capture must be exactly list-panes snapshot capture')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "display-message", "-p", workerLifecycleCurrentPaneBindingFormat\)/, 'later v0.6.60 permits only narrow current-pane binding display-message')
   assert.equal(/exec\.CommandContext\(ctx, "tmux", "display-message", "-p", "-t"/.test(goSource), false, 'Go must not add target-based display-message')
-  for (const forbidden of FORBIDDEN_GO_RUNTIME_TERMS.filter(term => !['createTeammatePane', 'split-window', 'select-layout', 'resize-pane', 'createDetachedSwarmSession', 'new-session'].includes(term))) {
+  for (const forbidden of FORBIDDEN_GO_RUNTIME_TERMS.filter(term => !['createTeammatePane', 'split-window', 'select-layout', 'resize-pane', 'createDetachedSwarmSession', 'new-session', 'createDetachedSwarmWindow', 'new-window'].includes(term))) {
     assert.equal(goSource.includes(forbidden), false, `Go source must not contain broad control-plane term ${forbidden}`)
   }
   assertIncludes(goSource, 'func createTeammatePane(params map[string]any) workerTeammatePaneCreationResult', 'later v0.6.80 authorized createTeammatePane worker lifecycle cutover')
+  assertIncludes(goSource, 'func createDetachedSwarmWindow(params map[string]any) workerDetachedSwarmWindowCreationResult', 'later v0.6.84 authorized detached new-window worker lifecycle cutover')
 }
 
 function assertManifest(root) {

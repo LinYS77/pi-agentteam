@@ -213,8 +213,9 @@ function assertFacadeSource(root) {
   assert.equal(ensureBody.includes('stdout'), false, 'post-creation lookup must not parse raw stdout')
   assert.equal(ensureBody.includes("runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]"), false, 'later v0.6.82 removes direct detached new-session fallback')
   assertIncludes(ensureBody, "createAgentTeamKernelAdapter().createDetachedSwarmSessionAsync(SWARM_SESSION, SWARM_WINDOW, signal)", 'later v0.6.82 detached new-session cutover')
-  assertIncludes(ensureBody, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", 'new-window remains TS-owned')
-  assert.ok(ensureBody.indexOf("runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]") < ensureBody.indexOf(WINDOW_NAME_DELEGATION), 'new-window must run before Go-backed post-creation lookup')
+  assert.equal(ensureBody.includes("runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]"), false, 'later v0.6.84 removes direct detached new-window fallback')
+  assertIncludes(ensureBody, "createAgentTeamKernelAdapter().createDetachedSwarmWindowAsync(SWARM_SESSION, SWARM_WINDOW, signal)", 'later v0.6.84 detached new-window cutover')
+  assert.ok(ensureBody.indexOf("createAgentTeamKernelAdapter().createDetachedSwarmWindowAsync(SWARM_SESSION, SWARM_WINDOW, signal)") < ensureBody.indexOf(WINDOW_NAME_DELEGATION), 'detached new-window creation must run before Go-backed post-creation lookup')
   assertIncludes(ensureBody, 'firstPaneInWindow(initialTarget, signal)', 'v0.6.69 first-pane lookup remains Go-backed')
   assertIncludes(ensureBody, 'resolvePaneBindingAsync(leaderPaneId, signal)', 'v0.6.68 target binding remains Go-backed')
   assertIncludes(ensureBody, 'await markWindowAsAgentTeam', 'marking remains TS-owned')
@@ -236,7 +237,7 @@ function assertFacadeSource(root) {
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-windows", "-t", sessionName, "-F", workerLifecycleWindowNameFormat\)/, 'Go window-name lookup command must be exact')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-windows", "-t", sessionName, "-F", workerLifecycleAgentTeamWindowFormat\)/, 'v0.6.65 marked-window discovery remains exact')
   assert.match(goSource, /exec\.CommandContext\(ctx, "tmux", "list-panes", "-t", target, "-F", workerLifecycleWindowPaneFormat\)/, 'v0.6.69 first-pane source remains exact')
-  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => !['select-pane', 'split-window', 'select-layout', 'resize-pane', 'new-session'].includes(command))) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add ${command}`)
+  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => !['select-pane', 'split-window', 'select-layout', 'resize-pane', 'new-session', 'new-window'].includes(command))) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add ${command}`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)', `${GO_SOURCE} later v0.6.76 permits only narrow pane-title setPaneLabel select-pane`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name")', `${GO_SOURCE} later v0.6.78 authorized pane label clearing`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", "")', `${GO_SOURCE} later v0.6.78 authorized pane title clearing`)
@@ -301,6 +302,10 @@ async function withPatchedDetachedDeps(env, patch, callback) {
   kernel.createAgentTeamKernelAdapter = () => ({
     sessionExistsAsync: async () => ({ ok: true, exists: true }),
     findAgentTeamWindowTargetAsync: async () => ({ ok: false, exists: false }),
+    createDetachedSwarmWindowAsync: async (sessionName, windowName, signal) => {
+      adapterCalls.push({ operation: 'createDetachedSwarmWindow', sessionName, windowName, signal })
+      return { ok: true, operation: 'createDetachedSwarmWindow', capability: 'workerLifecycle', sessionName, windowName, created: true, readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true }
+    },
     findWindowTargetByNameAsync: async (sessionName, windowName, signal) => {
       adapterCalls.push({ operation: 'findWindowTargetByName', sessionName, windowName, signal })
       return { ok: true, exists: true, sessionName, windowName, target: `${sessionName}:@7`, windowId: '@7' }
@@ -358,8 +363,8 @@ async function assertDetachedRuntime(env) {
   }, async ({ windows, tmuxCalls, markCalls, refreshCalls, adapterCalls }) => {
     const result = await windows.ensureSwarmWindow()
     assert.deepEqual(result, { session: 'detached-session', window: '@7', target: 'detached-session:@7', leaderPaneId: '%leader' })
-    assert.deepEqual(tmuxCalls, [['new-window', '-t', 'pi-agentteam', '-n', 'agentteam']], 'detached post-creation path should only keep TS-owned new-window direct tmux call')
-    assert.deepEqual(adapterCalls.map(call => ({ operation: call.operation, sessionName: call.sessionName, windowName: call.windowName })), [{ operation: 'findWindowTargetByName', sessionName: 'pi-agentteam', windowName: 'agentteam' }])
+    assert.deepEqual(tmuxCalls, [], 'detached post-creation path should not keep TS-owned new-window direct tmux call after v0.6.84')
+    assert.deepEqual(adapterCalls.map(call => ({ operation: call.operation, sessionName: call.sessionName, windowName: call.windowName })), [{ operation: 'createDetachedSwarmWindow', sessionName: 'pi-agentteam', windowName: 'agentteam' }, { operation: 'findWindowTargetByName', sessionName: 'pi-agentteam', windowName: 'agentteam' }])
     assert.deepEqual(markCalls.map(call => call.target), ['pi-agentteam:@7', 'detached-session:@7'])
     assert.deepEqual(refreshCalls.map(call => call.target), ['detached-session:@7'])
   })
@@ -380,7 +385,7 @@ async function assertDetachedRuntime(env) {
       assert.equal(error.message, COMPACT_FAILURE_ERROR)
       return true
     })
-    assert.deepEqual(tmuxCalls, [['new-window', '-t', 'pi-agentteam', '-n', 'agentteam']], 'missing post-creation window should not use hidden direct list-windows fallback')
+    assert.deepEqual(tmuxCalls, [], 'missing post-creation window should not use hidden direct tmux fallback')
   })
 }
 

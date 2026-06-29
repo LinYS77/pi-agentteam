@@ -6,7 +6,7 @@
   "module": "tmuxSnapshotParse",
   "source": {
     "path": "kernel/go/agentteam-kernel",
-    "revision": "d928f2f71ed8386a5a04e21e68096a9524fb0975"
+    "revision": "5f1e7d3546950a81dee47987ac12134885ee958c"
   },
   "build": {
     "command": [
@@ -23,7 +23,7 @@
     "cwd": "kernel/go/agentteam-kernel",
     "toolchain": "go version go1.25.10 linux/amd64",
     "runIdentity": "local-reviewer-run",
-    "generatedAt": "2026-06-29T03:36:33.740Z"
+    "generatedAt": "2026-06-29T06:20:55.035Z"
   },
   "smoke": {
     "health": true,
@@ -124,6 +124,12 @@
       ]
     },
     "workerLifecycleCreateDetachedSwarmSession": {
+      "ok": false,
+      "acceptedFailureKinds": [
+        "invalid-session"
+      ]
+    },
+    "workerLifecycleCreateDetachedSwarmWindow": {
       "ok": false,
       "acceptedFailureKinds": [
         "invalid-session"

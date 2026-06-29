@@ -243,7 +243,6 @@ function assertCurrentTypescriptWindowState(root) {
   const windowsSource = read(root, RUNTIME_FILE)
   const ensureBody = functionBody(windowsSource, 'ensureSwarmWindow')
   assertIncludes(windowsSource, "import { createAgentTeamKernelAdapter } from '../core/kernel.js'", RUNTIME_FILE)
-  assertIncludes(windowsSource, "import { runTmuxAsync } from './client.js'", RUNTIME_FILE)
   assertIncludes(windowsSource, 'SWARM_SESSION', RUNTIME_FILE)
   assertIncludes(windowsSource, 'SWARM_WINDOW', RUNTIME_FILE)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_WINDOW_SURFACE.detachedBranchGuard, `${RUNTIME_FILE} inside-tmux branch guard`)
@@ -253,7 +252,10 @@ function assertCurrentTypescriptWindowState(root) {
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_WINDOW_SURFACE.markAfterNewSessionCall, `${RUNTIME_FILE} mark after new-session remains unchanged`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_WINDOW_SURFACE.agentteamWindowLookupCall, `${RUNTIME_FILE} agentteam window lookup remains unchanged`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_WINDOW_SURFACE.missingAgentteamWindowGuard, `${RUNTIME_FILE} missing agentteam window guard remains unchanged`)
-  assertIncludes(ensureBody, `await ${CURRENT_TYPESCRIPT_DETACHED_NEW_WINDOW_SURFACE.newWindowCall}`, `${RUNTIME_FILE} new-window remains TS-owned`)
+  // The v0.6.83 fixture/doc remain historical gate-only evidence; current source may include the later v0.6.84 authorized cutover.
+  assert.equal(ensureBody.includes(CURRENT_TYPESCRIPT_DETACHED_NEW_WINDOW_SURFACE.newWindowCall), false, `${RUNTIME_FILE} detached new-window direct TS fallback removed after authorized v0.6.84 cutover`)
+  assertIncludes(ensureBody, 'createAgentTeamKernelAdapter().createDetachedSwarmWindowAsync(SWARM_SESSION, SWARM_WINDOW, signal)', `${RUNTIME_FILE} later v0.6.84 detached new-window cutover`)
+  assertIncludes(ensureBody, "throw new Error(createdWindow.reason || 'Go worker lifecycle createDetachedSwarmWindow unavailable (previous-helper-failure)')", `${RUNTIME_FILE} later v0.6.84 compact create failure`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_WINDOW_SURFACE.findWindowByNameCall, `${RUNTIME_FILE} findWindowTargetByName remains unchanged`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_WINDOW_SURFACE.failedPostCreateLookupThrow, `${RUNTIME_FILE} post-create failure throw remains unchanged`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_WINDOW_SURFACE.markAfterNewWindowLookupCall, `${RUNTIME_FILE} mark after new-window lookup remains unchanged`)
@@ -262,24 +264,20 @@ function assertCurrentTypescriptWindowState(root) {
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_WINDOW_SURFACE.finalMarkCall, `${RUNTIME_FILE} final mark remains unchanged`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_WINDOW_SURFACE.finalRefreshCall, `${RUNTIME_FILE} refresh remains unchanged`)
   assert.equal([...ensureBody.matchAll(/runTmuxAsync\(\['new-session'/g)].length, 0, `${RUNTIME_FILE} should not reintroduce direct detached new-session call after v0.6.82`)
-  assert.equal([...ensureBody.matchAll(/runTmuxAsync\(\['new-window'/g)].length, 1, `${RUNTIME_FILE} should keep exactly one direct detached new-window call in this gate`)
-  for (const forbidden of FORBIDDEN_RUNTIME_CUTOVER_SNIPPETS) {
-    assert.equal(ensureBody.includes(forbidden), false, `${RUNTIME_FILE} must not add gate future runtime cutover ${forbidden}`)
-  }
+  assert.equal([...ensureBody.matchAll(/runTmuxAsync\(\['new-window'/g)].length, 0, `${RUNTIME_FILE} should not keep direct detached new-window call after authorized v0.6.84 cutover`)
 }
 
-function assertNoGateRuntimeCutover(root) {
+function assertLaterV0684RuntimeCutoverRecognized(root) {
   const kernelSource = read(root, KERNEL_FILE)
   const goSource = read(root, GO_SOURCE_FILE)
   const windowsSource = read(root, RUNTIME_FILE)
-  for (const forbidden of FORBIDDEN_RUNTIME_CUTOVER_SNIPPETS) {
-    assert.equal(kernelSource.includes(forbidden), false, `${KERNEL_FILE} must not add future detached new-window adapter/runtime snippet ${forbidden}`)
-    assert.equal(windowsSource.includes(forbidden), false, `${RUNTIME_FILE} must not add future detached new-window adapter/runtime snippet ${forbidden}`)
-  }
-  for (const forbidden of FORBIDDEN_GO_CUTOVER_SNIPPETS) {
-    assert.equal(goSource.includes(forbidden), false, `${GO_SOURCE_FILE} must not add future detached new-window Go cutover snippet ${forbidden}`)
-  }
-  assert.equal(goSource.includes('exec.CommandContext(ctx, "tmux", "new-window"'), false, `${GO_SOURCE_FILE} must not add Go new-window command in this gate`)
+  assertIncludes(kernelSource, 'createDetachedSwarmWindowAsync(sessionName: string, windowName: string, signal?: AbortSignal)', `${KERNEL_FILE} later v0.6.84 adapter method`)
+  assertIncludes(kernelSource, "operation: 'createDetachedSwarmWindow'", `${KERNEL_FILE} later v0.6.84 operation`)
+  assertIncludes(kernelSource, 'workerLifecycleCreateDetachedSwarmWindowConnected', `${KERNEL_FILE} later v0.6.84 profile flag`)
+  assertIncludes(windowsSource, 'createAgentTeamKernelAdapter().createDetachedSwarmWindowAsync(SWARM_SESSION, SWARM_WINDOW, signal)', `${RUNTIME_FILE} later v0.6.84 facade cutover`)
+  assertIncludes(goSource, 'case "createDetachedSwarmWindow"', `${GO_SOURCE_FILE} later v0.6.84 adds authorized detached new-window handler`)
+  assertIncludes(goSource, 'func createDetachedSwarmWindow', `${GO_SOURCE_FILE} later v0.6.84 adds authorized detached new-window implementation`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.84 authorized new-window command`)
 }
 
 function assertV0682DetachedNewSessionStillRecognized(root) {
@@ -319,7 +317,7 @@ function assertV0680CreateTeammatePaneStillRecognized(root) {
   assert.deepEqual(manifest.smoke.workerLifecycleCreateTeammatePane, { ok: false, acceptedFailureKinds: ['invalid-target'] })
 }
 
-function assertCurrentGoSurfaceNoNewWindow(root) {
+function assertCurrentGoSurfaceWithLaterNewWindow(root) {
   const goSource = read(root, GO_SOURCE_FILE)
   assert.deepEqual(parseGoCapabilities(goSource), [...ACTIVE_CAPABILITIES])
   for (const operation of ACTIVE_OPERATIONS) assert.match(goSource, new RegExp(`case "${operation}"`), `${GO_SOURCE_FILE} should keep existing operation ${operation}`)
@@ -337,12 +335,14 @@ function assertCurrentGoSurfaceNoNewWindow(root) {
   assertIncludes(goSource, 'runCreateTeammatePaneTmux("resize-pane", "-t", leaderPaneID, "-x", "66%")', `${GO_SOURCE_FILE} createTeammatePane resize-pane`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} v0.6.82 detached new-session`)
   assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName\)/g)].length, 1, `${GO_SOURCE_FILE} should contain exactly one authorized detached new-session command`)
-  for (const forbiddenCommand of ['new-window', 'send-keys', 'kill-pane', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.84 detached new-window`)
+  assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName\)/g)].length, 1, `${GO_SOURCE_FILE} should contain exactly one authorized detached new-window command`)
+  for (const forbiddenCommand of ['send-keys', 'kill-pane', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
     assert.equal(goSource.includes(`"${forbiddenCommand}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${forbiddenCommand}`)
   }
 }
 
-function assertNativeArtifactUnchanged(root) {
+function assertNativeArtifactCurrentAndSelfConsistent(root) {
   const manifest = JSON.parse(read(root, `${NATIVE_ROOT}/manifest.json`))
   const provenance = JSON.parse(read(root, `${NATIVE_ROOT}/provenance.json`))
   assert.equal(exists(root, NATIVE_ARTIFACT_SNAPSHOT.helperPath), true, 'existing native helper should remain present')
@@ -353,20 +353,16 @@ function assertNativeArtifactUnchanged(root) {
   assert.equal(manifest.packageVersion, PACKAGE_VERSION)
   assert.equal(manifest.helperVersion, HELPER_VERSION)
   assert.equal(manifest.protocolVersion, PROTOCOL_VERSION)
-  assert.equal(manifest.artifact.size, NATIVE_ARTIFACT_SNAPSHOT.helperSize)
-  assert.equal(manifest.artifact.sha256, NATIVE_ARTIFACT_SNAPSHOT.helperSha256)
-  assert.equal(manifest.source.revision, NATIVE_ARTIFACT_SNAPSHOT.sourceRevision)
-  assert.equal(provenance.source.revision, NATIVE_ARTIFACT_SNAPSHOT.sourceRevision)
-  assert.equal(sha256(root, NATIVE_ARTIFACT_SNAPSHOT.helperPath), NATIVE_ARTIFACT_SNAPSHOT.helperSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/manifest.json`), NATIVE_ARTIFACT_SNAPSHOT.manifestSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/provenance.json`), NATIVE_ARTIFACT_SNAPSHOT.provenanceSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/attestation.intoto.jsonl`), NATIVE_ARTIFACT_SNAPSHOT.attestationSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/SHA256SUMS`), NATIVE_ARTIFACT_SNAPSHOT.checksumsSha256)
+  assert.equal(typeof manifest.source.revision, 'string')
+  assert.equal(provenance.source.revision, manifest.source.revision)
+  assert.equal(typeof manifest.artifact.sha256, 'string')
+  assert.equal(sha256(root, NATIVE_ARTIFACT_SNAPSHOT.helperPath), manifest.artifact.sha256)
+  assert.equal(fs.statSync(path.join(root, ...NATIVE_ARTIFACT_SNAPSHOT.helperPath.split('/'))).size, manifest.artifact.size)
   assert.deepEqual(manifest.smoke.workerLifecycleCreateDetachedSwarmSession, NATIVE_ARTIFACT_SNAPSHOT.createDetachedSwarmSessionSmoke)
   assert.deepEqual(provenance.smoke.workerLifecycleCreateDetachedSwarmSession, NATIVE_ARTIFACT_SNAPSHOT.createDetachedSwarmSessionSmoke)
   assert.deepEqual(manifest.smoke.workerLifecycleCreateTeammatePane, NATIVE_ARTIFACT_SNAPSHOT.createTeammatePaneSmoke)
-  assert.equal(Object.prototype.hasOwnProperty.call(manifest.smoke, 'workerLifecycleCreateDetachedSwarmWindow'), false, 'v0.6.83 gate must not add detached new-window native smoke')
-  assert.equal(Object.prototype.hasOwnProperty.call(provenance.smoke, 'workerLifecycleCreateDetachedSwarmWindow'), false, 'v0.6.83 gate must not add detached new-window provenance smoke')
+  assert.deepEqual(manifest.smoke.workerLifecycleCreateDetachedSwarmWindow, { ok: false, acceptedFailureKinds: ['invalid-session'] })
+  assert.deepEqual(provenance.smoke.workerLifecycleCreateDetachedSwarmWindow, { ok: false, acceptedFailureKinds: ['invalid-session'] })
 }
 
 function assertPackageAndReleaseGuards(root) {
@@ -389,11 +385,11 @@ module.exports = {
     assertFixtureShape(root)
     assertDocs(root)
     assertCurrentTypescriptWindowState(root)
-    assertNoGateRuntimeCutover(root)
+    assertLaterV0684RuntimeCutoverRecognized(root)
     assertV0682DetachedNewSessionStillRecognized(root)
     assertV0680CreateTeammatePaneStillRecognized(root)
-    assertCurrentGoSurfaceNoNewWindow(root)
-    assertNativeArtifactUnchanged(root)
+    assertCurrentGoSurfaceWithLaterNewWindow(root)
+    assertNativeArtifactCurrentAndSelfConsistent(root)
     assertPackageAndReleaseGuards(root)
   },
 }

@@ -24,8 +24,8 @@
   "artifact": {
     "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/agentteam-tmuxSnapshotParse",
     "filename": "agentteam-tmuxSnapshotParse",
-    "size": 3511594,
-    "sha256": "80b207e685fcdebbba17b03316d5a65fefd26cc28430a763f0b3672eb735ce9c",
+    "size": 3516559,
+    "sha256": "5647a92fb74238f7747eb3ce48f6d2f834f1b47a4584615c7f897a2815eff27e",
     "executable": true,
     "mode": "0755"
   },
@@ -40,7 +40,7 @@
   },
   "source": {
     "path": "kernel/go/agentteam-kernel",
-    "revision": "d928f2f71ed8386a5a04e21e68096a9524fb0975"
+    "revision": "5f1e7d3546950a81dee47987ac12134885ee958c"
   },
   "build": {
     "command": [
@@ -57,7 +57,7 @@
     "cwd": "kernel/go/agentteam-kernel",
     "toolchain": "go version go1.25.10 linux/amd64",
     "runIdentity": "local-reviewer-run",
-    "generatedAt": "2026-06-29T03:36:33.740Z"
+    "generatedAt": "2026-06-29T06:20:55.035Z"
   },
   "smoke": {
     "health": true,
@@ -163,6 +163,12 @@
         "invalid-session"
       ]
     },
+    "workerLifecycleCreateDetachedSwarmWindow": {
+      "ok": false,
+      "acceptedFailureKinds": [
+        "invalid-session"
+      ]
+    },
     "tmuxAvailability": {
       "ok": true,
       "acceptedFailureKinds": [
@@ -176,7 +182,7 @@
     "path": "native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/attestation.intoto.jsonl",
     "kind": "placeholder-only",
     "signed": false,
-    "sha256": "c60a141ffc90afe0b8690893673abbc49594efcdea79fc11e1b9785e032ae90c"
+    "sha256": "7cb152bfbc1a7101dc2891a4ea1f6a8924dc7a6f74b6fb528e73b2be12746a00"
   },
   "license": {
     "name": "MIT",

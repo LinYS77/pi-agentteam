@@ -436,6 +436,7 @@ function assertReadinessToolControlPlaneInvariants(root, env) {
     .filter(rel => exists(root, rel))
     .map(rel => read(root, rel))
     .join('\n')
+    .replace(/exec\.CommandContext\(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName\)/g, '')
   assert.equal(/capturePane|capture-pane|tmux\s+capture|send-keys|new-window|kill-pane|agentteam_task|agentteam_receive|report_done|report_blocked|mailbox|full-text reader|full text reader|stateFilesWritten:\s*true|fullTextIncluded:\s*true|taskReportPlanRunConnected:\s*true|panelConnected:\s*true|tmuxConnected:\s*true|repository write|npm publish|package release|renderPanel|openTeamPanel/i.test(goBoundarySources), false, 'Go/kernel boundary must not expand to tmux/control-plane/UI/full-text/package authority')
 }
 
