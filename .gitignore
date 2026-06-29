@@ -121,6 +121,7 @@ docs/perf/*
 !docs/perf/v0.6.89-go-worker-delivery-boundary-gate.md
 !docs/perf/v0.6.90-v07-readiness-burndown-refresh.md
 !docs/perf/v0.6.91-v07-clean-temp-p95-refresh.md
+!docs/perf/v0.6.92-v07-clean-temp-manual-rc-refresh.md
 
 # Dependencies
 node_modules/
