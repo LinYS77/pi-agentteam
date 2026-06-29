@@ -3,6 +3,7 @@ const HELPER_VERSION = '0.3.0-read-model-shadow'
 const CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability']
 const RAW_LABEL_CANARY = 'jsonrpc raw pane label canary 🚫'
 const RAW_CREATE_CANARY = 'jsonrpc raw pane create canary 🚫'
+const RAW_SESSION_CREATE_CANARY = 'jsonrpc raw detached session create canary 🚫'
 
 const tmuxStdout = [
   '%pane-a\tsession:@1\tagentteam leader\tpi',
@@ -138,6 +139,10 @@ function validMethodCases() {
       request: request('workerLifecycle', { operation: 'createTeammatePane', target: 'invalid fixture target!', leaderPaneId: '%123', hasLeaderLayout: true, cwd: RAW_CREATE_CANARY, startCommand: RAW_CREATE_CANARY }, 'worker-lifecycle-create-teammate-pane-string-id'),
     },
     {
+      name: 'worker lifecycle createDetachedSwarmSession invalid session without raw data leakage',
+      request: request('workerLifecycle', { operation: 'createDetachedSwarmSession', sessionName: RAW_SESSION_CREATE_CANARY, windowName: RAW_SESSION_CREATE_CANARY }, 'worker-lifecycle-create-detached-swarm-session-string-id'),
+    },
+    {
       name: 'tmux availability',
       request: request('tmuxAvailability', undefined, 'tmux-availability-string-id'),
     },
@@ -251,6 +256,7 @@ function multipleRequestBatch() {
     request('workerLifecycle', { operation: 'setPaneLabel', paneId: 'invalid batch pane', label: RAW_LABEL_CANARY }, 'batch-worker-lifecycle-set-pane-label'),
     request('workerLifecycle', { operation: 'clearPaneLabel', paneId: 'invalid batch pane' }, 'batch-worker-lifecycle-clear-pane-label'),
     request('workerLifecycle', { operation: 'createTeammatePane', target: 'invalid batch target!', leaderPaneId: '%123', hasLeaderLayout: false, cwd: RAW_CREATE_CANARY, startCommand: RAW_CREATE_CANARY }, 'batch-worker-lifecycle-create-teammate-pane'),
+    request('workerLifecycle', { operation: 'createDetachedSwarmSession', sessionName: RAW_SESSION_CREATE_CANARY, windowName: RAW_SESSION_CREATE_CANARY }, 'batch-worker-lifecycle-create-detached-swarm-session'),
     request('tmuxAvailability', undefined, 'batch-tmux-availability'),
     { jsonrpc: '2.0', id: 'batch-unknown', method: 'unknownMethod' },
   ]
@@ -270,6 +276,7 @@ module.exports = {
   CAPABILITIES,
   RAW_LABEL_CANARY,
   RAW_CREATE_CANARY,
+  RAW_SESSION_CREATE_CANARY,
   tmuxStdout,
   compactReadModelInput,
   request,

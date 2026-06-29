@@ -253,7 +253,8 @@ function assertCurrentTypescriptPaneState(root) {
   assertIncludes(clearSyncBody, "runTmuxNoThrow(['select-pane', '-t', paneId, '-T', ''])", `${RUNTIME_FILE} clearPaneLabelSync remains TS-owned sync helper`)
 
   assertIncludes(windowsSource, 'export async function ensureSwarmWindow', `${TMUX_WINDOWS} ensureSwarmWindow remains TS-owned`)
-  assertIncludes(windowsSource, "runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]", `${TMUX_WINDOWS} new-session remains outside this gate and later cutover`)
+  assert.equal(windowsSource.includes("runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]"), false, `${TMUX_WINDOWS} later v0.6.82 removes direct detached new-session fallback`)
+  assertIncludes(windowsSource, 'createAgentTeamKernelAdapter().createDetachedSwarmSessionAsync(SWARM_SESSION, SWARM_WINDOW, signal)', `${TMUX_WINDOWS} later v0.6.82 detached new-session cutover`)
   assertIncludes(windowsSource, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", `${TMUX_WINDOWS} new-window remains outside this gate and later cutover`)
   assertIncludes(labelsSource, 'createAgentTeamKernelAdapter().setPaneLabelAsync(paneId, label, signal)', `${TMUX_LABELS} v0.6.76 setPaneLabel helper preserved`)
   assertIncludes(labelsSource, 'createAgentTeamKernelAdapter().refreshWindowPaneLabelsAsync(target, signal)', `${TMUX_LABELS} v0.6.74 refresh helper preserved`)
@@ -289,7 +290,8 @@ function assertExistingGoCommandSurface(root) {
   assertIncludes(goSource, 'splitArgs := []string{"split-window"}', `${GO_SOURCE_FILE} later v0.6.80 authorized split-window`)
   assertIncludes(goSource, 'runCreateTeammatePaneTmux("select-layout", "-t", target, layout)', `${GO_SOURCE_FILE} later v0.6.80 authorized select-layout`)
   assertIncludes(goSource, 'runCreateTeammatePaneTmux("resize-pane", "-t", leaderPaneID, "-x", "66%")', `${GO_SOURCE_FILE} later v0.6.80 authorized resize-pane`)
-  for (const forbidden of ['new-session', 'new-window', 'send-keys', 'kill-pane', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.82 authorized detached new-session`)
+  for (const forbidden of ['new-window', 'send-keys', 'kill-pane', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
     assert.equal(goSource.includes(`"${forbidden}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${forbidden}`)
   }
 }
@@ -313,6 +315,8 @@ function assertNativeArtifactUnchanged(root) {
   assert.equal(Object.prototype.hasOwnProperty.call(manifest.smoke, 'workerLifecycleCreateTeammatePane'), true, 'later v0.6.80 cutover adds createTeammatePane native smoke')
   assert.deepEqual(manifest.smoke.workerLifecycleCreateTeammatePane, { ok: false, acceptedFailureKinds: ['invalid-target'] })
   assert.deepEqual(provenance.smoke.workerLifecycleCreateTeammatePane, { ok: false, acceptedFailureKinds: ['invalid-target'] })
+  assert.deepEqual(manifest.smoke.workerLifecycleCreateDetachedSwarmSession, { ok: false, acceptedFailureKinds: ['invalid-session'] })
+  assert.deepEqual(provenance.smoke.workerLifecycleCreateDetachedSwarmSession, { ok: false, acceptedFailureKinds: ['invalid-session'] })
 }
 
 function assertPackageAndReleaseGuards(root) {

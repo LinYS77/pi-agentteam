@@ -257,7 +257,8 @@ function assertRuntimeCutover(root) {
   assertIncludes(labelsSource, 'createAgentTeamKernelAdapter().setPaneLabelAsync(paneId, label, signal)', `${LABELS_FILE} ${LABEL_HELPER_NAME}`)
   assertIncludes(labelsSource, 'createAgentTeamKernelAdapter().refreshWindowPaneLabelsAsync(target, signal)', `${LABELS_FILE} ${REFRESH_HELPER_NAME}`)
   assertIncludes(windowsSource, 'export async function ensureSwarmWindow', `${WINDOWS_FILE} ensureSwarmWindow remains TS-owned`)
-  assertIncludes(windowsSource, "runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]", `${WINDOWS_FILE} new-session remains TS-owned`)
+  assert.equal(windowsSource.includes("runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW]"), false, `${WINDOWS_FILE} later v0.6.82 removes direct detached new-session fallback`)
+  assertIncludes(windowsSource, 'createAgentTeamKernelAdapter().createDetachedSwarmSessionAsync(SWARM_SESSION, SWARM_WINDOW, signal)', `${WINDOWS_FILE} later v0.6.82 detached new-session cutover`)
   assertIncludes(windowsSource, "runTmuxAsync(['new-window', '-t', SWARM_SESSION, '-n', SWARM_WINDOW]", `${WINDOWS_FILE} new-window remains TS-owned`)
 }
 
@@ -349,7 +350,8 @@ function assertGoRuntime(root) {
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)', `${GO_SOURCE_FILE} existing pane title label preserved`)
   assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name")', `${GO_SOURCE_FILE} existing clearPaneLabel preserved`)
   assertIncludes(goSource, 'runWindowPaneLabelsSetOption(target, "pane-border-status", "top")', `${GO_SOURCE_FILE} existing refresh preserved`)
-  for (const command of FORBIDDEN_GO_TMUX_COMMANDS) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${command}`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.82 authorized detached new-session`)
+  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => command !== 'new-session')) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${command}`)
   assert.equal(/exec\.Command\s*\(/.test(goSource), false, `${GO_SOURCE_FILE} must not use shell-capable exec.Command`)
   assert.equal(/"(?:sh|bash|zsh|fish)"/.test(goSource), false, `${GO_SOURCE_FILE} must not invoke shells`)
 }
@@ -372,6 +374,10 @@ function assertArtifactPipelineAndNative(root) {
   assert.deepEqual(manifest.smoke.workerLifecycleCreateTeammatePane.acceptedFailureKinds, ['invalid-target'])
   assert.equal(provenance.smoke.workerLifecycleCreateTeammatePane.ok, false)
   assert.deepEqual(provenance.smoke.workerLifecycleCreateTeammatePane.acceptedFailureKinds, ['invalid-target'])
+  assert.equal(manifest.smoke.workerLifecycleCreateDetachedSwarmSession.ok, false)
+  assert.deepEqual(manifest.smoke.workerLifecycleCreateDetachedSwarmSession.acceptedFailureKinds, ['invalid-session'])
+  assert.equal(provenance.smoke.workerLifecycleCreateDetachedSwarmSession.ok, false)
+  assert.deepEqual(provenance.smoke.workerLifecycleCreateDetachedSwarmSession.acceptedFailureKinds, ['invalid-session'])
 }
 
 function assertPackageAndReleaseGuards(root) {

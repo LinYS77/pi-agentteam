@@ -69,7 +69,7 @@ const PROVENANCE_KEYS = new Set([
 const PROVENANCE_SOURCE_KEYS = new Set(['path', 'revision'])
 const PROVENANCE_BUILD_KEYS = new Set(['command', 'env', 'cwd', 'toolchain', 'runIdentity', 'generatedAt'])
 const PROVENANCE_BUILD_ENV_KEYS = new Set(['GO111MODULE'])
-const PROVENANCE_SMOKE_KEYS = new Set(['health', MODULE, 'workerLifecycleInspectPane', 'workerLifecycleListAgentTeamPanes', 'workerLifecycleCaptureCurrentPaneBinding', 'workerLifecycleListPanesInWindow', 'workerLifecycleFindAgentTeamWindowTarget', 'workerLifecycleFindWindowTargetByName', 'workerLifecycleSessionExists', 'workerLifecycleMarkWindowAsAgentTeam', 'workerLifecycleRefreshWindowPaneLabels', 'workerLifecycleSetPaneLabel', 'workerLifecycleClearPaneLabel', 'workerLifecycleCreateTeammatePane', 'tmuxAvailability'])
+const PROVENANCE_SMOKE_KEYS = new Set(['health', MODULE, 'workerLifecycleInspectPane', 'workerLifecycleListAgentTeamPanes', 'workerLifecycleCaptureCurrentPaneBinding', 'workerLifecycleListPanesInWindow', 'workerLifecycleFindAgentTeamWindowTarget', 'workerLifecycleFindWindowTargetByName', 'workerLifecycleSessionExists', 'workerLifecycleMarkWindowAsAgentTeam', 'workerLifecycleRefreshWindowPaneLabels', 'workerLifecycleSetPaneLabel', 'workerLifecycleClearPaneLabel', 'workerLifecycleCreateTeammatePane', 'workerLifecycleCreateDetachedSwarmSession', 'tmuxAvailability'])
 const PROVENANCE_TMUX_SMOKE_KEYS = new Set(['ok', 'paneCount', 'capturedAt'])
 const FAILURE_KINDS = new Set([
   'artifact-root-invalid',

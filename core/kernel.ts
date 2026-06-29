@@ -140,6 +140,7 @@ export type AgentTeamKernelProfile = AgentTeamKernelHealth & {
     workerLifecycleSetPaneLabelConnected?: boolean
     workerLifecycleClearPaneLabelConnected?: boolean
     workerLifecycleCreateTeammatePaneConnected?: boolean
+    workerLifecycleCreateDetachedSwarmSessionConnected?: boolean
     tmuxAvailabilityConnected?: boolean
     panelConnected: false
     taskReportPlanRunConnected: false
@@ -321,6 +322,24 @@ export type AgentTeamKernelSessionExistence = {
   tmuxMutation: false
 }
 
+export type AgentTeamKernelDetachedSwarmSessionCreation = {
+  ok: boolean
+  operation: 'createDetachedSwarmSession'
+  capability: 'workerLifecycle'
+  sessionName: string
+  windowName: string
+  created: boolean
+  status?: 'unknown'
+  resultMarker?: 'stale'
+  failureKind?: AgentTeamKernelWorkerLifecycleFailureKind
+  reason?: string
+  error?: string
+  readOnly: false
+  stateFilesRead: false
+  stateFilesWritten: false
+  tmuxMutation: true
+}
+
 export type AgentTeamKernelWindowMarking = {
   ok: boolean
   operation: 'markWindowAsAgentTeam'
@@ -445,6 +464,7 @@ export type AgentTeamKernelAdapter = {
   findAgentTeamWindowTargetAsync(sessionName: string, signal?: AbortSignal): Promise<AgentTeamKernelAgentTeamWindowTarget>
   findWindowTargetByNameAsync(sessionName: string, windowName: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowNameTarget>
   sessionExistsAsync(sessionName: string, signal?: AbortSignal): Promise<AgentTeamKernelSessionExistence>
+  createDetachedSwarmSessionAsync(sessionName: string, windowName: string, signal?: AbortSignal): Promise<AgentTeamKernelDetachedSwarmSessionCreation>
   markWindowAsAgentTeamAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowMarking>
   refreshWindowPaneLabelsAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowPaneLabelsRefresh>
   setPaneLabelAsync(paneId: string, label: string, signal?: AbortSignal): Promise<AgentTeamKernelPaneLabelSetting>
@@ -680,6 +700,7 @@ function fallbackProfile(metadata: AgentTeamKernelMetadata, params: Record<strin
       workerLifecycleSetPaneLabelConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleClearPaneLabelConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       workerLifecycleCreateTeammatePaneConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
+      workerLifecycleCreateDetachedSwarmSessionConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('workerLifecycle'),
       tmuxAvailabilityConnected: metadata.kernel.enabled && metadata.kernel.capabilities.includes('tmuxAvailability'),
       panelConnected: false,
       taskReportPlanRunConnected: false,
@@ -854,6 +875,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
     if (profile.workerLifecycleSetPaneLabelConnected !== undefined && profile.workerLifecycleSetPaneLabelConnected !== true) return undefined
     if (profile.workerLifecycleClearPaneLabelConnected !== undefined && profile.workerLifecycleClearPaneLabelConnected !== true) return undefined
     if (profile.workerLifecycleCreateTeammatePaneConnected !== undefined && profile.workerLifecycleCreateTeammatePaneConnected !== true) return undefined
+    if (profile.workerLifecycleCreateDetachedSwarmSessionConnected !== undefined && profile.workerLifecycleCreateDetachedSwarmSessionConnected !== true) return undefined
     if (profile.tmuxAvailabilityConnected !== undefined && profile.tmuxAvailabilityConnected !== true) return undefined
     if (profile.panelConnected !== false || profile.taskReportPlanRunConnected !== false) return undefined
     return {
@@ -878,6 +900,7 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         workerLifecycleSetPaneLabelConnected: profile.workerLifecycleSetPaneLabelConnected === true,
         workerLifecycleClearPaneLabelConnected: profile.workerLifecycleClearPaneLabelConnected === true,
         workerLifecycleCreateTeammatePaneConnected: profile.workerLifecycleCreateTeammatePaneConnected === true,
+        workerLifecycleCreateDetachedSwarmSessionConnected: profile.workerLifecycleCreateDetachedSwarmSessionConnected === true,
         tmuxAvailabilityConnected: profile.tmuxAvailabilityConnected === true,
         panelConnected: false,
         taskReportPlanRunConnected: false,
@@ -1171,6 +1194,29 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       stateFilesRead: false,
       stateFilesWritten: false,
       tmuxMutation: false,
+    }
+  }
+
+  function workerLifecycleUnavailableDetachedSwarmSessionCreation(sessionName: string, windowName: string, kind: AgentTeamKernelWorkerLifecycleFailureKind): AgentTeamKernelDetachedSwarmSessionCreation {
+    const safeSessionName = compactTmuxSessionName(sessionName)
+    const safeWindowName = compactTmuxWindowName(windowName)
+    const reason = compactKernelText(`Go worker lifecycle createDetachedSwarmSession unavailable (${kind})`, 'Go worker lifecycle createDetachedSwarmSession unavailable (previous-helper-failure)')
+    return {
+      ok: false,
+      operation: 'createDetachedSwarmSession',
+      capability: 'workerLifecycle',
+      sessionName: safeSessionName,
+      windowName: safeWindowName,
+      created: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind: kind,
+      reason,
+      error: reason,
+      readOnly: false,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: true,
     }
   }
 
@@ -1657,6 +1703,52 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
       stateFilesRead: false,
       stateFilesWritten: false,
       tmuxMutation: false,
+    }
+  }
+
+  function validateDetachedSwarmSessionCreationResult(value: unknown, requestedSessionName: string, requestedWindowName: string): AgentTeamKernelDetachedSwarmSessionCreation | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const result = value as Partial<AgentTeamKernelDetachedSwarmSessionCreation>
+    if (result.operation !== 'createDetachedSwarmSession' || result.capability !== 'workerLifecycle') return undefined
+    if (result.readOnly !== false || result.stateFilesRead !== false || result.stateFilesWritten !== false || result.tmuxMutation !== true) return undefined
+    const sessionName = compactTmuxSessionName(result.sessionName || requestedSessionName)
+    const windowName = compactTmuxWindowName(result.windowName || requestedWindowName)
+    if (result.ok === true) {
+      if (!sessionName || !windowName || result.created !== true) return undefined
+      return {
+        ok: true,
+        operation: 'createDetachedSwarmSession',
+        capability: 'workerLifecycle',
+        sessionName,
+        windowName,
+        created: true,
+        readOnly: false,
+        stateFilesRead: false,
+        stateFilesWritten: false,
+        tmuxMutation: true,
+      }
+    }
+    if (result.ok !== false || result.created !== false) return undefined
+    const failureKind = typeof result.failureKind === 'string' && ['unsupported-operation', 'invalid-session', 'invalid-window-name', ...AGENTTEAM_KERNEL_CUTOVER_FAILURE_KINDS].includes(result.failureKind)
+      ? result.failureKind as AgentTeamKernelWorkerLifecycleFailureKind
+      : 'previous-helper-failure'
+    const reason = compactKernelText(`Go worker lifecycle createDetachedSwarmSession unavailable (${failureKind})`, 'Go worker lifecycle createDetachedSwarmSession unavailable (previous-helper-failure)')
+    return {
+      ok: false,
+      operation: 'createDetachedSwarmSession',
+      capability: 'workerLifecycle',
+      sessionName,
+      windowName,
+      created: false,
+      status: 'unknown',
+      resultMarker: 'stale',
+      failureKind,
+      reason,
+      error: reason,
+      readOnly: false,
+      stateFilesRead: false,
+      stateFilesWritten: false,
+      tmuxMutation: true,
     }
   }
 
@@ -2290,6 +2382,19 @@ export function createAgentTeamKernelAdapter(options: AgentTeamKernelAdapterOpti
         recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle sessionExists async result shape')
       }
       return workerLifecycleUnavailableSessionExistence(requestedSessionName, cutoverFailureKind ?? 'previous-helper-failure')
+    },
+    async createDetachedSwarmSessionAsync(sessionName, windowName, signal) {
+      const requestedSessionName = compactTmuxSessionName(sessionName)
+      const requestedWindowName = compactTmuxWindowName(windowName)
+      if (!requestedSessionName) return workerLifecycleUnavailableDetachedSwarmSessionCreation(sessionName, windowName, 'invalid-session')
+      if (!requestedWindowName) return workerLifecycleUnavailableDetachedSwarmSessionCreation(requestedSessionName, windowName, 'invalid-window-name')
+      const helperResult = await callHelperAsync<unknown>('workerLifecycle', { operation: 'createDetachedSwarmSession', sessionName: requestedSessionName, windowName: requestedWindowName }, signal)
+      const parsed = validateDetachedSwarmSessionCreationResult(helperResult, requestedSessionName, requestedWindowName)
+      if (parsed) return parsed
+      if (helperResult !== undefined) {
+        recordRuntimeFallback('helper-incompatible-response', 'workerLifecycle createDetachedSwarmSession async result shape')
+      }
+      return workerLifecycleUnavailableDetachedSwarmSessionCreation(requestedSessionName, requestedWindowName, cutoverFailureKind ?? 'previous-helper-failure')
     },
     async markWindowAsAgentTeamAsync(target, signal) {
       const requestedTarget = compactTmuxWindowTarget(target)

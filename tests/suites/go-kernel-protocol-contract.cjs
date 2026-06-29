@@ -82,6 +82,7 @@ function assertProfileResult(result, expectedParams = {}) {
   assert.equal(result.profile.workerLifecycleSetPaneLabelConnected, true)
   assert.equal(result.profile.workerLifecycleClearPaneLabelConnected, true)
   assert.equal(result.profile.workerLifecycleCreateTeammatePaneConnected, true)
+  assert.equal(result.profile.workerLifecycleCreateDetachedSwarmSessionConnected, true)
   assert.equal(result.profile.tmuxAvailabilityConnected, true)
   assert.equal(result.profile.panelConnected, false)
   assert.equal(result.profile.taskReportPlanRunConnected, false)
@@ -182,8 +183,10 @@ function assertMethodResult(response, request, fingerprintModule) {
                   ? 'clearPaneLabel'
                   : requestedOperation === 'createTeammatePane'
                     ? 'createTeammatePane'
-                    : 'inspectPane'
-    const mutatingOperation = expectedOperation === 'setPaneLabel' || expectedOperation === 'clearPaneLabel' || expectedOperation === 'createTeammatePane'
+                    : requestedOperation === 'createDetachedSwarmSession'
+                      ? 'createDetachedSwarmSession'
+                      : 'inspectPane'
+    const mutatingOperation = expectedOperation === 'setPaneLabel' || expectedOperation === 'clearPaneLabel' || expectedOperation === 'createTeammatePane' || expectedOperation === 'createDetachedSwarmSession'
     assert.equal(response.result.operation, expectedOperation)
     assert.equal(response.result.capability, 'workerLifecycle')
     assert.equal(response.result.readOnly, !mutatingOperation)
@@ -229,6 +232,10 @@ function assertMethodResult(response, request, fingerprintModule) {
     if (expectedOperation === 'createTeammatePane') {
       assert.equal(response.result.created, false)
       assert.equal(JSON.stringify(response.result).includes(fixtures.RAW_CREATE_CANARY), false, 'createTeammatePane result must not leak raw cwd/startCommand text')
+    }
+    if (expectedOperation === 'createDetachedSwarmSession') {
+      assert.equal(response.result.created, false)
+      assert.equal(JSON.stringify(response.result).includes(fixtures.RAW_SESSION_CREATE_CANARY), false, 'createDetachedSwarmSession result must not leak raw session/window text')
     }
     if (response.result.ok === false) {
       if (expectedOperation === 'inspectPane' || expectedOperation === 'findAgentTeamWindowTarget' || expectedOperation === 'findWindowTargetByName' || expectedOperation === 'sessionExists') assert.equal(response.result.exists, false)

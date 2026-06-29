@@ -224,6 +224,24 @@ type workerSessionExistenceResult struct {
 	TmuxMutation      bool   `json:"tmuxMutation"`
 }
 
+type workerDetachedSwarmSessionCreationResult struct {
+	OK                bool   `json:"ok"`
+	Operation         string `json:"operation"`
+	Capability        string `json:"capability"`
+	SessionName       string `json:"sessionName"`
+	WindowName        string `json:"windowName"`
+	Created           bool   `json:"created"`
+	Status            string `json:"status,omitempty"`
+	Marker            string `json:"resultMarker,omitempty"`
+	Failure           string `json:"failureKind,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Error             string `json:"error,omitempty"`
+	ReadOnly          bool   `json:"readOnly"`
+	StateFilesRead    bool   `json:"stateFilesRead"`
+	StateFilesWritten bool   `json:"stateFilesWritten"`
+	TmuxMutation      bool   `json:"tmuxMutation"`
+}
+
 type workerWindowMarkingResult struct {
 	OK                bool   `json:"ok"`
 	Operation         string `json:"operation"`
@@ -344,28 +362,29 @@ func profile(params map[string]any) profileResult {
 	return profileResult{
 		healthResult: health(),
 		Profile: map[string]any{
-			"scope":                                             "skeleton-only",
-			"params":                                            params,
-			"stateConnected":                                    false,
-			"tmuxConnected":                                     false,
-			"tmuxSnapshotParseConnected":                        true,
-			"tmuxSnapshotCaptureConnected":                      true,
-			"compactReadModelFingerprintConnected":              true,
-			"workerLifecycleInspectPaneConnected":               true,
-			"workerLifecycleListAgentTeamPanesConnected":        true,
-			"workerLifecycleCaptureCurrentPaneBindingConnected": true,
-			"workerLifecycleListPanesInWindowConnected":         true,
-			"workerLifecycleFindAgentTeamWindowTargetConnected": true,
-			"workerLifecycleFindWindowTargetByNameConnected":    true,
-			"workerLifecycleSessionExistsConnected":             true,
-			"workerLifecycleMarkWindowAsAgentTeamConnected":     true,
-			"workerLifecycleRefreshWindowPaneLabelsConnected":   true,
-			"workerLifecycleSetPaneLabelConnected":              true,
-			"workerLifecycleClearPaneLabelConnected":            true,
-			"workerLifecycleCreateTeammatePaneConnected":        true,
-			"tmuxAvailabilityConnected":                         true,
-			"panelConnected":                                    false,
-			"taskReportPlanRunConnected":                        false,
+			"scope":                                              "skeleton-only",
+			"params":                                             params,
+			"stateConnected":                                     false,
+			"tmuxConnected":                                      false,
+			"tmuxSnapshotParseConnected":                         true,
+			"tmuxSnapshotCaptureConnected":                       true,
+			"compactReadModelFingerprintConnected":               true,
+			"workerLifecycleInspectPaneConnected":                true,
+			"workerLifecycleListAgentTeamPanesConnected":         true,
+			"workerLifecycleCaptureCurrentPaneBindingConnected":  true,
+			"workerLifecycleListPanesInWindowConnected":          true,
+			"workerLifecycleFindAgentTeamWindowTargetConnected":  true,
+			"workerLifecycleFindWindowTargetByNameConnected":     true,
+			"workerLifecycleSessionExistsConnected":              true,
+			"workerLifecycleMarkWindowAsAgentTeamConnected":      true,
+			"workerLifecycleRefreshWindowPaneLabelsConnected":    true,
+			"workerLifecycleSetPaneLabelConnected":               true,
+			"workerLifecycleClearPaneLabelConnected":             true,
+			"workerLifecycleCreateTeammatePaneConnected":         true,
+			"workerLifecycleCreateDetachedSwarmSessionConnected": true,
+			"tmuxAvailabilityConnected":                          true,
+			"panelConnected":                                     false,
+			"taskReportPlanRunConnected":                         false,
 		},
 	}
 }
@@ -1157,6 +1176,73 @@ func sessionExists(params map[string]any) workerSessionExistenceResult {
 	}
 }
 
+func unavailableDetachedSwarmSessionCreation(sessionName string, windowName string, kind string) workerDetachedSwarmSessionCreationResult {
+	safeSessionName := compactTmuxSessionName(sessionName)
+	safeWindowName := compactTmuxWindowName(windowName)
+	reason := "Go worker lifecycle createDetachedSwarmSession unavailable (" + kind + ")"
+	return workerDetachedSwarmSessionCreationResult{
+		OK:                false,
+		Operation:         "createDetachedSwarmSession",
+		Capability:        "workerLifecycle",
+		SessionName:       safeSessionName,
+		WindowName:        safeWindowName,
+		Created:           false,
+		Status:            "unknown",
+		Marker:            "stale",
+		Failure:           kind,
+		Reason:            reason,
+		Error:             reason,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
+func runDetachedSwarmSessionCreation(sessionName string, windowName string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName)
+	cmd.Env = os.Environ()
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "tmux-command-timeout"
+	}
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			return "tmux-unavailable"
+		}
+		return "tmux-command-failed"
+	}
+	return ""
+}
+
+func createDetachedSwarmSession(params map[string]any) workerDetachedSwarmSessionCreationResult {
+	sessionName := compactTmuxSessionName(stringParam(params, "sessionName"))
+	windowName := compactTmuxWindowName(stringParam(params, "windowName"))
+	if sessionName == "" {
+		return unavailableDetachedSwarmSessionCreation("", windowName, "invalid-session")
+	}
+	if windowName == "" {
+		return unavailableDetachedSwarmSessionCreation(sessionName, "", "invalid-window-name")
+	}
+	if failureKind := runDetachedSwarmSessionCreation(sessionName, windowName); failureKind != "" {
+		return unavailableDetachedSwarmSessionCreation(sessionName, windowName, failureKind)
+	}
+	return workerDetachedSwarmSessionCreationResult{
+		OK:                true,
+		Operation:         "createDetachedSwarmSession",
+		Capability:        "workerLifecycle",
+		SessionName:       sessionName,
+		WindowName:        windowName,
+		Created:           true,
+		ReadOnly:          false,
+		StateFilesRead:    false,
+		StateFilesWritten: false,
+		TmuxMutation:      true,
+	}
+}
+
 func unavailableWindowMarking(target string, kind string) workerWindowMarkingResult {
 	safeTarget := compactTmuxWindowTarget(target)
 	reason := "Go worker lifecycle markWindowAsAgentTeam unavailable (" + kind + ")"
@@ -1620,6 +1706,8 @@ func workerLifecycle(params map[string]any) any {
 		return findWindowTargetByName(params)
 	case "sessionExists":
 		return sessionExists(params)
+	case "createDetachedSwarmSession":
+		return createDetachedSwarmSession(params)
 	case "markWindowAsAgentTeam":
 		return markWindowAsAgentTeam(params)
 	case "refreshWindowPaneLabels":

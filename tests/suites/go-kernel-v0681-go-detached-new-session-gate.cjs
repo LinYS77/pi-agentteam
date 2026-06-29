@@ -243,32 +243,32 @@ function assertCurrentTypescriptWindowState(root) {
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_SESSION_SURFACE.detachedBranchGuard, `${RUNTIME_FILE} inside-tmux branch guard`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_SESSION_SURFACE.sessionExistsDelegation, `${RUNTIME_FILE} detached sessionExists`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_SESSION_SURFACE.missingSessionCheck, `${RUNTIME_FILE} detached missing-session check`)
-  assertIncludes(ensureBody, `await ${CURRENT_TYPESCRIPT_DETACHED_NEW_SESSION_SURFACE.newSessionCall}`, `${RUNTIME_FILE} detached new-session remains TS-owned`)
+  // The v0.6.81 fixture/doc remain historical gate-only evidence; current source may include the later v0.6.82 authorized cutover.
+  assert.equal(ensureBody.includes(CURRENT_TYPESCRIPT_DETACHED_NEW_SESSION_SURFACE.newSessionCall), false, `${RUNTIME_FILE} detached new-session direct TS fallback removed after authorized v0.6.82 cutover`)
+  assertIncludes(ensureBody, 'createAgentTeamKernelAdapter().createDetachedSwarmSessionAsync(SWARM_SESSION, SWARM_WINDOW, signal)', `${RUNTIME_FILE} later v0.6.82 detached new-session cutover`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_SESSION_SURFACE.markAfterNewSessionCall, `${RUNTIME_FILE} mark after new-session remains unchanged`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_SESSION_SURFACE.postCreationLookupCall, `${RUNTIME_FILE} post-creation lookup remains unchanged`)
   assertIncludes(ensureBody, `await ${CURRENT_TYPESCRIPT_DETACHED_NEW_SESSION_SURFACE.newWindowCall}`, `${RUNTIME_FILE} new-window remains TS-owned`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_SESSION_SURFACE.findWindowByNameCall, `${RUNTIME_FILE} findWindowTargetByName remains unchanged`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_SESSION_SURFACE.firstPaneLookupCall, `${RUNTIME_FILE} firstPaneInWindow remains unchanged`)
   assertIncludes(ensureBody, CURRENT_TYPESCRIPT_DETACHED_NEW_SESSION_SURFACE.leaderBindingLookupCall, `${RUNTIME_FILE} resolvePaneBindingAsync remains unchanged`)
-  assert.equal([...ensureBody.matchAll(/runTmuxAsync\(\['new-session'/g)].length, 1, `${RUNTIME_FILE} should keep exactly one direct detached new-session call`)
+  assert.equal([...ensureBody.matchAll(/runTmuxAsync\(\['new-session'/g)].length, 0, `${RUNTIME_FILE} should not keep direct detached new-session call after authorized v0.6.82 cutover`)
   assert.equal([...ensureBody.matchAll(/runTmuxAsync\(\['new-window'/g)].length, 1, `${RUNTIME_FILE} should keep exactly one direct detached new-window call`)
-  for (const forbidden of FORBIDDEN_RUNTIME_CUTOVER_SNIPPETS) assert.equal(windowsSource.includes(forbidden), false, `${RUNTIME_FILE} must not add gate runtime cutover snippet ${forbidden}`)
+  assertIncludes(windowsSource, 'createDetachedSwarmSessionAsync', `${RUNTIME_FILE} later v0.6.82 detached new-session adapter seam`)
 }
 
 function assertNoGateRuntimeCutover(root) {
   const kernelSource = read(root, KERNEL_FILE)
   const goSource = read(root, GO_SOURCE_FILE)
   const windowsSource = read(root, RUNTIME_FILE)
-  for (const forbidden of FORBIDDEN_RUNTIME_CUTOVER_SNIPPETS) {
-    assert.equal(kernelSource.includes(forbidden), false, `${KERNEL_FILE} must not add ${forbidden}`)
-    assert.equal(windowsSource.includes(forbidden), false, `${RUNTIME_FILE} must not add ${forbidden}`)
-  }
-  for (const forbidden of FORBIDDEN_GO_CUTOVER_SNIPPETS) {
-    assert.equal(goSource.includes(forbidden), false, `${GO_SOURCE_FILE} must not add gate Go cutover snippet ${forbidden}`)
-  }
-  assert.equal(goSource.includes('new-session'), false, `${GO_SOURCE_FILE} must not mention new-session in this gate`)
-  assert.equal(goSource.includes('new-window'), false, `${GO_SOURCE_FILE} must not mention new-window in this gate`)
-  assert.equal(goSource.includes('createDetachedSwarmSession'), false, `${GO_SOURCE_FILE} must not add future detached session operation`)
+  assertIncludes(kernelSource, 'createDetachedSwarmSessionAsync(sessionName: string, windowName: string, signal?: AbortSignal)', `${KERNEL_FILE} later v0.6.82 adapter method`)
+  assertIncludes(kernelSource, "operation: 'createDetachedSwarmSession'", `${KERNEL_FILE} later v0.6.82 operation`)
+  assertIncludes(kernelSource, 'workerLifecycleCreateDetachedSwarmSessionConnected', `${KERNEL_FILE} later v0.6.82 profile flag`)
+  assertIncludes(windowsSource, 'createAgentTeamKernelAdapter().createDetachedSwarmSessionAsync(SWARM_SESSION, SWARM_WINDOW, signal)', `${RUNTIME_FILE} later v0.6.82 facade cutover`)
+  assertIncludes(goSource, 'case "createDetachedSwarmSession"', `${GO_SOURCE_FILE} later v0.6.82 adds authorized detached new-session handler`)
+  assertIncludes(goSource, 'func createDetachedSwarmSession', `${GO_SOURCE_FILE} later v0.6.82 adds authorized detached new-session implementation`)
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.82 authorized new-session command`)
+  assert.equal(goSource.includes('"new-window"'), false, `${GO_SOURCE_FILE} must still not mention new-window`)
 }
 
 function assertV0680CreateTeammatePaneStillRecognized(root) {
@@ -306,7 +306,8 @@ function assertCurrentGoSurfaceAndNoNewSession(root) {
   assertIncludes(goSource, 'splitArgs := []string{"split-window"}', `${GO_SOURCE_FILE} createTeammatePane split-window`)
   assertIncludes(goSource, 'runCreateTeammatePaneTmux("select-layout", "-t", target, layout)', `${GO_SOURCE_FILE} createTeammatePane select-layout`)
   assertIncludes(goSource, 'runCreateTeammatePaneTmux("resize-pane", "-t", leaderPaneID, "-x", "66%")', `${GO_SOURCE_FILE} createTeammatePane resize-pane`)
-  for (const forbiddenCommand of ['new-session', 'new-window', 'send-keys', 'kill-pane', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
+  assertIncludes(goSource, 'exec.CommandContext(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName)', `${GO_SOURCE_FILE} later v0.6.82 authorized detached new-session`)
+  for (const forbiddenCommand of ['new-window', 'send-keys', 'kill-pane', 'kill-window', 'kill-session', 'respawn-pane', 'set-buffer', 'paste-buffer']) {
     assert.equal(goSource.includes(`"${forbiddenCommand}"`), false, `${GO_SOURCE_FILE} must not add forbidden command ${forbiddenCommand}`)
   }
 }
@@ -322,18 +323,15 @@ function assertNativeArtifactUnchanged(root) {
   assert.equal(manifest.packageVersion, PACKAGE_VERSION)
   assert.equal(manifest.helperVersion, HELPER_VERSION)
   assert.equal(manifest.protocolVersion, PROTOCOL_VERSION)
-  assert.equal(manifest.source.revision, NATIVE_ARTIFACT_SNAPSHOT.sourceRevision)
-  assert.equal(provenance.source.revision, NATIVE_ARTIFACT_SNAPSHOT.sourceRevision)
-  assert.equal(manifest.artifact.size, NATIVE_ARTIFACT_SNAPSHOT.helperSize)
-  assert.equal(manifest.artifact.sha256, NATIVE_ARTIFACT_SNAPSHOT.helperSha256)
-  assert.equal(sha256(root, NATIVE_ARTIFACT_SNAPSHOT.helperPath), NATIVE_ARTIFACT_SNAPSHOT.helperSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/manifest.json`), NATIVE_ARTIFACT_SNAPSHOT.manifestSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/provenance.json`), NATIVE_ARTIFACT_SNAPSHOT.provenanceSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/attestation.intoto.jsonl`), NATIVE_ARTIFACT_SNAPSHOT.attestationSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/SHA256SUMS`), NATIVE_ARTIFACT_SNAPSHOT.checksumsSha256)
+  assert.equal(typeof manifest.source.revision, 'string')
+  assert.equal(provenance.source.revision, manifest.source.revision)
+  assert.equal(typeof manifest.artifact.sha256, 'string')
+  assert.equal(sha256(root, NATIVE_ARTIFACT_SNAPSHOT.helperPath), manifest.artifact.sha256)
+  assert.equal(fs.statSync(path.join(root, ...NATIVE_ARTIFACT_SNAPSHOT.helperPath.split('/'))).size, manifest.artifact.size)
   assert.equal(Object.prototype.hasOwnProperty.call(manifest.smoke, 'workerLifecycleCreateTeammatePane'), NATIVE_ARTIFACT_SNAPSHOT.createTeammatePaneSmokePresent)
-  assert.equal(Object.prototype.hasOwnProperty.call(manifest.smoke, 'workerLifecycleCreateDetachedSwarmSession'), NATIVE_ARTIFACT_SNAPSHOT.detachedNewSessionSmokePresent)
-  assert.equal(Object.prototype.hasOwnProperty.call(provenance.smoke, 'workerLifecycleCreateDetachedSwarmSession'), NATIVE_ARTIFACT_SNAPSHOT.detachedNewSessionSmokePresent)
+  assert.equal(Object.prototype.hasOwnProperty.call(manifest.smoke, 'workerLifecycleCreateDetachedSwarmSession'), true, 'later v0.6.82 cutover adds detached new-session native smoke')
+  assert.deepEqual(manifest.smoke.workerLifecycleCreateDetachedSwarmSession, { ok: false, acceptedFailureKinds: ['invalid-session'] })
+  assert.deepEqual(provenance.smoke.workerLifecycleCreateDetachedSwarmSession, { ok: false, acceptedFailureKinds: ['invalid-session'] })
 }
 
 function assertPackageAndReleaseGuards(root) {

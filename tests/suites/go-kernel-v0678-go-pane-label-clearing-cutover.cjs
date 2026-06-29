@@ -315,7 +315,7 @@ function assertGoRuntime(root) {
   assertIncludes(goSource, 'runWindowPaneLabelsSetOption(target, "pane-border-format", "#{?@agentteam-name,#{@agentteam-name},#{pane_title}}")', `${GO_SOURCE} v0.6.74 refresh preserved`)
   for (const command of EXISTING_MARK_WINDOW_TMUX_COMMANDS) assertIncludes(goSource, `runWindowMarkingSetOption(target, "${command.args[4]}", "${command.args[5]}")`, `${GO_SOURCE} v0.6.72 mark preserved`)
 
-  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => !['split-window', 'select-layout', 'resize-pane'].includes(command))) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add forbidden command ${command}`)
+  for (const command of FORBIDDEN_GO_TMUX_COMMANDS.filter(command => !['split-window', 'select-layout', 'resize-pane', 'new-session'].includes(command))) assert.equal(goSource.includes(`"${command}"`), false, `${GO_SOURCE} must not add forbidden command ${command}`)
   assertIncludes(goSource, 'splitArgs := []string{"split-window"}', `${GO_SOURCE} later v0.6.80 authorized createTeammatePane split-window`)
   assertIncludes(goSource, 'runCreateTeammatePaneTmux("select-layout", "-t", target, layout)', `${GO_SOURCE} later v0.6.80 authorized createTeammatePane select-layout`)
   assertIncludes(goSource, 'runCreateTeammatePaneTmux("resize-pane", "-t", leaderPaneID, "-x", "66%")', `${GO_SOURCE} later v0.6.80 authorized createTeammatePane resize-pane`)

@@ -60,7 +60,10 @@ export async function ensureSwarmWindow(
   const sessionResult = await createAgentTeamKernelAdapter().sessionExistsAsync(SWARM_SESSION, signal)
   const hasSession = sessionResult.ok && sessionResult.exists
   if (!hasSession) {
-    await runTmuxAsync(['new-session', '-d', '-s', SWARM_SESSION, '-n', SWARM_WINDOW], undefined, signal)
+    const createdSession = await createAgentTeamKernelAdapter().createDetachedSwarmSessionAsync(SWARM_SESSION, SWARM_WINDOW, signal)
+    if (!createdSession.ok) {
+      throw new Error(createdSession.reason || 'Go worker lifecycle createDetachedSwarmSession unavailable (previous-helper-failure)')
+    }
     await markWindowAsAgentTeam(`${SWARM_SESSION}:${SWARM_WINDOW}`, signal)
   }
 
