@@ -1,6 +1,11 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const {
+  HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES,
+} = require('../fixtures/kernel/historicalCheckpointDeletionMap.cjs')
+
+const READY_DELETED_SUITES = new Set(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES)
 
 const CHECKPOINT = 'docs/perf/v0.4.22-native-helper-package-metadata-checkpoint.md'
 const PRIOR_CHECKPOINT = 'docs/perf/v0.4.21-go-runtime-availability-checkpoint.md'
@@ -23,6 +28,15 @@ function read(root, rel) {
 
 function assertIncludes(source, expected, label) {
   assert.ok(source.includes(expected), `${label} should include ${expected}`)
+}
+
+function assertReadyDeletedOrExists(root, rel, label = rel) {
+  const exists = fs.existsSync(path.join(root, rel))
+  if (READY_DELETED_SUITES.has(rel)) {
+    assert.equal(exists, false, `${label} should be absent after the T024 ready-suite deletion slice`)
+    return
+  }
+  assert.equal(exists, true, `${label} should exist`)
 }
 
 function assertMatches(source, pattern, label) {
@@ -73,7 +87,7 @@ module.exports = {
   async run(env) {
     const root = env.helpers.extRoot
     for (const rel of [CHECKPOINT, PRIOR_CHECKPOINT, METADATA_DOC, PLAN, ...V0422_ARTIFACTS]) {
-      assert.equal(fs.existsSync(path.join(root, rel)), true, `${rel} should exist`)
+      assertReadyDeletedOrExists(root, rel)
     }
 
     const checkpoint = read(root, CHECKPOINT)

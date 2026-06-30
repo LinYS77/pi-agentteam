@@ -1,6 +1,11 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const {
+  HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES,
+} = require('../fixtures/kernel/historicalCheckpointDeletionMap.cjs')
+
+const READY_DELETED_SUITES = new Set(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES)
 const { assertNoUnapprovedWorkflowReleaseOrPackageBehavior } = require('../helpers/reviewArtifactWorkflowGuard.cjs')
 
 const CHECKPOINT = 'docs/perf/v0.4.26-go-helper-artifact-pipeline-checkpoint.md'
@@ -164,6 +169,15 @@ function assertIncludes(source, expected, label) {
   assert.ok(source.includes(expected), `${label} should include ${expected}`)
 }
 
+function assertReadyDeletedOrExists(root, rel, label = rel) {
+  const exists = fs.existsSync(path.join(root, rel))
+  if (READY_DELETED_SUITES.has(rel)) {
+    assert.equal(exists, false, `${label} should be absent after the T024 ready-suite deletion slice`)
+    return
+  }
+  assert.equal(exists, true, `${label} should exist`)
+}
+
 function walkFiles(root, out = []) {
   if (!fs.existsSync(root)) return out
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
@@ -240,7 +254,7 @@ module.exports = {
   async run(env) {
     const root = env.helpers.extRoot
     for (const rel of [CHECKPOINT, OWNER_DOC, ...LINKS]) {
-      assert.equal(fs.existsSync(path.join(root, rel)), true, `${rel} should exist`)
+      assertReadyDeletedOrExists(root, rel)
     }
     const doc = read(root, CHECKPOINT)
     const ownerDoc = read(root, OWNER_DOC)

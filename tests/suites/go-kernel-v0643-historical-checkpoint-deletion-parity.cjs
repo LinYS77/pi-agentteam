@@ -142,9 +142,26 @@ function assertNoNonCandidatesInDeletionLists() {
   }
 }
 
-function assertFilesStillExist(root) {
+function assertPostDeletionFileState(root) {
   const allCandidateSuites = manifestCandidates()
-  for (const suite of allCandidateSuites) assert.equal(existsRel(root, suite), true, `${suite} should still exist; T023 must not delete old suites`)
+  const readySet = new Set(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES)
+  const notDeletedSuites = [
+    ...HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES,
+    ...HISTORICAL_CHECKPOINT_KEEP_SUITES,
+  ]
+  assertSameSet([
+    ...HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES,
+    ...notDeletedSuites,
+  ], allCandidateSuites, 'post-deletion suite accounting')
+
+  for (const suite of HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES) {
+    assert.equal(existsRel(root, suite), false, `${suite} should be absent after the T024 ready-suite deletion slice`)
+  }
+  for (const suite of notDeletedSuites) {
+    assert.equal(existsRel(root, suite), true, `${suite} should remain because it is needs-split/keep, not ready-to-delete`)
+    assert.equal(readySet.has(suite), false, `${suite} must not also be ready-to-delete`)
+  }
+
   for (const entry of HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP) {
     assert.equal(existsRel(root, entry.replacementAuditSuite), true, `${entry.replacementAuditSuite} should exist for ${entry.suite}`)
     for (const supplemental of entry.supplementalAuditSuites) assert.equal(existsRel(root, supplemental), true, `${supplemental} should exist for ${entry.suite}`)
@@ -154,10 +171,19 @@ function assertFilesStillExist(root) {
     ...HISTORICAL_CHECKPOINT_DOCS_V0628_V0643,
     ...HISTORICAL_CHECKPOINT_DOCS_V0644_V0688,
   ]) {
-    assert.equal(existsRel(root, doc), true, `${doc} should still exist; T023 must not delete historical docs`)
+    assert.equal(existsRel(root, doc), true, `${doc} should still exist; T024 must not delete historical docs`)
   }
-  for (const suite of HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.nonCandidatesV0644V0688) {
-    assert.equal(existsRel(root, suite), true, `${suite} should still exist as a v0.6.44-v0.6.88 non-candidate`)
+  for (const suite of [
+    ...HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.nonCandidatesV0628V0643,
+    ...HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.nonCandidatesV0644V0688,
+  ]) {
+    assert.equal(existsRel(root, suite), true, `${suite} should remain as a cautious non-candidate`)
+  }
+  for (const manifestFile of [
+    'tests/fixtures/kernel/historicalCheckpoints.cjs',
+    'tests/fixtures/kernel/historicalCheckpointDeletionMap.cjs',
+  ]) {
+    assert.equal(existsRel(root, manifestFile), true, `${manifestFile} should remain as canonical manifest evidence`)
   }
 }
 
@@ -183,7 +209,7 @@ module.exports = {
     assertMapShape()
     assertEntryShape()
     assertNoNonCandidatesInDeletionLists()
-    assertFilesStillExist(root)
+    assertPostDeletionFileState(root)
     assertPackageSurfaceStillConservative(root)
     assertNoRawOrReleaseArtifacts(root)
 

@@ -1,6 +1,11 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const {
+  HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES,
+} = require('../fixtures/kernel/historicalCheckpointDeletionMap.cjs')
+
+const READY_DELETED_SUITES = new Set(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES)
 
 const DOC = 'docs/perf/v0.4.22-native-helper-package-metadata.md'
 const PLAN = 'docs/agentteam方案书.md'
@@ -20,6 +25,15 @@ const FORBIDDEN_GENERATED_ARTIFACT_NAMES = /(?:agentteam.*(?:helper|kernel)|go-h
 
 function read(root, rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8')
+}
+
+function assertReadyDeletedOrExists(root, rel, label = rel) {
+  const exists = fs.existsSync(path.join(root, rel))
+  if (READY_DELETED_SUITES.has(rel)) {
+    assert.equal(exists, false, `${label} should be absent after the T024 ready-suite deletion slice`)
+    return
+  }
+  assert.equal(exists, true, `${label} should exist`)
 }
 
 function walkFiles(root, out = []) {
@@ -80,9 +94,9 @@ function assertNoRepoArtifacts(root) {
 
 function assertAllowedFixtureBoundaries(root) {
   for (const rel of ALLOWED_FIXTURE_SOURCES) {
-    assert.equal(fs.existsSync(path.join(root, rel)), true, `${rel} should exist as allowed fixture source`)
+    assertReadyDeletedOrExists(root, rel, `${rel} allowed fixture source`)
   }
-  for (const rel of ALLOWED_FIXTURE_SOURCES.filter(item => item.startsWith('tests/suites/') && item !== 'tests/suites/go-kernel-v0422-package-native-guardrails.cjs')) {
+  for (const rel of ALLOWED_FIXTURE_SOURCES.filter(item => item.startsWith('tests/suites/') && item !== 'tests/suites/go-kernel-v0422-package-native-guardrails.cjs' && !READY_DELETED_SUITES.has(item))) {
     const source = read(root, rel)
     if (source.includes('fs.mkdtempSync(')) {
       assert.match(source, /os\.tmpdir\(\)/, `${rel} temp fixtures should use os.tmpdir()`)

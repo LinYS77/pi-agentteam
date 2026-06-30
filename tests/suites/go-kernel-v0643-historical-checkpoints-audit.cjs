@@ -16,6 +16,9 @@ const {
   HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0628_V0643,
   HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643,
 } = require('../fixtures/kernel/historicalCheckpoints.cjs')
+const {
+  HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES,
+} = require('../fixtures/kernel/historicalCheckpointDeletionMap.cjs')
 
 const HISTORICAL_SCOPE_MARKERS = [
   'Scope:',
@@ -139,8 +142,13 @@ module.exports = {
     assertCurrentRoadmapFraming(root)
     assertGitignoreAllowList(root)
 
+    const deletedReadySuites = new Set(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES)
     for (const suitePath of HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643) {
-      assert.equal(existsRel(root, suitePath), true, `${suitePath} should remain in place until a later deletion slice`)
+      if (deletedReadySuites.has(suitePath)) {
+        assert.equal(existsRel(root, suitePath), false, `${suitePath} should be absent after the audited ready-suite deletion slice`)
+      } else {
+        assert.equal(existsRel(root, suitePath), true, `${suitePath} should remain in place because it was not ready-to-delete`)
+      }
     }
     for (const suitePath of HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0628_V0643) {
       assert.equal(existsRel(root, suitePath), true, `${suitePath} should remain preserved as a cautious non-candidate`)
