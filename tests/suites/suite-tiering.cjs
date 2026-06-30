@@ -1,12 +1,42 @@
 const assert = require('node:assert/strict')
+const {
+  HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT,
+  HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS,
+  HISTORICAL_CHECKPOINT_KEEP_SUITES,
+  HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES,
+  HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES,
+} = require('../fixtures/kernel/historicalCheckpointDeletionMap.cjs')
 const { assertPackageVersion } = require('../helpers/packageGuards.cjs')
 const {
   classifySuite,
   discoverSuiteFiles,
   isCurrentGoKernelSuite,
   isHistoricalGoKernelSuite,
+  normalizeSuiteFile,
   selectSuiteFiles,
+  summarizeSelection,
 } = require('../suiteManifest.cjs')
+
+const EXPECTED_TIER_COUNTS_POST_T024 = Object.freeze({
+  default: 76,
+  smoke: 10,
+  core: 57,
+  'go-current': 19,
+  audit: 157,
+  benchmark: 3,
+  regression: 236,
+})
+
+const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
+  ready: 15,
+  'needs-split': 31,
+  keep: 1,
+})
+
+const HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE = normalizeSuiteFile(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT)
+const HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES = HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES.map(normalizeSuiteFile)
+const HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITE_FILES = HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES.map(normalizeSuiteFile)
+const HISTORICAL_CHECKPOINT_KEEP_SUITE_FILES = HISTORICAL_CHECKPOINT_KEEP_SUITES.map(normalizeSuiteFile)
 
 module.exports = {
   name: 'suite tiering manifest',
@@ -31,11 +61,25 @@ module.exports = {
     const benchmarkSuites = selectSuiteFiles({ tiers: ['benchmark'] })
     const goCurrentSuites = selectSuiteFiles({ tiers: ['go-current'] })
     const smokeSuites = selectSuiteFiles({ tiers: ['smoke'] })
+    const coreSuites = selectSuiteFiles({ tiers: ['core'] })
+    const tierSelections = {
+      default: defaultSuites,
+      smoke: smokeSuites,
+      core: coreSuites,
+      'go-current': goCurrentSuites,
+      audit: auditSuites,
+      benchmark: benchmarkSuites,
+      regression: regressionSuites,
+    }
 
-    assert.ok(allSuites.length > 200, 'manifest should cover the existing large flat suite set')
+    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T024.regression, 'manifest should encode the post-T024 discovered suite count')
+    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T024, 'suite tier summary should encode the post-T024 topology')
+    for (const [tier, suites] of Object.entries(tierSelections)) {
+      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T024[tier], `${tier} tier count should match post-T024 topology`)
+    }
     assert.deepEqual(regressionSuites, allSuites, 'regression tier should preserve every suite')
     assert.ok(defaultSuites.length < regressionSuites.length, 'default tier should be reduced from full regression')
-    assert.ok(auditSuites.length > 100, 'audit tier should preserve historical Go/kernel coverage explicitly')
+    assert.ok(auditSuites.length > defaultSuites.length, 'audit tier should preserve historical Go/kernel coverage explicitly')
     assert.ok(benchmarkSuites.includes('zzzzzzzzzzzzz-read-model-bench-v0414.cjs'), 'benchmark tier should preserve opt-in bench suites')
     assert.equal(defaultSuites.includes('zzzzzzzzzzzzz-read-model-bench-v0414.cjs'), false, 'default tier should exclude benchmark suites')
 
@@ -46,8 +90,12 @@ module.exports = {
     assert.ok(defaultSuites.includes('go-kernel-v0696-v07-release-decision-package.cjs'), 'default tier should keep current Go release guard')
     assert.ok(auditSuites.includes('go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs'), 'audit tier should retain historical cutover coverage')
     assert.ok(auditSuites.includes('go-kernel-v0688-historical-checkpoints-audit.cjs'), 'audit tier should include the historical checkpoint manifest audit')
+    assert.deepEqual(classifySuite(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE).tiers, ['audit', 'regression'], 'deletion parity suite must remain audit/regression only')
+    assert.ok(auditSuites.includes(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE), 'audit tier should include the historical checkpoint deletion parity audit')
+    assert.ok(regressionSuites.includes(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE), 'regression tier should include the historical checkpoint deletion parity audit')
     assert.equal(defaultSuites.includes('go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs'), false, 'default tier should remove historical audit coverage')
     assert.equal(defaultSuites.includes('go-kernel-v0688-historical-checkpoints-audit.cjs'), false, 'default tier should exclude the historical checkpoint manifest audit')
+    assert.equal(defaultSuites.includes(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE), false, 'default tier should exclude the historical checkpoint deletion parity audit')
     assert.ok(auditSuites.includes('go-kernel-release-checklist-docs.cjs'), 'audit tier should retain older release checklist docs')
     assert.equal(defaultSuites.includes('go-kernel-release-checklist-docs.cjs'), false, 'default tier should remove older release checklist docs')
 
@@ -60,6 +108,20 @@ module.exports = {
     }
     assert.equal(isHistoricalGoKernelSuite('go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs'), true)
     assert.equal(isHistoricalGoKernelSuite('go-kernel-v0689-go-worker-delivery-boundary-gate.cjs'), false)
+
+    assert.deepEqual(HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS, EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS, 'historical checkpoint deletion readiness counts should remain explicit')
+    assert.equal(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES.length, EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS.ready, 'T024 ready-deleted suite list should remain exactly 15 suites')
+    for (const file of HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES) {
+      assert.equal(allSuites.includes(file), false, `${file} should remain absent after the T024 ready-suite deletion slice`)
+      assert.equal(auditSuites.includes(file), false, `${file} should not reappear in audit after the T024 deletion slice`)
+      assert.equal(regressionSuites.includes(file), false, `${file} should not reappear in regression after the T024 deletion slice`)
+    }
+    for (const file of [...HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITE_FILES, ...HISTORICAL_CHECKPOINT_KEEP_SUITE_FILES]) {
+      assert.ok(allSuites.includes(file), `${file} should remain discoverable after the T024 deletion slice`)
+      assert.ok(auditSuites.includes(file), `${file} should remain in audit until separately migrated or accepted`)
+      assert.ok(regressionSuites.includes(file), `${file} should remain in regression until separately migrated or accepted`)
+      assert.equal(defaultSuites.includes(file), false, `${file} should remain historical/audit-only and absent from default`)
+    }
 
     assert.deepEqual(selectSuiteFiles({ filters: ['service-units'] }), ['service-units.cjs'], 'legacy substring suite filters should still work without tiers')
     assert.deepEqual(selectSuiteFiles({ tiers: ['audit'], filters: ['go-kernel-v0688'] }), [
