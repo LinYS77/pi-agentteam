@@ -125,6 +125,7 @@ docs/perf/*
 !docs/perf/v0.6.93-v07-bug-burndown-ledger.md
 !docs/perf/v0.6.94-v07-release-governance-review.md
 !docs/perf/v0.6.95-v07-evidence-reconciliation.md
+!docs/perf/v0.6.96-v07-release-decision-package.md
 
 # Dependencies
 node_modules/
