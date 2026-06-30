@@ -1,3 +1,609 @@
+# AgentTeam v0.7.0 Go-owned Core 重构方案书
+
+> 更新时间：2026-06-30
+> 当前仓库事实：`HEAD/origin/main = 37a1d71 Add v0.7 release decision package`；`package.json = 0.6.8`。
+> 产品目标仍为：`v0.7.0 = core refactor + performance baseline + bug burn-down release`。
+> 当前最新决策：v0.6.96 release decision package 已接受为 no-action evidence packet，但用户决定暂停 release mechanics，回到更强的原始架构目标：AgentTeam 内部 runtime/control-plane/business core 应逐步迁移到 Go；TypeScript/脚本层保留为 pi extension facade/public adapter。
+> 审计兼容口径：`package.json` 当前声明版本为 `0.6.8`；Go kernel 一旦通过某个模块的 cutover gate，release rollback 通过 GitHub tag/npm version，而不是 runtime 中长期偷偷走旧 TS path。历史门禁短语保留：fallback deletion remains blocked until runtime prerequisite signoff；STOP gates：no TS fallback deletion until normal-user availability signoff。
+
+---
+
+## 0. 一页结论
+
+v0.6.96 之后，项目不进入发布动作。它只说明已有 evidence chain 可以供用户审阅，且没有执行 release action。新的主线是：
+
+```text
+Go-owned internal core + thin TypeScript/pi facade
+```
+
+含义：
+
+- TypeScript 继续是 pi extension 合规入口：`index.ts`、`api/*`、commands/tools schemas、hooks/renderers/prompts、`/team` TUI shell、pi bridge API 调用。
+- Go 逐步成为内部 core/runtime/control-plane owner：tmuxRuntime、helper runtime substrate、compact read-model/teamPanelViewModel、stateRepository、task/report/PlanRun transitions、mailbox/outbox persistence/indexing、governance policy core，以及 package/release verification helper。
+- `agentteam_receive` 仍是 mailbox full-text/read boundary；`agentteam_task action=report` 仍是 TaskReport full-text boundary。Go 可以拥有存储和索引，但不能暴露新的隐藏 full-text reader。
+- worker delivery 保持 bridge-only。Go 可拥有 outbox/delivery lifecycle planning/persistence/idempotency/claim/retry，但实际 pi bridge invocation 仍由 TypeScript facade 调用 pi runtime API。Go `send-keys` / active `wakePane` 仍未授权。
+- 单一 owner 规则继续有效：迁移前可以 TS oracle + Go shadow；cutover 后删除同一行为的 hidden TypeScript runtime fallback，失败时 fail closed / compact diagnostics / 显式 rollback policy。
+- 不做 release mechanics：不执行 `npm version`、`npm publish`、tag、GitHub release/assets、release upload、signing/cosign/SLSA、package source approval；`package.json` 保持 `0.6.8`。
+
+这份方案书完全重构了当前目标口径：v0.7 不以 evidence/governance packet 作为终点，而以 Go-owned core architecture completion 作为继续推进目标。
+
+---
+
+## 1. 战略重置：v0.6.96 之后不发布，继续架构完成
+
+### 1.1 v0.6.96 的新定位
+
+v0.6.96 `release-decision-package-ready-for-user-review-no-release-action` 仍是已接受证据，但它不是：
+
+- v0.7 architecture completion；
+- release approval；
+- npm/tag/GitHub release 授权；
+- true interactive pi/TUI/operator/model coverage；
+- Go-owned core 完成证明。
+
+v0.6.96 之后的路线改为：
+
+```text
+accepted no-action evidence packet
+  -> release paused
+  -> Go-owned core continuation
+  -> architecture completion decision package
+  -> later explicit user release mechanics decision, if any
+```
+
+### 1.2 T052/T053 决策关系
+
+T052 提供了 first strong-scope reset：回到完整 core-refactor 目标，不把 v0.6.96 当发布终点。
+
+T053 进一步 supersede T052 中较保守的部分：
+
+```text
+T052 的保守表述（mailbox/outbox/governance persistence boundary 作为后续决策）被当前用户澄清 supersede：这些区域现在是 Go-owned core 的目标范围，但必须通过独立 design/cutover gates 分阶段迁移。
+```
+
+因此当前路线不是“Go 只做 selected helper”，而是“Go 成为内部 core，TS 缩小为 pi facade”。
+
+### 1.3 Go 占比口径
+
+GitHub language percentage 是弱代理指标：TypeScript 会长期存在，因为 pi extension schemas、prompts、TUI shell、public adapter、tests 和 package glue 仍必须由 TS/Node 形态承载。
+
+但用户的担忧是有效的：当前 Go footprint 对目标架构仍偏窄。当前 Go 已经拥有 tmux snapshot/capture 与大量 workerLifecycle tmux primitives，但 `stateConnected=false`、`panelConnected=false`、`taskReportPlanRunConnected=false`，mailbox/outbox/governance 也仍由 TS 主导。
+
+后续不追逐 LOC 百分比本身，而追踪 capability ownership：
+
+| 指标 | 解释 |
+| --- | --- |
+| runtime responsibility ownership | 正常运行时哪个语言真正执行该行为 |
+| cutover/fallback status | 是否已删除同一行为 hidden TS fallback |
+| capability connectivity | Go health/profile 是否声明该 capability active/connected |
+| p95 impact | 目标 hot path 是否保持或改善 p95 |
+| no-leak/governance evidence | compact surfaces、read boundary、authorization 是否保持 |
+| rollback/default-disable policy | 高风险迁移是否可 fail closed 或回滚 |
+
+---
+
+## 2. 目标架构
+
+### 2.1 总体形态
+
+```text
+pi extension / npm package
+        |
+        v
+TypeScript facade / script adapter
+  - extension registration
+  - public tool/command schemas
+  - actor/session/team context extraction
+  - hooks/renderers/prompts integration
+  - /team TUI shell + pi UI lifecycle
+  - actual pi bridge API invocation
+        |
+        v
+Go-owned AgentTeam core
+  - helper runtime substrate
+  - tmuxRuntime
+  - stateRepository
+  - compact read-model/teamPanelViewModel
+  - task/report/PlanRun transition core
+  - mailbox/report body store + compact indexes
+  - outbox/effect/delivery-request lifecycle
+  - governance policy core
+  - package/release verification helper (verify-only)
+        |
+        v
+local tmux + file-backed state + compact evidence
+```
+
+### 2.2 End-state ownership map
+
+| Area | End-state owner | TypeScript/pi facade role | Go core role | Invariant |
+| --- | --- | --- | --- | --- |
+| extension loading/package entry | TS | `index.ts`, `package.json#pi.extensions`, register tools/commands/hooks/renderers | none, except optional verify helper | pi extension compliance |
+| public schemas | TS facade over Go | validate public shape, extract actor/team/session | execute/plan core operation after context | public vocabulary compatible |
+| prompts | TS facade/assets | prompt text/files and pi integration | optional compact policy metadata | no hidden scheduler/autopilot |
+| `/team` TUI shell | TS facade | component lifecycle, input/render wiring | compact view-model/fingerprint/projection | not full-text reader |
+| tmuxRuntime | Go | call adapter, surface compact diagnostics | capture/parse/index, pane/window/label/create/kill | no Go send-keys/wakePane |
+| helper runtime substrate | Go with TS process adapter | hold process handle/lifecycle hooks if needed | pooled/long-lived JSON-RPC, queue, cancel, health | no raw stdout/stderr/path leaks |
+| stateRepository | Go | pass authorized operation/context | file layout, locks, read/write, atomic rename, sidecars, legacy compatibility | no destructive migration |
+| mailbox persistence/index | Go core + TS public boundary | expose `agentteam_receive` | store/index/project/authorized receive and read/delivered mutation | no hidden full-text reader |
+| TaskReport persistence | Go core + TS public boundary | expose `agentteam_task action=report` | body store, compact summaries, authorized full retrieval | compact surfaces omit body |
+| outbox/effect store | Go core | invoke pi bridge side effect | enqueue/idempotency/deps/claim/retry/recovery/status | bridge-only delivery |
+| governance policy | Go core + TS context adapter | adapt trusted actor/session/team context | role/action permissions, routing, side-effect plans | no worker-spawns-worker / no peer auto-tasking |
+| task/report/PlanRun transitions | Go core | public command/tool facade | reducers/state machines and transition planning | no hidden timer/autopilot |
+| package/release verification | Go helper + TS facade | expose checks, never execute release mechanics | verify metadata/checksums/policy | verify-only/no-action |
+
+### 2.3 TypeScript 永久保留的职责
+
+这些职责不应为了语言占比迁移到 Go：
+
+- pi extension registration and package entry；
+- command/tool public schema registration；
+- hooks/renderers/prompts binding；
+- `/team` TUI shell 与 pi UI lifecycle；
+- actual pi bridge API invocation；
+- public adapter code that extracts trusted actor/session/team context and calls Go.
+
+TypeScript 的目标不是消失，而是变薄：public facade + adapter + script glue。
+
+### 2.4 Go-owned core 的职责
+
+Go 的目标是拥有产品内部行为的深模块：
+
+- deterministic state transitions；
+- file-backed persistence and indexing；
+- compact projections and fingerprints；
+- tmux runtime and snapshot cache；
+- mailbox/report body storage with explicit full-text API boundaries；
+- outbox/effect/delivery-request lifecycle；
+- governance policy decisions；
+- high-frequency performance-critical paths；
+- no-leak/fail-closed diagnostics.
+
+---
+
+## 3. 当前状态评估
+
+### 3.1 已经强的部分
+
+- TS/pi facade 稳定：extension loading、tools/commands、prompts、TUI shell 和 bridge integration 已经可用。
+- Go 已真实拥有大量 tmux/runtime 行为：`tmuxSnapshotParse`、`tmuxSnapshotCapture`、pane/window lookup、tmux availability、label set/clear/refresh、create teammate pane、detached session/window creation、kill pane 等。
+- worker delivery boundary 明确为 bridge-only。
+- v0.6.90–v0.6.96 evidence/governance chain 已接受，且没有执行 release action。
+- p95 baseline 已有 clean-temp evidence：task/message/report、large mailbox、fsStore lock wait、render debounce、spawn bookkeeping。
+- T046 tools-state pane-health mismatch 已修复并进入回归。
+
+### 3.2 只是 evidence/governance，还不是架构完成
+
+- v0.6.96 是 decision package/no-action preflight，不是 architecture completion。
+- v0.6.92 是 deterministic operator-seam RC，不是真实 interactive pi/TUI/operator/model pass。
+- v0.6.93 是 no known active test-visible P0/P1 blocker，不是“所有环境无 bug”。
+- release mechanics 未授权，也不应自动推断。
+
+### 3.3 对 Go-core 目标仍不完整的部分
+
+| Area | Current shape | Strong target gap |
+| --- | --- | --- |
+| Go source organization | mostly `kernel/go/agentteam-kernel/main.go` | architecture-ready multi-file Go core |
+| helper runtime | per-call / simple adapter shape | long-lived/pool substrate with backpressure/cancel/restart |
+| stateRepository | TS/file-backed stores | Go read/write/lock/atomic/sidecar owner |
+| teamPanelViewModel | TS data source/view-model/fingerprint | Go compact projection/fingerprint owner |
+| task/report/PlanRun | TS reducers/application orchestration | Go transition core and state-machine owner |
+| mailbox/report storage | TS stores and reports | Go body store + indexes + explicit boundary APIs |
+| outbox/effect/delivery lifecycle | TS app/runtime stores | Go lifecycle/idempotency/claim/retry owner; TS bridge invocation |
+| governance policy | TS application/policy modules | Go policy core; TS actor context adapter |
+| package/release verification | docs/tests/TS scripts | optional Go verify-only helper |
+
+---
+
+## 4. Go-core 迁移路线（v0.6.97+）
+
+Checkpoint label 是产品/工程 checkpoint，不是 npm version。`package.json` 保持 `0.6.8`。
+
+### Phase 0 — v0.6.97 Go-core reset docs + ownership ledger
+
+目的：把本次方案书重构落成可验证的路线重置。
+
+范围：
+
+- docs/tests only；
+- 声明 v0.6.96 是 accepted no-action evidence packet；
+- 声明 release mechanics paused；
+- 声明 Go-owned internal core + thin TS/pi facade；
+- 声明 mailbox/outbox/governance 是 Go-core target，不再 indefinite deferral；
+- 新增 capability ownership ledger。
+
+验收：
+
+- `ready:false` / release paused；
+- `package.json = 0.6.8`；
+- no package/native/release changes；
+- no overclaim/no raw artifact guard。
+
+### Phase 1 — Kernel contract + Go source split foundation
+
+目的：将当前单文件 Go helper 准备成 architecture-ready Go core。
+
+候选变更：
+
+- `core/kernelContract.ts`；
+- `core/kernel.ts`；
+- `kernel/go/agentteam-kernel/*.go` split：`protocol.go`、`diagnostics.go`、`tmux_runtime.go`、`state_repository.go`、`mailbox.go`、`outbox.go`、`governance.go`、`panel_view_model.go`、`task_planrun.go` 等。
+
+gate：
+
+- no native path/binary rename；
+- no `go.mod/go.sum` unless separate build/package gate；
+- correct stale capability contract fields；
+- add future capability names: `tmuxRuntime`, `stateRepository`, `mailboxStore`, `outboxStore`, `governancePolicy`, `taskReportPlanRun`, `teamPanelViewModel`, `packageReleaseVerify`。
+
+验收：无 production behavior change；existing tests pass；Go code navigable。
+
+### Phase 2 — Helper runtime substrate
+
+目的：在 state/panel/mailbox/outbox 高频迁移前建立可靠连接模型。
+
+必须定义：
+
+- long-lived or pooled JSON-RPC helper；
+- bounded request queue/backpressure；
+- per-request timeout/cancellation；
+- crash detection/restart budget；
+- version/capability renegotiation；
+- compact no-leak diagnostics；
+- connection migration fallback 仅限 Go helper path，不允许 hidden TS business fallback。
+
+验收：crash/timeout/cancel/no-leak tests；repeated calls avoid per-call spawn overhead in preview/shadow。
+
+### Phase 3 — Go-owned tmuxRuntime completion
+
+目的：收口 Go 已经最强的区域。
+
+范围：
+
+- capture/parse/index/cache；
+- pane/window lookup；
+- labels/window marking；
+- pane create/kill/session/window commands already gated；
+- ordinary `/team` refresh stale/unknown semantics。
+
+非目标：
+
+- no Go `send-keys`；
+- no active Go `wakePane`；
+- no terminal/tmux delivery。
+
+验收：cut-over behavior 无 production TS tmux fallback；exact argv fixtures；compact diagnostics；global `/team` snapshot command count controlled。
+
+### Phase 4 — Go compact read-model + teamPanelViewModel
+
+目的：Go 负责 compact projection/fingerprint/view-model，TS 保留 TUI shell。
+
+范围：
+
+- `teamPanel/dataSource.ts` adapter 化；
+- `teamPanel/viewModel.ts` / `teamPanel/fingerprint.ts` 行为迁至 Go；
+- `core/readModelFingerprint.ts` 迁入/代理 Go；
+- compact input/output schema；
+- no full mailbox/report body。
+
+验收：attached/global p95 pass/improve；full-body sentinel no-leak；`/team` 不 mark read/delivered。
+
+### Phase 5 — Go stateRepository read/write ownership
+
+目的：迁移最大核心基础设施。
+
+子阶段：
+
+1. read-only shadow/read contract；
+2. transaction planner；
+3. write engine cutover。
+
+范围：
+
+- `state/fsStore.ts`、`state/repository.ts`、`state/teamStore.ts`、`state/mailboxStore.ts`、`state/outboxStore.ts`、`state/runtimeStore.ts`、`state/panelProjectionStore.ts`；
+- locks、stale lock、atomic rename、JSON parse/write、sidecars；
+- legacy `teams/-` quarantine/compatibility。
+
+验收：temp-home fixtures；no destructive migration；state p95 pass/improve；compact sidecars no full text。
+
+### Phase 6 — Go task/report/PlanRun transition core
+
+目的：Go 拥有协作状态机，TS 保留 public facade/context adapter。
+
+范围：
+
+- task create/assign/block/unblock/close/progress；
+- report_done/report_blocked report-only semantics；
+- TaskReport metadata/body split；
+- PlanRun approve/advance/review/pause/resume/cancel/failure/limits；
+- side-effect plan output。
+
+不允许：hidden scheduler/autopilot/timer；worker-spawns-worker；peer report auto-task creation。
+
+验收：TS oracle parity；role/permission matrix；PlanRun characterization；compact no-leak。
+
+### Phase 7 — Go mailbox/outbox persistence, indexing, and read-boundary implementation
+
+目的：将 T053 新增目标落地：mailbox/outbox/governance persistence 不再 indefinite deferral。
+
+子阶段：
+
+1. mailbox store/index cutover；
+2. TaskReport body store boundary；
+3. outbox/effect store cutover；
+4. delivery request lifecycle cutover。
+
+核心不变量：
+
+- `agentteam_receive` 是唯一 public mailbox full-text/read boundary；
+- `agentteam_task action=report` 是唯一 public TaskReport full-text boundary；
+- `/team`、history、reports list、panel、PlanRun projection 只读 compact metadata/summary；
+- markRead/readAt/deliveredAt semantics 保持；
+- Go 不执行 terminal delivery；TS 仍执行 pi bridge invocation。
+
+验收：large mailbox p95 pass/improve；normal task/message/report p95 pass/improve；receive lifecycle fixtures；outbox idempotency/retry/claim/recovery fixtures；no full-text leak sentinels。
+
+### Phase 8 — Go governance policy core
+
+目的：Go 成为产品治理决策 authority。
+
+范围：
+
+- leader-only actions；
+- owner-only report；
+- non-leader report-only；
+- message routing/wake policy；
+- PlanRun gate rules；
+- worker delivery eligibility；
+- no peer auto-tasking；
+- no worker-spawns-worker；
+- side-effect plan。
+
+TS 只负责 trusted `ActorContext` extraction 和 public schema prechecks。
+
+验收：actor/action/resource policy matrix；message policy/wake intent parity；no hidden automation。
+
+### Phase 9 — Package/release verification helper（verify-only）
+
+目的：Go 可拥有 verification logic，但不执行 release mechanics。
+
+范围：
+
+- package surface guard；
+- native manifest/checksum guard；
+- no raw artifact guard；
+- forbidden scripts/files guard。
+
+不允许：`npm version`、`npm publish`、tag、GitHub release、assets、signing、upload、hosted release queries。
+
+### Phase 10 — Broad p95/manual/bug-burndown/architecture-completion evidence
+
+目的：证明 Go-owned core architecture，而不是准备发布动作。
+
+刷新：
+
+- helper runtime latency/throughput/crash/cancel；
+- panel p95；
+- stateRepository p95；
+- task/report/PlanRun p95/parity；
+- mailbox/outbox p95/lifecycle；
+- governance policy matrix；
+- bug burn-down ledger；
+- deterministic manual RC/operator-seam。
+
+true interactive pi/TUI/operator/model pass 只有单独授权并实际执行后才能声明。
+
+### Phase 11 — Architecture completion decision package（still no release mechanics）
+
+目的：当 Go-owned core 完成后，生成新的 architecture-completion package。
+
+必须区分：
+
+```text
+architectureComplete != releaseActionAuthorized
+```
+
+即使架构完成，也不自动 npm/tag/GitHub release。
+
+---
+
+## 5. Mailbox / Outbox / Governance Go-core 设计
+
+### 5.1 Go-owned domain records
+
+目标高层数据模型：
+
+```text
+Team / Member / TeamIdentity
+Task / TaskEvent / TaskMessageRef
+TaskReport = metadata + compact summary + body pointer/body storage
+MailboxMessage = metadata/index fields + full body
+MailboxIndex = per-member ordered ids + unread/undelivered counts + thread/task indexes
+OutboxEffect = idempotency key + dependencies + status + attempts + claim + result/error
+DeliveryRequest = member + message ids + prompt hash + status lifecycle + expiry/claim
+GovernanceDecision = allow/deny + compact reason + wake intent + side-effect plan
+```
+
+### 5.2 Go APIs behind TS facade
+
+候选 API：
+
+```text
+MailboxAppend(ctx, recipient, envelope, body)
+MailboxProjection(ctx, member)                 # compact only, no mutation
+MailboxReceive(ctx, member, limit, markRead)   # authorized full-text boundary
+MailboxMarkDelivered(ctx, member, ids, reason)
+TaskReportAppend(ctx, taskId, envelope, body)
+TaskReportProjection(ctx, taskId/reportId)      # compact only
+TaskReportGetFull(ctx, reportId)                # authorized full-text boundary
+OutboxEnqueue(ctx, effect)
+OutboxClaim(ctx, workerId, filters)
+OutboxComplete(ctx, effectId, claimId, result)
+OutboxFail(ctx, effectId, claimId, error)
+OutboxRecoverExpired(ctx)
+DeliveryRequestCreateOrRefresh(ctx, member, messageIds, bootPromptRef)
+DeliveryRequestClaim(ctx, bridgeLease, promptHash)
+GovernanceAuthorize(ctx, action, resource)
+GovernancePlanSideEffects(ctx, transitionResult)
+```
+
+### 5.3 保持 readAt / deliveredAt 语义
+
+- full body 只通过 TS `agentteam_receive` 调用 Go `MailboxReceive` 返回；
+- `/team`、leader digest、task show/history、mailbox projection、Go panel view-model 只能用 `MailboxProjection`；
+- projection 不得 mutate `readAt` / `deliveredAt`；
+- `markRead=true/false`、unread ordering、delivered filtering、重复 receive idempotency 必须有 fixtures；
+- delivery prompt building 可以使用 compact metadata，但不得创建新的 public read boundary。
+
+### 5.4 保持 TaskReport full-text boundary
+
+- report body 与 compact metadata 分离；
+- `agentteam_task show/history/reports` 和 `/team` 只看 compact metadata/summary；
+- `agentteam_task action=report reportId=<id>` 是唯一 public full report body boundary；
+- body sentinel tests 覆盖 panel/history/reports/diagnostics。
+
+### 5.5 Outbox / bridge delivery split
+
+End-state：
+
+- Go owns：effect store、idempotency、dependencies、claim/retry/backoff、expiry/recovery、terminal status、delivery request lifecycle、prompt hash、side-effect plan；
+- TS owns：actual pi bridge invocation、TUI invalidation、pi runtime API interaction；
+- Go never executes terminal transport；no `send-keys`；no active `wakePane`。
+
+Bridge pump flow：
+
+```text
+TS bridge pump -> claim eligible request/effect from Go
+               -> render prompt via TS prompt templates + Go compact plan
+               -> submit through pi bridge API
+               -> report success/failure back to Go
+```
+
+---
+
+## 6. 设计 gates
+
+后续 implementation 前必须先建 gate：
+
+1. Go-core reset gate；
+2. capability ownership ledger gate；
+3. kernel contract/source split gate；
+4. helper runtime substrate gate；
+5. tmuxRuntime completion gate；
+6. teamPanelViewModel gate；
+7. stateRepository read/write gate；
+8. taskReportPlanRun transition gate；
+9. mailbox full-text/read-boundary gate；
+10. TaskReport full-text-boundary gate；
+11. outbox/effect store gate；
+12. delivery request bridge-boundary gate；
+13. governance policy core gate；
+14. packageReleaseVerify gate；
+15. native helper path/binary rename gate（单独，不与 core migration 绑定）；
+16. terminal wake/send-keys gate（future non-goal，除非用户单独授权）。
+
+---
+
+## 7. 性能与证据策略
+
+### 7.1 每轮通用验证
+
+```bash
+npm test
+npm run typecheck
+npm run -s check:boundaries
+git diff --check
+node -p "require('./package.json').version"   # must be 0.6.8
+sha256sum -c native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/SHA256SUMS
+```
+
+并持续执行：
+
+- no raw artifact/status guard；
+- forbidden lock/module guard；
+- no release mechanics guard；
+- no full-text leak sentinel guard；
+- bridge-only / no Go send-keys / no active wakePane guard。
+
+### 7.2 p95 refresh points
+
+1. helper runtime substrate 后；
+2. panel view-model/fingerprint cutover 后；
+3. stateRepository write cutover 后；
+4. task/report/PlanRun transition cutover 后；
+5. mailbox/outbox cutover 后；
+6. governance policy core cutover 后；
+7. final architecture-completion evidence refresh。
+
+### 7.3 Raw artifact policy
+
+不得 check in：raw logs、validation output、terminal transcripts、screenshots、state archives、temp homes、raw JSON、hosted records、release artifacts、tarballs、signatures、worker/provider transcripts。
+
+证据文档只记录 sanitized summaries、thresholds、pass/fail、hashes。
+
+---
+
+## 8. 风险与非目标
+
+### 8.1 主要风险
+
+| Risk | Why it matters | Control |
+| --- | --- | --- |
+| state/mailbox/outbox data loss | file-backed state 是用户数据 | read-only shadow、temp-home fixtures、atomic write parity、backup/quarantine |
+| governance authorization hole | 可能破坏 leader-gated 语义 | actor/action/resource matrix、TS context validation、Go policy parity |
+| full-text leak | mailbox/report body 是边界数据 | body sentinels、compact schema、diagnostics scrub |
+| bridge delivery regression | delivery side effects 有幂等/claim 语义 | Go lifecycle + TS bridge invocation split、idempotency fixtures |
+| helper lifecycle hang/leak | long-lived process 增加复杂度 | bounded queue、timeouts、restart budget、health renegotiation |
+| scope expansion | Go-owned core 比 evidence release 大很多 | 分阶段 gates；不静默降级目标 |
+| LOC pressure | 可能诱导低价值改写 | 以 capability ownership 衡量，不搬 facade/prompts/TUI shell |
+
+### 8.2 明确非目标
+
+- no release mechanics while Go-core architecture continues；
+- no `npm version` / `npm publish` / tag / GitHub release/assets / signing；
+- no Go `send-keys` / active `wakePane` unless separate explicit gate；
+- no hidden scheduler/autopilot；
+- no worker-spawns-worker；
+- no peer report auto-task creation；
+- no `/team` full-text reader；
+- no destructive legacy migration；
+- no native helper path/binary rename without separate gate；
+- no hidden same-behavior TS runtime fallback after Go cutover；
+- no moving pi extension registration/tool schemas/TUI shell fully out of TS unless pi itself supports it。
+
+---
+
+## 9. 当前完成定义
+
+### 9.1 Architecture completion
+
+只有当下列条件成立，才能说 strong-scope architecture completion 已达到：
+
+- Go capability ledger 显示核心 internals connected：tmuxRuntime、stateRepository、teamPanelViewModel、taskReportPlanRun、mailboxStore、outboxStore、governancePolicy；
+- TS facade 明确缩小为 pi/public adapter；
+- cut-over 行为没有 hidden TS runtime fallback；
+- p95/broad validation/bug burn-down evidence 刷新通过；
+- full-text/read boundary 和 bridge-only delivery 语义保持；
+- package remains `0.6.8` unless later explicitly authorized。
+
+### 9.2 Release action
+
+architecture completion 仍不等于 release action：
+
+```text
+architectureComplete != releaseActionAuthorized
+```
+
+任何 npm/tag/GitHub release/signing/assets 仍需用户单独授权。
+
+---
+
+## 10. 历史 checkpoint ledger（审计附录）
+
+以下保留历史 checkpoint / tests 需要的审计字符串。历史条目不覆盖上文当前 Go-owned core 主计划；若与上文冲突，以上文“当前最新决策”和 v0.6.97+ Go-core 路线为准。
+
+### 10.1 历史方案书前半部分快照（v0.6.96 之前，审计保留）
+
 # AgentTeam v0.7.0 核心重构方案书
 
 > 更新时间：2026-06-23
@@ -869,6 +1475,9 @@ v0.7.0 不做：
 - legacy `teams/-` 可能仍承载真实用户 state，不能被 v0.7 自动迁移误伤。
 
 ---
+
+
+### 10.2 历史版本切片 ledger（审计保留）
 
 ## 6. 版本切片与 patch plan
 
