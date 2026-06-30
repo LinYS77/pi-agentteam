@@ -1,6 +1,5 @@
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const path = require('node:path')
+const { assertPackageVersion } = require('../helpers/packageGuards.cjs')
 const {
   classifySuite,
   discoverSuiteFiles,
@@ -13,9 +12,8 @@ module.exports = {
   name: 'suite tiering manifest',
   async run(env) {
     const root = env.helpers.extRoot
-    const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+    const packageJson = assertPackageVersion(root)
 
-    assert.equal(packageJson.version, '0.6.8', 'suite tiering must not change the approved package version')
     assert.equal(packageJson.scripts?.test, 'node tests/run.cjs --tier default')
     assert.equal(packageJson.scripts?.['test:regression'], 'node tests/run.cjs --tier regression')
     assert.equal(packageJson.scripts?.['test:audit'], 'node tests/run.cjs --tier audit')

@@ -1,7 +1,20 @@
 const assert = require('node:assert/strict')
-const crypto = require('node:crypto')
-const fs = require('node:fs')
-const path = require('node:path')
+const {
+  assertIncludes,
+  assertNoOverclaims,
+  existsRel,
+  readRel,
+} = require('../helpers/fsAssertions.cjs')
+const { assertPackageNoReleaseGuards } = require('../helpers/packageGuards.cjs')
+const { assertNativeArtifactSnapshot } = require('../helpers/nativeGuards.cjs')
+const {
+  assertNoBridgeTerminalTransport,
+  escapeRegExp,
+  functionBody,
+  parseGoCapabilities,
+  parseGoWorkerLifecycleCases,
+  sourceWithoutLineComments,
+} = require('../helpers/goKernelGuards.cjs')
 const {
   ACTIVE_CAPABILITIES,
   ACTIVE_WORKER_LIFECYCLE_OPERATIONS,
@@ -104,85 +117,9 @@ const RELEASE_OVERCLAIMS = [
   'native helper rebuilt',
   'packageVersionChanged: true',
 ]
-const BRIDGE_NO_TERMINAL_TOKENS = ['send-keys', 'paste-buffer', 'set-buffer', 'runtimeWake']
-
-function read(root, rel) {
-  return fs.readFileSync(path.join(root, ...rel.split('/')), 'utf8')
-}
-
-function exists(root, rel) {
-  return fs.existsSync(path.join(root, ...rel.split('/')))
-}
-
-function sha256(root, rel) {
-  return crypto.createHash('sha256').update(fs.readFileSync(path.join(root, ...rel.split('/')))).digest('hex')
-}
-
-function assertIncludes(source, expected, label) {
-  assert.ok(source.includes(expected), `${label} should include ${expected}`)
-}
-
-function assertNoReleaseOverclaims(source, label) {
-  for (const forbidden of RELEASE_OVERCLAIMS) assert.equal(source.includes(forbidden), false, `${label} must not overclaim: ${forbidden}`)
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function sourceWithoutLineComments(source) {
-  return source.replace(/^\s*\/\/.*$/gm, '')
-}
-
-function functionBody(source, name) {
-  const candidates = [
-    `export async function ${name}(`,
-    `export function ${name}(`,
-    `async function ${name}(`,
-    `function ${name}(`,
-  ]
-  let start = -1
-  for (const candidate of candidates) {
-    start = source.indexOf(candidate)
-    if (start !== -1) break
-  }
-  assert.notEqual(start, -1, `${name} should exist`)
-  const parameterEnd = source.indexOf(')', start)
-  assert.notEqual(parameterEnd, -1, `${name} should have parameters`)
-  const signatureEnd = source.indexOf('\n', parameterEnd)
-  const brace = source.lastIndexOf('{', signatureEnd === -1 ? source.length : signatureEnd)
-  assert.ok(brace > parameterEnd, `${name} should have a body`)
-  let depth = 0
-  for (let index = brace; index < source.length; index += 1) {
-    const char = source[index]
-    if (char === '{') depth += 1
-    if (char === '}') {
-      depth -= 1
-      if (depth === 0) return source.slice(start, index + 1)
-    }
-  }
-  throw new Error(`${name} body should close`)
-}
-
-function parseGoCapabilities(source) {
-  const body = source.match(/var\s+capabilities\s*=\s*\[\]string\{([^}]+)\}/s)?.[1] || ''
-  return [...body.matchAll(/"([^"]+)"/g)].map(match => match[1])
-}
-
-function parseGoWorkerLifecycleCases(source) {
-  const body = source.match(/func\s+workerLifecycle\([^]*?switch\s+operation\s*\{([^]*?)\n\s*default:/)?.[1] || ''
-  return [...body.matchAll(/case "([^"]+)"/g)].map(match => match[1])
-}
-
-function assertNoBridgeTerminalTransport(source, label) {
-  for (const token of BRIDGE_NO_TERMINAL_TOKENS) assert.equal(source.includes(token), false, `${label} must not use terminal/tmux transport token ${token}`)
-  assert.equal(/runTmux(?:NoThrow|Async|NoThrowAsync)?\s*\(/.test(source), false, `${label} must not call tmux client helpers for delivery`)
-  assert.equal(/exec\.Command|spawnSync|spawn\(/.test(source), false, `${label} must not shell out for worker delivery`)
-}
-
 function assertFixtureShape(root) {
-  assert.equal(exists(root, FIXTURE), true, `${FIXTURE} should exist`)
-  assert.equal(exists(root, SUITE), true, `${SUITE} should exist`)
+  assert.equal(existsRel(root, FIXTURE), true, `${FIXTURE} should exist`)
+  assert.equal(existsRel(root, SUITE), true, `${SUITE} should exist`)
   assert.deepEqual(JSON.parse(JSON.stringify(goWorkerDeliveryBoundaryGate)), goWorkerDeliveryBoundaryGate)
   assert.equal(goWorkerDeliveryBoundaryGate.schemaVersion, GO_WORKER_DELIVERY_BOUNDARY_GATE_SCHEMA_VERSION)
   assert.equal(goWorkerDeliveryBoundaryGate.theme, GO_WORKER_DELIVERY_BOUNDARY_GATE_THEME)
@@ -222,20 +159,20 @@ function assertFixtureShape(root) {
 }
 
 function assertDocs(root) {
-  assert.equal(exists(root, DOC), true, `${DOC} should exist`)
-  assertIncludes(read(root, '.gitignore'), `!${DOC}`, '.gitignore')
-  const doc = read(root, DOC)
-  const roadmap = read(root, ROADMAP)
+  assert.equal(existsRel(root, DOC), true, `${DOC} should exist`)
+  assertIncludes(readRel(root, '.gitignore'), `!${DOC}`, '.gitignore')
+  const doc = readRel(root, DOC)
+  const roadmap = readRel(root, ROADMAP)
   for (const expected of REQUIRED_DOC) assertIncludes(doc, expected, DOC)
   for (const expected of REQUIRED_ROADMAP) assertIncludes(roadmap, expected, ROADMAP)
-  assertNoReleaseOverclaims(doc, DOC)
-  assertNoReleaseOverclaims(roadmap, ROADMAP)
+  assertNoOverclaims(doc, RELEASE_OVERCLAIMS, DOC)
+  assertNoOverclaims(roadmap, RELEASE_OVERCLAIMS, ROADMAP)
 }
 
 function assertDeliveryPolicyAndConfig(root) {
-  const deliveryPolicy = read(root, DELIVERY_POLICY_FILE)
+  const deliveryPolicy = readRel(root, DELIVERY_POLICY_FILE)
   const deliveryPolicyCode = sourceWithoutLineComments(deliveryPolicy)
-  const config = read(root, CONFIG_FILE)
+  const config = readRel(root, CONFIG_FILE)
   assertIncludes(deliveryPolicy, DELIVERY_POLICY_SURFACE.comment, DELIVERY_POLICY_FILE)
   assertIncludes(deliveryPolicy, DELIVERY_POLICY_SURFACE.typeExport, DELIVERY_POLICY_FILE)
   assertIncludes(deliveryPolicy, DELIVERY_POLICY_SURFACE.bridgeOnlyConst, DELIVERY_POLICY_FILE)
@@ -261,13 +198,13 @@ function assertDeliveryPolicyAndConfig(root) {
 }
 
 function assertOutboxAndMessageFlow(root) {
-  const outboxModel = read(root, OUTBOX_MODEL_FILE)
-  const outbox = read(root, OUTBOX_FILE)
-  const handlers = read(root, OUTBOX_EFFECT_HANDLERS_FILE)
-  const messageApplication = read(root, MESSAGE_APPLICATION_FILE)
-  const taskSideEffects = read(root, TASK_SIDE_EFFECTS_FILE)
-  const workerSpawn = read(root, WORKER_SPAWN_FILE)
-  const messagePolicy = read(root, MESSAGE_POLICY_FILE)
+  const outboxModel = readRel(root, OUTBOX_MODEL_FILE)
+  const outbox = readRel(root, OUTBOX_FILE)
+  const handlers = readRel(root, OUTBOX_EFFECT_HANDLERS_FILE)
+  const messageApplication = readRel(root, MESSAGE_APPLICATION_FILE)
+  const taskSideEffects = readRel(root, TASK_SIDE_EFFECTS_FILE)
+  const workerSpawn = readRel(root, WORKER_SPAWN_FILE)
+  const messagePolicy = readRel(root, MESSAGE_POLICY_FILE)
   const messageDeliveryBody = functionBody(messageApplication, 'deliverMessageToRecipient')
   const spawnDeliveryBody = functionBody(workerSpawn, 'requestInitialSpawnDeliveryThroughOutbox')
 
@@ -312,12 +249,12 @@ function assertOutboxAndMessageFlow(root) {
 }
 
 function assertBridgeRuntimeBoundary(root) {
-  const bridgeDelivery = read(root, BRIDGE_DELIVERY_FILE)
-  const bridgeRequest = read(root, BRIDGE_REQUEST_FILE)
-  const bridgePump = read(root, BRIDGE_DELIVERY_PUMP_FILE)
-  const deliveryService = read(root, DELIVERY_REQUEST_SERVICE_FILE)
-  const deliveryStore = read(root, DELIVERY_STORE_FILE)
-  const deliveryTypes = read(root, DELIVERY_TYPES_FILE)
+  const bridgeDelivery = readRel(root, BRIDGE_DELIVERY_FILE)
+  const bridgeRequest = readRel(root, BRIDGE_REQUEST_FILE)
+  const bridgePump = readRel(root, BRIDGE_DELIVERY_PUMP_FILE)
+  const deliveryService = readRel(root, DELIVERY_REQUEST_SERVICE_FILE)
+  const deliveryStore = readRel(root, DELIVERY_STORE_FILE)
+  const deliveryTypes = readRel(root, DELIVERY_TYPES_FILE)
 
   assertIncludes(bridgeDelivery, 'createBridgeDeliveryRequest(team.name, memberName, {', BRIDGE_DELIVERY_FILE)
   assertIncludes(bridgeDelivery, "? 'bridge unavailable in bridge-only delivery mode'", BRIDGE_DELIVERY_FILE)
@@ -348,9 +285,9 @@ function assertBridgeRuntimeBoundary(root) {
 }
 
 function assertGoWakeBoundary(root) {
-  const goSource = read(root, GO_SOURCE_FILE)
-  const kernelSource = read(root, KERNEL_FILE)
-  const kernelContract = read(root, KERNEL_CONTRACT_FILE)
+  const goSource = readRel(root, GO_SOURCE_FILE)
+  const kernelSource = readRel(root, KERNEL_FILE)
+  const kernelContract = readRel(root, KERNEL_CONTRACT_FILE)
   assert.deepEqual(parseGoCapabilities(goSource), [...ACTIVE_CAPABILITIES])
   assert.deepEqual(parseGoWorkerLifecycleCases(goSource), [...ACTIVE_WORKER_LIFECYCLE_OPERATIONS])
   assert.equal(goSource.includes('wakePane'), false, `${GO_SOURCE_FILE} must not add active wakePane operation`)
@@ -369,9 +306,9 @@ function assertGoWakeBoundary(root) {
 }
 
 function assertRuntimeSurfacesPreserved(root) {
-  const panesSource = read(root, TMUX_PANES_FILE)
-  const windowsSource = read(root, TMUX_WINDOWS_FILE)
-  const labelsSource = read(root, TMUX_LABELS_FILE)
+  const panesSource = readRel(root, TMUX_PANES_FILE)
+  const windowsSource = readRel(root, TMUX_WINDOWS_FILE)
+  const labelsSource = readRel(root, TMUX_LABELS_FILE)
   const clearSyncBody = functionBody(panesSource, 'clearPaneLabelSync')
   const killBody = functionBody(panesSource, 'killPane')
   const createBody = functionBody(panesSource, 'createTeammatePane')
@@ -397,40 +334,22 @@ function assertRuntimeSurfacesPreserved(root) {
 }
 
 function assertArtifactPipelineAndNativeUnchanged(root) {
-  const manifest = JSON.parse(read(root, `${NATIVE_ROOT}/manifest.json`))
-  const provenance = JSON.parse(read(root, `${NATIVE_ROOT}/provenance.json`))
-  assert.equal(manifest.packageVersion, PACKAGE_VERSION)
-  assert.equal(manifest.helperVersion, HELPER_VERSION)
-  assert.equal(manifest.protocolVersion, PROTOCOL_VERSION)
-  assert.deepEqual(manifest.capabilities, [...ACTIVE_CAPABILITIES])
-  assert.equal(manifest.artifact.path, `${NATIVE_ROOT}/agentteam-tmuxSnapshotParse`)
-  assert.equal(manifest.artifact.filename, 'agentteam-tmuxSnapshotParse')
-  assert.equal(manifest.artifact.size, NATIVE_ARTIFACT_SNAPSHOT.helperSize)
-  assert.equal(manifest.artifact.sha256, NATIVE_ARTIFACT_SNAPSHOT.helperSha256)
-  assert.equal(manifest.source.revision, NATIVE_ARTIFACT_SNAPSHOT.sourceRevision)
-  assert.equal(provenance.source.revision, NATIVE_ARTIFACT_SNAPSHOT.sourceRevision)
-  for (const key of NATIVE_ARTIFACT_SNAPSHOT.forbiddenSmokeKeys) {
-    assert.equal(Object.prototype.hasOwnProperty.call(manifest.smoke, key), false, `native manifest must not add ${key}`)
-    assert.equal(Object.prototype.hasOwnProperty.call(provenance.smoke, key), false, `native provenance must not add ${key}`)
-  }
-  assert.equal(sha256(root, NATIVE_ARTIFACT_SNAPSHOT.helperPath), NATIVE_ARTIFACT_SNAPSHOT.helperSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/manifest.json`), NATIVE_ARTIFACT_SNAPSHOT.manifestSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/provenance.json`), NATIVE_ARTIFACT_SNAPSHOT.provenanceSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/attestation.intoto.jsonl`), NATIVE_ARTIFACT_SNAPSHOT.attestationSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/SHA256SUMS`), NATIVE_ARTIFACT_SNAPSHOT.checksumsSha256)
+  assertNativeArtifactSnapshot(root, {
+    nativeRoot: NATIVE_ROOT,
+    packageVersion: PACKAGE_VERSION,
+    helperVersion: HELPER_VERSION,
+    protocolVersion: PROTOCOL_VERSION,
+    capabilities: ACTIVE_CAPABILITIES,
+    snapshot: NATIVE_ARTIFACT_SNAPSHOT,
+  })
 }
 
 function assertPackageAndReleaseGuards(root) {
-  const packageJson = JSON.parse(read(root, 'package.json'))
-  assert.equal(packageJson.version, PACKAGE_VERSION)
-  assert.equal(packageJson.optionalDependencies, undefined)
-  assert.equal(packageJson.bundleDependencies, undefined)
-  assert.equal(packageJson.bundledDependencies, undefined)
-  assert.equal(packageJson.bin, undefined)
-  for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish']) {
-    assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define ${lifecycle}`)
-  }
-  for (const rel of ROOT_FORBIDDEN_FILES) assert.equal(exists(root, rel), false, `${rel} must not exist`)
+  assertPackageNoReleaseGuards(root, {
+    expectedVersion: PACKAGE_VERSION,
+    lifecycleScripts: ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish'],
+    forbiddenRootFiles: ROOT_FORBIDDEN_FILES,
+  })
 }
 
 module.exports = {

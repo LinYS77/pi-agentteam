@@ -1,7 +1,20 @@
 const assert = require('node:assert/strict')
-const crypto = require('node:crypto')
-const fs = require('node:fs')
-const path = require('node:path')
+const {
+  assertIncludes,
+  assertNoOverclaims,
+  existsRel,
+  readRel,
+} = require('../helpers/fsAssertions.cjs')
+const { assertPackageNoReleaseGuards } = require('../helpers/packageGuards.cjs')
+const {
+  assertNativeArtifactSnapshot,
+  assertNoRawOrReleaseArtifacts,
+} = require('../helpers/nativeGuards.cjs')
+const {
+  parseGoCapabilities,
+  parseGoWorkerLifecycleCases,
+  sourceWithoutLineComments,
+} = require('../helpers/goKernelGuards.cjs')
 const {
   ACCEPTED_EVIDENCE_CHAIN,
   ACTIVE_CAPABILITIES,
@@ -184,58 +197,9 @@ const FORBIDDEN_RAW_FILE = /(?:^|\/)(?:.*raw.*(?:benchmark|p95|manual|rc|smoke|t
 const FORBIDDEN_ARTIFACT = /\.(?:tgz|tar|tar\.gz|zip|sig|sigstore|pem|key|crt|cert|p7s|minisig|asc|spdx|sbom)$/i
 const APPROVED_NATIVE_PREFIX = `${NATIVE_ROOT}/`
 
-function read(root, rel) {
-  return fs.readFileSync(path.join(root, ...rel.split('/')), 'utf8')
-}
-
-function exists(root, rel) {
-  return fs.existsSync(path.join(root, ...rel.split('/')))
-}
-
-function sha256(root, rel) {
-  return crypto.createHash('sha256').update(fs.readFileSync(path.join(root, ...rel.split('/')))).digest('hex')
-}
-
-function toRel(root, file) {
-  return path.relative(root, file).replace(/\\/g, '/')
-}
-
-function walkFiles(root, out = []) {
-  if (!fs.existsSync(root)) return out
-  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-    if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === 'data' || entry.name === 'dist') continue
-    const full = path.join(root, entry.name)
-    if (entry.isDirectory()) walkFiles(full, out)
-    else if (entry.isFile()) out.push(full)
-  }
-  return out
-}
-
-function assertIncludes(source, expected, label) {
-  assert.ok(source.includes(expected), `${label} should include ${expected}`)
-}
-
-function assertNoOverclaims(source, label) {
-  for (const forbidden of FORBIDDEN_OVERCLAIMS) assert.equal(source.includes(forbidden), false, `${label} must not overclaim: ${forbidden}`)
-}
-
-function sourceWithoutLineComments(source) {
-  return source.replace(/^\s*\/\/.*$/gm, '')
-}
-
-function parseGoCapabilities(source) {
-  const body = source.match(/var\s+capabilities\s*=\s*\[\]string\{([^}]+)\}/s)?.[1] || ''
-  return [...body.matchAll(/"([^"]+)"/g)].map(match => match[1])
-}
-
-function parseGoWorkerLifecycleCases(source) {
-  const body = source.match(/func\s+workerLifecycle\([^]*?switch\s+operation\s*\{([^]*?)\n\s*default:/)?.[1] || ''
-  return [...body.matchAll(/case "([^"]+)"/g)].map(match => match[1])
-}
-
 function assertFixtureShape(root) {
-  assert.equal(exists(root, FIXTURE), true, `${FIXTURE} should exist`)
-  assert.equal(exists(root, SUITE), true, `${SUITE} should exist`)
+  assert.equal(existsRel(root, FIXTURE), true, `${FIXTURE} should exist`)
+  assert.equal(existsRel(root, SUITE), true, `${SUITE} should exist`)
   assert.deepEqual(JSON.parse(JSON.stringify(v07ReleaseDecisionPackage)), v07ReleaseDecisionPackage)
   assert.equal(v07ReleaseDecisionPackage.schemaVersion, V07_RELEASE_DECISION_PACKAGE_SCHEMA_VERSION)
   assert.equal(v07ReleaseDecisionPackage.theme, V07_RELEASE_DECISION_PACKAGE_THEME)
@@ -314,7 +278,7 @@ function assertFixtureShape(root) {
 }
 
 function assertDocs(root) {
-  assert.equal(exists(root, DOC), true, `${DOC} should exist`)
+  assert.equal(existsRel(root, DOC), true, `${DOC} should exist`)
   for (const rel of [
     V0690_DOC,
     V0690_FIXTURE,
@@ -335,52 +299,47 @@ function assertDocs(root) {
     V0695_FIXTURE,
     V0695_SUITE,
     T046_FIX_FILE,
-  ]) assert.equal(exists(root, rel), true, `${rel} should exist`)
-  assertIncludes(read(root, '.gitignore'), `!${DOC}`, '.gitignore')
-  const doc = read(root, DOC)
-  const roadmap = read(root, ROADMAP)
+  ]) assert.equal(existsRel(root, rel), true, `${rel} should exist`)
+  assertIncludes(readRel(root, '.gitignore'), `!${DOC}`, '.gitignore')
+  const doc = readRel(root, DOC)
+  const roadmap = readRel(root, ROADMAP)
   const roadmapCheckpoint = roadmap.split('\n').find(line => line.includes('**v0.6.96 v0.7 release decision package/no-action preflight**')) ?? ''
   for (const expected of REQUIRED_DOC) assertIncludes(doc, expected, DOC)
   for (const expected of REQUIRED_ROADMAP) assertIncludes(roadmap, expected, ROADMAP)
-  assertNoOverclaims(doc, DOC)
-  assertNoOverclaims(roadmapCheckpoint, `${ROADMAP} v0.6.96 checkpoint`)
-  assertIncludes(read(root, V0690_DOC), 'Machine-readable status: `not-release-ready-readiness-inventory-only`', V0690_DOC)
-  assertIncludes(read(root, V0691_DOC), 'Slice status: `p95-refreshed-not-release-ready`', V0691_DOC)
-  assertIncludes(read(root, V0692_DOC), 'Slice status: `manual-rc-operator-seam-refreshed-not-release-ready`', V0692_DOC)
-  assertIncludes(read(root, V0692_DOC), 'No true interactive pi/TUI/operator/model evidence is claimed', V0692_DOC)
-  assertIncludes(read(root, V0693_DOC), 'Slice status: `bug-burndown-ledger-refreshed-not-release-ready`', V0693_DOC)
-  assertIncludes(read(root, V0693_DOC), 'bug burn-down ledger gate status: `refreshed-no-known-active-test-visible-p0-p1-blockers`', V0693_DOC)
-  assertIncludes(read(root, V0694_DOC), 'Slice status: `release-governance-reviewed-not-release-ready`', V0694_DOC)
-  assertIncludes(read(root, V0694_DOC), 'governance gate status: `reviewed-no-release-action-authorized`', V0694_DOC)
-  assertIncludes(read(root, V0695_DOC), 'Slice status: `evidence-reconciled-release-decision-pending-no-release-action`', V0695_DOC)
-  assertIncludes(read(root, V0695_DOC), 'release decision status: `release-decision-pending-explicit-user-authorization`', V0695_DOC)
-  assertIncludes(read(root, T046_FIX_FILE), 'host tmux pane IDs cannot collide', T046_FIX_FILE)
-  assertIncludes(read(root, T046_FIX_FILE), 'test tmux snapshot unavailable', T046_FIX_FILE)
+  assertNoOverclaims(doc, FORBIDDEN_OVERCLAIMS, DOC)
+  assertNoOverclaims(roadmapCheckpoint, FORBIDDEN_OVERCLAIMS, `${ROADMAP} v0.6.96 checkpoint`)
+  assertIncludes(readRel(root, V0690_DOC), 'Machine-readable status: `not-release-ready-readiness-inventory-only`', V0690_DOC)
+  assertIncludes(readRel(root, V0691_DOC), 'Slice status: `p95-refreshed-not-release-ready`', V0691_DOC)
+  assertIncludes(readRel(root, V0692_DOC), 'Slice status: `manual-rc-operator-seam-refreshed-not-release-ready`', V0692_DOC)
+  assertIncludes(readRel(root, V0692_DOC), 'No true interactive pi/TUI/operator/model evidence is claimed', V0692_DOC)
+  assertIncludes(readRel(root, V0693_DOC), 'Slice status: `bug-burndown-ledger-refreshed-not-release-ready`', V0693_DOC)
+  assertIncludes(readRel(root, V0693_DOC), 'bug burn-down ledger gate status: `refreshed-no-known-active-test-visible-p0-p1-blockers`', V0693_DOC)
+  assertIncludes(readRel(root, V0694_DOC), 'Slice status: `release-governance-reviewed-not-release-ready`', V0694_DOC)
+  assertIncludes(readRel(root, V0694_DOC), 'governance gate status: `reviewed-no-release-action-authorized`', V0694_DOC)
+  assertIncludes(readRel(root, V0695_DOC), 'Slice status: `evidence-reconciled-release-decision-pending-no-release-action`', V0695_DOC)
+  assertIncludes(readRel(root, V0695_DOC), 'release decision status: `release-decision-pending-explicit-user-authorization`', V0695_DOC)
+  assertIncludes(readRel(root, T046_FIX_FILE), 'host tmux pane IDs cannot collide', T046_FIX_FILE)
+  assertIncludes(readRel(root, T046_FIX_FILE), 'test tmux snapshot unavailable', T046_FIX_FILE)
   assertIncludes(doc, T046_FIX_COMMIT, DOC)
   assertIncludes(doc, T050_COMMIT, DOC)
   assert.equal(/"runId"\s*:|"commands"\s*:|"tools"\s*:|V0638_RC_FULL_TEXT_SENTINEL_DO_NOT_LEAK/i.test(doc), false, `${DOC} must not embed raw harness JSON or sentinels`)
 }
 
 function assertPackageAndReleaseGuards(root) {
-  const packageJson = JSON.parse(read(root, PACKAGE_FILE))
-  assert.equal(packageJson.version, PACKAGE_VERSION)
-  assert.deepEqual(packageJson.pi?.extensions, ['./index.ts'])
-  assert.equal(packageJson.optionalDependencies, undefined)
-  assert.equal(packageJson.bundleDependencies, undefined)
-  assert.equal(packageJson.bundledDependencies, undefined)
-  assert.equal(packageJson.bin, undefined)
-  for (const lifecycle of ['preinstall', 'install', 'postinstall', 'prepare', 'prepublish', 'prepublishOnly', 'publish', 'postpublish', 'prepack', 'postpack']) {
-    assert.equal(Object.prototype.hasOwnProperty.call(packageJson.scripts || {}, lifecycle), false, `package must not define ${lifecycle}`)
-  }
-  for (const rel of ROOT_FORBIDDEN_FILES) assert.equal(exists(root, rel), false, `${rel} must not exist`)
+  assertPackageNoReleaseGuards(root, {
+    packageRel: PACKAGE_FILE,
+    expectedVersion: PACKAGE_VERSION,
+    expectedPiExtensions: ['./index.ts'],
+    forbiddenRootFiles: ROOT_FORBIDDEN_FILES,
+  })
   for (const rel of EXPECTED_CHANGED_FILES) assert.equal(rel === '.gitignore' || rel.startsWith('docs/') || rel.startsWith('tests/'), true, `${rel} should be docs/tests/.gitignore scoped`)
 }
 
 function assertWorkerDeliveryAndGoBoundary(root) {
-  const deliveryPolicy = read(root, DELIVERY_POLICY_FILE)
+  const deliveryPolicy = readRel(root, DELIVERY_POLICY_FILE)
   const deliveryPolicyCode = sourceWithoutLineComments(deliveryPolicy)
-  const goSource = read(root, GO_SOURCE_FILE)
-  const kernelSource = read(root, KERNEL_FILE)
+  const goSource = readRel(root, GO_SOURCE_FILE)
+  const kernelSource = readRel(root, KERNEL_FILE)
   assertIncludes(deliveryPolicy, "export type AgentTeamDeliveryPolicyName = 'bridge-only'", DELIVERY_POLICY_FILE)
   assertIncludes(deliveryPolicy, "export const BRIDGE_ONLY_DELIVERY_POLICY: AgentTeamDeliveryPolicyName = 'bridge-only'", DELIVERY_POLICY_FILE)
   assertIncludes(deliveryPolicy, 'export const DEFAULT_DELIVERY_POLICY: AgentTeamDeliveryPolicyName = BRIDGE_ONLY_DELIVERY_POLICY', DELIVERY_POLICY_FILE)
@@ -399,38 +358,22 @@ function assertWorkerDeliveryAndGoBoundary(root) {
 }
 
 function assertNativeUnchanged(root) {
-  const manifest = JSON.parse(read(root, `${NATIVE_ROOT}/manifest.json`))
-  const provenance = JSON.parse(read(root, `${NATIVE_ROOT}/provenance.json`))
-  assert.equal(manifest.packageVersion, PACKAGE_VERSION)
-  assert.deepEqual(manifest.capabilities, [...ACTIVE_CAPABILITIES])
-  assert.equal(manifest.artifact.path, `${NATIVE_ROOT}/agentteam-tmuxSnapshotParse`)
-  assert.equal(manifest.artifact.filename, 'agentteam-tmuxSnapshotParse')
-  assert.equal(manifest.artifact.size, NATIVE_ARTIFACT_SNAPSHOT.helperSize)
-  assert.equal(manifest.artifact.sha256, NATIVE_ARTIFACT_SNAPSHOT.helperSha256)
-  assert.equal(manifest.source.revision, NATIVE_ARTIFACT_SNAPSHOT.sourceRevision)
-  assert.equal(provenance.source.revision, NATIVE_ARTIFACT_SNAPSHOT.sourceRevision)
-  for (const key of NATIVE_ARTIFACT_SNAPSHOT.forbiddenSmokeKeys) {
-    assert.equal(Object.prototype.hasOwnProperty.call(manifest.smoke, key), false, `native manifest must not add ${key}`)
-    assert.equal(Object.prototype.hasOwnProperty.call(provenance.smoke, key), false, `native provenance must not add ${key}`)
-  }
-  assert.equal(sha256(root, NATIVE_ARTIFACT_SNAPSHOT.helperPath), NATIVE_ARTIFACT_SNAPSHOT.helperSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/manifest.json`), NATIVE_ARTIFACT_SNAPSHOT.manifestSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/provenance.json`), NATIVE_ARTIFACT_SNAPSHOT.provenanceSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/attestation.intoto.jsonl`), NATIVE_ARTIFACT_SNAPSHOT.attestationSha256)
-  assert.equal(sha256(root, `${NATIVE_ROOT}/SHA256SUMS`), NATIVE_ARTIFACT_SNAPSHOT.checksumsSha256)
+  assertNativeArtifactSnapshot(root, {
+    nativeRoot: NATIVE_ROOT,
+    packageVersion: PACKAGE_VERSION,
+    capabilities: ACTIVE_CAPABILITIES,
+    snapshot: NATIVE_ARTIFACT_SNAPSHOT,
+  })
 }
 
 function assertNoRawArtifactsCheckedIn(root) {
-  const forbiddenRaw = []
-  const forbiddenArtifacts = []
-  for (const file of walkFiles(root)) {
-    const rel = toRel(root, file)
-    if (rel.startsWith(APPROVED_NATIVE_PREFIX)) continue
-    if (FORBIDDEN_RAW_FILE.test(rel)) forbiddenRaw.push(rel)
-    if (FORBIDDEN_ARTIFACT.test(rel)) forbiddenArtifacts.push(rel)
-  }
-  assert.deepEqual(forbiddenRaw.sort(), [], 'repo must not contain raw v0.7 release decision package files')
-  assert.deepEqual(forbiddenArtifacts.sort(), [], 'repo must not contain unapproved release/archive/signing artifacts')
+  assertNoRawOrReleaseArtifacts(root, {
+    approvedPrefixes: [APPROVED_NATIVE_PREFIX],
+    rawPattern: FORBIDDEN_RAW_FILE,
+    artifactPattern: FORBIDDEN_ARTIFACT,
+    rawMessage: 'repo must not contain raw v0.7 release decision package files',
+    artifactMessage: 'repo must not contain unapproved release/archive/signing artifacts',
+  })
 }
 
 module.exports = {
