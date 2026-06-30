@@ -11,20 +11,39 @@ const { assertNoRawOrReleaseArtifacts } = require('../helpers/nativeGuards.cjs')
 const {
   COMMON_NO_RELEASE_OVERCLAIMS,
   CURRENT_ROADMAP_EXPECTATIONS,
-  HISTORICAL_CHECKPOINT_FAMILIES_V0419_V0427: HISTORICAL_CHECKPOINT_FAMILIES,
-  HISTORICAL_CHECKPOINT_DOCS_V0419_V0427: HISTORICAL_CHECKPOINT_DOCS,
-  HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0419_V0427: HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES,
+  HISTORICAL_CHECKPOINT_FAMILIES_V0628_V0643,
+  HISTORICAL_CHECKPOINT_DOCS_V0628_V0643,
+  HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0628_V0643,
+  HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643,
 } = require('../fixtures/kernel/historicalCheckpoints.cjs')
 
 const HISTORICAL_SCOPE_MARKERS = [
   'Scope:',
   'docs/tests',
-  'docs/reference',
-  'GitHub-only',
+  'review-only',
   'checkpoint',
-  'evidence only',
+  'evidence',
   'STOP for',
   'does not',
+  'not approve',
+]
+
+const EXPECTED_V0628_V0643_VERSIONS = [
+  'v0.6.28',
+  'v0.6.29',
+  'v0.6.30',
+  'v0.6.31',
+  'v0.6.32',
+  'v0.6.33',
+  'v0.6.34',
+  'v0.6.35',
+  'v0.6.36',
+  'v0.6.37',
+  'v0.6.38',
+  'v0.6.39',
+  'v0.6.41',
+  'v0.6.42',
+  'v0.6.43',
 ]
 
 function assertUnique(values, label) {
@@ -37,37 +56,39 @@ function assertUnique(values, label) {
   assert.deepEqual(duplicates, [], `${label} should not contain duplicates`)
 }
 
+function suitePrefixForVersion(version) {
+  return `tests/suites/go-kernel-${String(version).replace('v0.', 'v0').replace(/\./g, '')}`
+}
+
 function assertManifestShape() {
-  assert.ok(HISTORICAL_CHECKPOINT_FAMILIES.length >= 9, 'manifest should cover v0.4.19 through v0.4.27 families')
-  assertUnique(HISTORICAL_CHECKPOINT_FAMILIES.map(family => family.id), 'family ids')
-  assertUnique(HISTORICAL_CHECKPOINT_DOCS, 'historical checkpoint docs')
-  assertUnique(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES, 'replacement candidate suites')
+  assert.equal(HISTORICAL_CHECKPOINT_FAMILIES_V0628_V0643.length, EXPECTED_V0628_V0643_VERSIONS.length, 'manifest should cover the coherent v0.6.28-v0.6.43 historical family scope')
+  assert.deepEqual(HISTORICAL_CHECKPOINT_FAMILIES_V0628_V0643.map(family => family.version), EXPECTED_V0628_V0643_VERSIONS, 'manifest should preserve chronological v0.6.28-v0.6.43 coverage with no synthetic v0.6.40 doc')
+  assertUnique(HISTORICAL_CHECKPOINT_FAMILIES_V0628_V0643.map(family => family.id), 'v0.6.28-v0.6.43 family ids')
+  assertUnique(HISTORICAL_CHECKPOINT_DOCS_V0628_V0643, 'v0.6.28-v0.6.43 historical checkpoint docs')
+  assertUnique(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643, 'v0.6.28-v0.6.43 replacement candidate suites')
+  assertUnique(HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0628_V0643, 'v0.6.28-v0.6.43 cautious non-candidate suites')
 
-  const versions = HISTORICAL_CHECKPOINT_FAMILIES.map(family => family.version)
-  assert.deepEqual(versions, [
-    'v0.4.19',
-    'v0.4.20',
-    'v0.4.21',
-    'v0.4.22',
-    'v0.4.23',
-    'v0.4.24',
-    'v0.4.25',
-    'v0.4.26',
-    'v0.4.27',
-  ], 'manifest should preserve append-only chronological coverage')
+  for (const suite of HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643) {
+    assert.equal(HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0628_V0643.includes(suite), false, `${suite} should not be both a replacement candidate and a cautious non-candidate`)
+  }
 
-  for (const family of HISTORICAL_CHECKPOINT_FAMILIES) {
+  for (const family of HISTORICAL_CHECKPOINT_FAMILIES_V0628_V0643) {
     assert.ok(family.id.startsWith(family.version.replace(/\./g, '').replace('v', 'v')), `${family.id} should carry version identity`)
     assert.ok(family.checkpointLabel, `${family.id} should have a checkpoint label`)
     assert.ok(family.docs.includes(family.checkpointDoc), `${family.id} docs should include checkpointDoc`)
+    assert.ok(Array.isArray(family.replacementCandidateSuites), `${family.id} should explicitly name replacement candidates, even when empty`)
+    assert.ok(Array.isArray(family.nonCandidateSuites), `${family.id} should explicitly preserve cautious non-candidates, even when empty`)
     assert.ok(family.requiredThemes.length >= 3, `${family.id} should define compact required themes`)
-    assert.ok(family.replacementCandidateSuites.length >= 1, `${family.id} should name legacy candidate suites for later replacement review`)
     for (const doc of family.docs) {
       assert.ok(doc.startsWith(`docs/perf/${family.version}-`), `${doc} should stay under its historical version prefix`)
       assert.ok(doc.endsWith('.md'), `${doc} should be a markdown checkpoint/audit doc`)
     }
     for (const suite of family.replacementCandidateSuites) {
-      assert.ok(suite.startsWith(`tests/suites/go-kernel-${family.version.replace('v0.', 'v0').replace(/\./g, '')}`), `${suite} should carry the historical suite version prefix`)
+      assert.ok(suite.startsWith(suitePrefixForVersion(family.version)), `${suite} should carry the historical suite version prefix`)
+      assert.ok(suite.endsWith('.cjs'), `${suite} should be a CommonJS suite path`)
+    }
+    for (const suite of family.nonCandidateSuites) {
+      assert.ok(suite.startsWith(suitePrefixForVersion(family.version)), `${suite} should carry the historical suite version prefix`)
       assert.ok(suite.endsWith('.cjs'), `${suite} should be a CommonJS suite path`)
     }
   }
@@ -80,7 +101,7 @@ function readDocs(root, docs) {
 function assertHistoricalFraming(doc, text) {
   assert.ok(text.startsWith('# '), `${doc} should keep a markdown title`)
   assert.ok(HISTORICAL_SCOPE_MARKERS.some(marker => text.includes(marker)), `${doc} should retain historical/audit-only scope framing`)
-  assert.equal(/\b(?:npm\s+publish|npm\s+version|git\s+tag|gh\s+release)\b/i.test(text) && !/(?:does not|no |STOP|Do not|not approve|not release|without)/i.test(text), false, `${doc} should not authorize release mechanics`)
+  assert.equal(/\b(?:npm\s+publish|npm\s+version|git\s+tag|gh\s+release)\b/i.test(text) && !/(?:does not|no |STOP|Do not|not approve|not release|without|forbidden|not run)/i.test(text), false, `${doc} should not authorize release mechanics`)
 }
 
 function assertContinuityLinks(root, family) {
@@ -103,11 +124,12 @@ function assertCurrentRoadmapFraming(root) {
 
 function assertGitignoreAllowList(root) {
   const gitignore = readRel(root, '.gitignore')
-  for (const doc of HISTORICAL_CHECKPOINT_DOCS) assertIncludes(gitignore, `!${doc}`, '.gitignore historical docs allow-list')
+  for (const doc of HISTORICAL_CHECKPOINT_DOCS_V0628_V0643) assertIncludes(gitignore, `!${doc}`, '.gitignore v0.6.28-v0.6.43 docs allow-list')
+  assert.equal(gitignore.includes('!docs/perf/v0.6.41-true-operator-planrun-cancel-evidence.md'), false, 'ignored T129 local evidence doc must remain untracked/not allow-listed')
 }
 
 module.exports = {
-  name: 'Go kernel v0.4.19-v0.4.27 historical checkpoint manifest audit',
+  name: 'Go kernel v0.6.28-v0.6.43 historical checkpoint manifest audit',
   async run(env) {
     const root = env.helpers.extRoot
 
@@ -117,11 +139,14 @@ module.exports = {
     assertCurrentRoadmapFraming(root)
     assertGitignoreAllowList(root)
 
-    for (const suitePath of HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES) {
+    for (const suitePath of HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643) {
       assert.equal(existsRel(root, suitePath), true, `${suitePath} should remain in place until a later deletion slice`)
     }
+    for (const suitePath of HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0628_V0643) {
+      assert.equal(existsRel(root, suitePath), true, `${suitePath} should remain preserved as a cautious non-candidate`)
+    }
 
-    for (const family of HISTORICAL_CHECKPOINT_FAMILIES) {
+    for (const family of HISTORICAL_CHECKPOINT_FAMILIES_V0628_V0643) {
       for (const doc of family.docs) assert.equal(existsRel(root, doc), true, `${family.id} doc should exist: ${doc}`)
       const docs = readDocs(root, family.docs)
       const combined = docs.map(item => item.text).join('\n\n')
@@ -133,7 +158,7 @@ module.exports = {
     }
 
     const packageJson = JSON.parse(readRel(root, 'package.json'))
-    assert.equal(packageJson.version, '0.6.8', 'historical checkpoint audit must keep package version unchanged')
-    assert.equal(path.basename(__filename), 'go-kernel-v0427-historical-checkpoints-audit.cjs', 'suite name should remain versioned historical/audit-only for tier auto-discovery')
+    assert.equal(packageJson.version, '0.6.8', 'v0.6.28-v0.6.43 historical checkpoint audit must keep package version unchanged')
+    assert.equal(path.basename(__filename), 'go-kernel-v0643-historical-checkpoints-audit.cjs', 'suite name should remain versioned historical/audit-only for tier auto-discovery')
   },
 }
