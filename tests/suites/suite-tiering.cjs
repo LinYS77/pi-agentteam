@@ -45,7 +45,9 @@ module.exports = {
     assert.ok(goCurrentSuites.includes('go-kernel-v0696-v07-release-decision-package.cjs'), 'go-current tier should keep latest release/no-action guard')
     assert.ok(defaultSuites.includes('go-kernel-v0696-v07-release-decision-package.cjs'), 'default tier should keep current Go release guard')
     assert.ok(auditSuites.includes('go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs'), 'audit tier should retain historical cutover coverage')
+    assert.ok(auditSuites.includes('go-kernel-v0688-historical-checkpoints-audit.cjs'), 'audit tier should include the historical checkpoint manifest audit')
     assert.equal(defaultSuites.includes('go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs'), false, 'default tier should remove historical audit coverage')
+    assert.equal(defaultSuites.includes('go-kernel-v0688-historical-checkpoints-audit.cjs'), false, 'default tier should exclude the historical checkpoint manifest audit')
     assert.ok(auditSuites.includes('go-kernel-release-checklist-docs.cjs'), 'audit tier should retain older release checklist docs')
     assert.equal(defaultSuites.includes('go-kernel-release-checklist-docs.cjs'), false, 'default tier should remove older release checklist docs')
 
@@ -60,6 +62,9 @@ module.exports = {
     assert.equal(isHistoricalGoKernelSuite('go-kernel-v0689-go-worker-delivery-boundary-gate.cjs'), false)
 
     assert.deepEqual(selectSuiteFiles({ filters: ['service-units'] }), ['service-units.cjs'], 'legacy substring suite filters should still work without tiers')
-    assert.deepEqual(selectSuiteFiles({ tiers: ['audit'], filters: ['go-kernel-v0688'] }), ['go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs'], 'suite filters should intersect with tier selectors')
+    assert.deepEqual(selectSuiteFiles({ tiers: ['audit'], filters: ['go-kernel-v0688'] }), [
+      'go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs',
+      'go-kernel-v0688-historical-checkpoints-audit.cjs',
+    ], 'suite filters should intersect with tier selectors')
   },
 }
