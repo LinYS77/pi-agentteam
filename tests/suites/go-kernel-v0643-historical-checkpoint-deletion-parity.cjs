@@ -1,0 +1,194 @@
+const assert = require('node:assert/strict')
+const path = require('node:path')
+const {
+  assertIncludes,
+  existsRel,
+  readRel,
+} = require('../helpers/fsAssertions.cjs')
+const { APPROVED_NATIVE_ROOT, assertNoRawOrReleaseArtifacts } = require('../helpers/nativeGuards.cjs')
+const { assertPackageNoReleaseGuards } = require('../helpers/packageGuards.cjs')
+const {
+  HISTORICAL_CHECKPOINT_DOCS_V0419_V0427,
+  HISTORICAL_CHECKPOINT_DOCS_V0628_V0643,
+  HISTORICAL_CHECKPOINT_DOCS_V0644_V0688,
+  HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0419_V0427,
+  HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643,
+  HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688,
+} = require('../fixtures/kernel/historicalCheckpoints.cjs')
+const {
+  DELETE_READINESS_VALUES,
+  HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS,
+  HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT,
+  HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP,
+  HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS,
+  HISTORICAL_CHECKPOINT_DELETION_REPLACEMENT_AUDITS,
+  HISTORICAL_CHECKPOINT_KEEP_SUITES,
+  HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES,
+  HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES,
+  KEEP_DELETION_CANDIDATE_DETAILS,
+  NEEDS_SPLIT_DELETION_CANDIDATE_DETAILS,
+  READY_DELETION_CANDIDATE_SUITES,
+  READY_REPLACED_ASSERTION_CATEGORIES,
+} = require('../fixtures/kernel/historicalCheckpointDeletionMap.cjs')
+
+const EXPECTED_CANDIDATE_TOTAL = 47
+const EXPECTED_READY_COUNT = 15
+const EXPECTED_NEEDS_SPLIT_COUNT = 31
+const EXPECTED_KEEP_COUNT = 1
+
+function assertUnique(values, label) {
+  const seen = new Set()
+  const duplicates = []
+  for (const value of values) {
+    if (seen.has(value)) duplicates.push(value)
+    seen.add(value)
+  }
+  assert.deepEqual(duplicates, [], `${label} should not contain duplicates`)
+}
+
+function sorted(values) {
+  return [...values].sort((a, b) => a.localeCompare(b))
+}
+
+function assertSameSet(actual, expected, label) {
+  assert.deepEqual(sorted(actual), sorted(expected), `${label} should match exactly`)
+}
+
+function manifestCandidates() {
+  return [
+    ...HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0419_V0427,
+    ...HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643,
+  ]
+}
+
+function assertMapShape() {
+  const candidates = manifestCandidates()
+  assert.equal(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0419_V0427.length, 29, 'v0.4.19-v0.4.27 manifest candidate count should remain stable')
+  assert.equal(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643.length, 18, 'v0.6.28-v0.6.43 manifest candidate count should remain stable')
+  assert.equal(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688.length, 0, 'v0.6.44-v0.6.88 must remain zero deletion candidates')
+  assert.equal(candidates.length, EXPECTED_CANDIDATE_TOTAL, 'combined deletion parity candidate count should remain stable')
+  assert.equal(HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP.length, EXPECTED_CANDIDATE_TOTAL, 'deletion parity map should enumerate every manifest candidate exactly once')
+  assert.equal(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT, 'tests/suites/go-kernel-v0643-historical-checkpoint-deletion-parity.cjs', 'parity audit suite path should stay versioned historical/audit-only')
+
+  assertUnique(candidates, 'manifest deletion candidates')
+  assertUnique(HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP.map(entry => entry.suite), 'deletion parity map suites')
+  assertSameSet(HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP.map(entry => entry.suite), candidates, 'deletion parity map candidate suites')
+
+  assert.deepEqual(HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.candidatesV0419V0427, HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0419_V0427, 'fixture should preserve v0.4.19-v0.4.27 manifest input snapshot')
+  assert.deepEqual(HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.candidatesV0628V0643, HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643, 'fixture should preserve v0.6.28-v0.6.43 manifest input snapshot')
+  assert.deepEqual(HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.candidatesV0644V0688, [], 'fixture should explicitly record empty v0.6.44-v0.6.88 candidate input')
+
+  assert.equal(HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS.ready, EXPECTED_READY_COUNT, 'ready-to-delete count should remain evidence-reviewed')
+  assert.equal(HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS['needs-split'], EXPECTED_NEEDS_SPLIT_COUNT, 'needs-split count should remain evidence-reviewed')
+  assert.equal(HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS.keep, EXPECTED_KEEP_COUNT, 'keep count should remain evidence-reviewed')
+  assert.equal(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES.length, EXPECTED_READY_COUNT, 'ready-to-delete list length should match count')
+  assert.equal(HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES.length, EXPECTED_NEEDS_SPLIT_COUNT, 'needs-split list length should match count')
+  assert.equal(HISTORICAL_CHECKPOINT_KEEP_SUITES.length, EXPECTED_KEEP_COUNT, 'keep list length should match count')
+  assertSameSet(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES, READY_DELETION_CANDIDATE_SUITES, 'ready-to-delete suite export')
+
+  const detailSuites = [
+    ...READY_DELETION_CANDIDATE_SUITES,
+    ...Object.keys(NEEDS_SPLIT_DELETION_CANDIDATE_DETAILS),
+    ...Object.keys(KEEP_DELETION_CANDIDATE_DETAILS),
+  ]
+  assertSameSet(detailSuites, candidates, 'manual readiness classifications')
+}
+
+function assertEntryShape() {
+  const validReadiness = new Set(DELETE_READINESS_VALUES)
+  const readyRequired = new Set(READY_REPLACED_ASSERTION_CATEGORIES)
+  for (const entry of HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP) {
+    assert.ok(entry.suite.startsWith('tests/suites/go-kernel-v0'), `${entry.suite} should be a historical Go suite path`)
+    assert.ok(entry.suite.endsWith('.cjs'), `${entry.suite} should be a CommonJS suite`)
+    assert.ok(['v0419-v0427', 'v0628-v0643'].includes(entry.scope), `${entry.suite} should have a supported historical scope`)
+    assert.ok(entry.familyId, `${entry.suite} should record its manifest family id`)
+    assert.ok(/^v0\.(?:4|6)\./.test(entry.version), `${entry.suite} should record a historical version`)
+    assert.equal(validReadiness.has(entry.deleteReadiness), true, `${entry.suite} should use a valid deleteReadiness value`)
+    assert.equal(entry.replacementAuditSuite, HISTORICAL_CHECKPOINT_DELETION_REPLACEMENT_AUDITS[entry.scope], `${entry.suite} should point at the scope replacement audit`)
+    assert.deepEqual(entry.supplementalAuditSuites, [HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT], `${entry.suite} should point at this parity audit as supplemental deletion evidence`)
+    assert.ok(Array.isArray(entry.replacedAssertionCategories), `${entry.suite} should list replaced assertion categories`)
+    assert.ok(entry.replacedAssertionCategories.length >= 5, `${entry.suite} should have meaningful replacement categories`)
+    assert.ok(Array.isArray(entry.uniqueAssertions), `${entry.suite} should list unique assertions or an empty list`)
+    assert.ok(Array.isArray(entry.risks), `${entry.suite} should list risks or an empty list`)
+    assert.ok(entry.rationale && typeof entry.rationale === 'string', `${entry.suite} should have a rationale`)
+
+    if (entry.deleteReadiness === 'ready') {
+      for (const category of readyRequired) assert.ok(entry.replacedAssertionCategories.includes(category), `${entry.suite} ready entry should include replacement category ${category}`)
+      assert.deepEqual(entry.uniqueAssertions, [], `${entry.suite} ready entry should not carry unresolved unique assertions`)
+      assert.deepEqual(entry.risks, [], `${entry.suite} ready entry should not carry unresolved risks`)
+      assertIncludes(entry.rationale, 'docs/checkpoint/evidence-only', `${entry.suite} ready rationale`)
+    } else {
+      assert.ok(entry.uniqueAssertions.length >= 1, `${entry.suite} non-ready entry should document unique assertions`)
+      assert.ok(entry.risks.length >= 1, `${entry.suite} non-ready entry should document deletion risks`)
+      assert.equal(entry.replacedAssertionCategories.includes('preserved-candidate-existence'), true, `${entry.suite} non-ready entry should still preserve candidate existence`)
+    }
+  }
+}
+
+function assertNoNonCandidatesInDeletionLists() {
+  const nonCandidates = [
+    ...HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.nonCandidatesV0628V0643,
+    ...HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.nonCandidatesV0644V0688,
+  ]
+  const mappedSuites = HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP.map(entry => entry.suite)
+  for (const suite of nonCandidates) {
+    assert.equal(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES.includes(suite), false, `${suite} must not appear in ready-to-delete suites`)
+    assert.equal(mappedSuites.includes(suite), false, `${suite} must not appear in manifest candidate deletion map`)
+  }
+
+  for (const suite of HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.nonCandidatesV0644V0688) {
+    assert.equal(suite.startsWith('tests/suites/go-kernel-v06'), true, `${suite} should be a v0.6 historical non-candidate`)
+    assert.equal(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES.includes(suite), false, `${suite} v0.6.44-v0.6.88 non-candidate must not be deletion-ready`)
+  }
+}
+
+function assertFilesStillExist(root) {
+  const allCandidateSuites = manifestCandidates()
+  for (const suite of allCandidateSuites) assert.equal(existsRel(root, suite), true, `${suite} should still exist; T023 must not delete old suites`)
+  for (const entry of HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP) {
+    assert.equal(existsRel(root, entry.replacementAuditSuite), true, `${entry.replacementAuditSuite} should exist for ${entry.suite}`)
+    for (const supplemental of entry.supplementalAuditSuites) assert.equal(existsRel(root, supplemental), true, `${supplemental} should exist for ${entry.suite}`)
+  }
+  for (const doc of [
+    ...HISTORICAL_CHECKPOINT_DOCS_V0419_V0427,
+    ...HISTORICAL_CHECKPOINT_DOCS_V0628_V0643,
+    ...HISTORICAL_CHECKPOINT_DOCS_V0644_V0688,
+  ]) {
+    assert.equal(existsRel(root, doc), true, `${doc} should still exist; T023 must not delete historical docs`)
+  }
+  for (const suite of HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.nonCandidatesV0644V0688) {
+    assert.equal(existsRel(root, suite), true, `${suite} should still exist as a v0.6.44-v0.6.88 non-candidate`)
+  }
+}
+
+function assertPackageSurfaceStillConservative(root) {
+  const packageJson = assertPackageNoReleaseGuards(root)
+  const files = packageJson.files || []
+  assert.equal(files.some(item => item === 'kernel' || item.startsWith('kernel/') || item.includes('/kernel/')), false, 'package files should not include kernel source')
+  assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'agentteamGoHelper'), false, 'package must not define native helper metadata')
+  assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'os'), false, 'main package must not define native os metadata')
+  assert.equal(Object.prototype.hasOwnProperty.call(packageJson, 'cpu'), false, 'main package must not define native cpu metadata')
+  for (const item of files) {
+    const allowedEmbeddedNative = item.startsWith(`${APPROVED_NATIVE_ROOT}/`)
+    const nativeGenerated = /(?:helper|native|manifest|artifact|bundle|generated|checksum|provenance|attestation|\.exe|\.dll|\.so|\.dylib|\.tgz)/i.test(item)
+    assert.equal(nativeGenerated && !allowedEmbeddedNative, false, `package files must not include unapproved native/helper/generated output: ${item}`)
+  }
+}
+
+module.exports = {
+  name: 'Go kernel historical checkpoint deletion parity map',
+  async run(env) {
+    const root = env.helpers.extRoot
+
+    assertMapShape()
+    assertEntryShape()
+    assertNoNonCandidatesInDeletionLists()
+    assertFilesStillExist(root)
+    assertPackageSurfaceStillConservative(root)
+    assertNoRawOrReleaseArtifacts(root)
+
+    const packageJson = JSON.parse(readRel(root, 'package.json'))
+    assert.equal(packageJson.version, '0.6.8', 'historical checkpoint deletion parity must keep package version unchanged')
+    assert.equal(path.basename(__filename), path.basename(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT), 'suite name should remain versioned historical/audit-only for tier auto-discovery')
+  },
+}
