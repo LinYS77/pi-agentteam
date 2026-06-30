@@ -96,10 +96,16 @@
     "typebox": "*"
   },
   "scripts": {
-    "test": "node tests/run.cjs",
+    "test": "node tests/run.cjs --tier default",
+    "test:smoke": "node tests/run.cjs --tier smoke",
+    "test:core": "node tests/run.cjs --tier core",
+    "test:go-current": "node tests/run.cjs --tier go-current",
+    "test:audit": "node tests/run.cjs --tier audit",
+    "test:regression": "node tests/run.cjs --tier regression",
+    "test:list": "node tests/run.cjs --list",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "check:boundaries": "node scripts/check-import-boundaries.cjs",
-    "check": "npm test && npm run typecheck && git diff --check && npm run -s check:boundaries",
+    "check": "npm run test:regression && npm run typecheck && git diff --check && npm run -s check:boundaries",
     "release:check": "npm run check && npm pack --dry-run --ignore-scripts",
     "test:e2e": "node tests/e2e/tmux-smoke.cjs",
     "bench:state-read-model": "PI_AGENTTEAM_PROFILE=1 node tests/bench/team-read-model-baseline.cjs",

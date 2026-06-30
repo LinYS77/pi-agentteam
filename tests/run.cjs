@@ -4,6 +4,13 @@ const path = require('node:path')
 const os = require('node:os')
 const assert = require('node:assert/strict')
 const { createStateBundle } = require('./stateBundle.cjs')
+const {
+  SUITES_DIR,
+  KNOWN_TIERS,
+  classifySuite,
+  selectSuiteFiles,
+  summarizeSelection,
+} = require('./suiteManifest.cjs')
 
 const DEFAULT_EXT_ROOT = path.resolve(__dirname, '..')
 const EXT_ROOT = process.env.AGENTTEAM_EXT_ROOT
@@ -455,44 +462,118 @@ function loadModules() {
   }
 }
 
-function loadSuites(filters = []) {
-  const suitesDir = path.join(__dirname, 'suites')
-  const preferredOrder = [
-    'core-vocabulary.cjs',
-    'core-task-reducer.cjs',
-    'core-message-policy.cjs',
-    'core-worker-health.cjs',
-    'package-install-smoke.cjs',
-    'tools-state.cjs',
-    'commands.cjs',
-    'protocol-decisions-orchestration.cjs',
-    'panel-renderer.cjs',
-    'public-output-leak-guards.cjs',
-    'outbox-store-runner.cjs',
-    'data-layout-vnext.cjs',
-  ]
-  const existing = new Set(
-    fs.readdirSync(suitesDir).filter(name => name.endsWith('.cjs')),
-  )
-  const ordered = preferredOrder.filter(name => existing.has(name))
-  for (const file of [...existing].sort((a, b) => a.localeCompare(b))) {
-    if (!ordered.includes(file)) ordered.push(file)
+function splitSelectorValues(value) {
+  return String(value || '').split(',').map(part => part.trim()).filter(Boolean)
+}
+
+function pushSelectorValues(target, value) {
+  target.push(...splitSelectorValues(value))
+}
+
+function requireOptionValue(argv, index, optionName) {
+  const value = argv[index + 1]
+  if (!value || value.startsWith('--')) throw new Error(`${optionName} requires a value`)
+  return value
+}
+
+function parseSuiteArgs(argv) {
+  const selector = { tiers: [], tags: [], filters: [], list: false, help: false }
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i]
+    if (arg === '--') {
+      selector.filters.push(...argv.slice(i + 1))
+      break
+    }
+    if (arg === '--help' || arg === '-h') {
+      selector.help = true
+      continue
+    }
+    if (arg === '--list' || arg === '-l') {
+      selector.list = true
+      continue
+    }
+    if (arg === '--all') {
+      selector.tiers.push('regression')
+      continue
+    }
+    if (arg === '--tier') {
+      pushSelectorValues(selector.tiers, requireOptionValue(argv, i, '--tier'))
+      i += 1
+      continue
+    }
+    if (arg.startsWith('--tier=')) {
+      pushSelectorValues(selector.tiers, arg.slice('--tier='.length))
+      continue
+    }
+    if (arg === '--tag') {
+      pushSelectorValues(selector.tags, requireOptionValue(argv, i, '--tag'))
+      i += 1
+      continue
+    }
+    if (arg.startsWith('--tag=')) {
+      pushSelectorValues(selector.tags, arg.slice('--tag='.length))
+      continue
+    }
+    if (arg.startsWith('--')) throw new Error(`Unknown test runner option: ${arg}`)
+    selector.filters.push(arg)
   }
-  const normalizedFilters = filters.map(filter => String(filter || '').trim()).filter(Boolean)
-  const selected = normalizedFilters.length === 0
-    ? ordered
-    : ordered.filter(file => {
-      const stem = file.replace(/\.cjs$/, '')
-      return normalizedFilters.some(filter => file === filter || file === `${filter}.cjs` || stem === filter || stem.includes(filter))
-    })
-  if (normalizedFilters.length > 0 && selected.length === 0) {
-    throw new Error(`No test suites matched: ${normalizedFilters.join(', ')}`)
-  }
-  return selected.map(file => require(path.join(suitesDir, file)))
+  return selector
+}
+
+function runnerUsage() {
+  return [
+    'Usage: node tests/run.cjs [--tier <tier>] [--tag <tag>] [--list] [suite-filter ...]',
+    '',
+    `Known tiers: ${KNOWN_TIERS.join(', ')}`,
+    'Aliases: --all/--tier regression run the full suite; --tier full and --tier all also map to regression.',
+    '',
+    'No arguments preserve the historical runner behavior and run every suite.',
+    'npm test intentionally passes --tier default so developer defaults exclude historical/audit suites.',
+    'Suite filters remain substring/stem compatible, e.g. node tests/run.cjs service-units.',
+  ].join('\n')
+}
+
+function describeSelector(selector) {
+  const parts = []
+  if (selector.tiers.length > 0) parts.push(`tiers=${selector.tiers.join(',')}`)
+  if (selector.tags.length > 0) parts.push(`tags=${selector.tags.join(',')}`)
+  if (selector.filters.length > 0) parts.push(`filters=${selector.filters.join(',')}`)
+  return parts.join(' ') || 'all suites'
+}
+
+function selectedSuiteFiles(selector) {
+  const selected = selectSuiteFiles(selector)
+  if (selected.length === 0) throw new Error(`No test suites matched selector: ${describeSelector(selector)}`)
+  return selected
+}
+
+function formatSuiteList(files) {
+  const lines = files.map(file => {
+    const meta = classifySuite(file)
+    return `${meta.stem} [tiers: ${meta.tiers.join(', ')}] [tags: ${meta.tags.join(', ')}]`
+  })
+  const counts = summarizeSelection(files)
+  const countText = Object.entries(counts).map(([tier, count]) => `${tier}=${count}`).join(', ')
+  lines.push(`Total suites: ${files.length}${countText ? ` (${countText})` : ''}`)
+  return lines.join('\n')
+}
+
+function loadSuites(files) {
+  return files.map(file => require(path.join(SUITES_DIR, file)))
 }
 
 async function main() {
-  const suiteFilters = process.argv.slice(2)
+  const suiteSelector = parseSuiteArgs(process.argv.slice(2))
+  if (suiteSelector.help) {
+    log(runnerUsage())
+    return
+  }
+  const suiteFiles = selectedSuiteFiles(suiteSelector)
+  if (suiteSelector.list) {
+    log(formatSuiteList(suiteFiles))
+    return
+  }
+
   createStubs()
   transpile()
 
@@ -543,7 +624,7 @@ async function main() {
         },
       }
 
-      for (const suite of loadSuites(suiteFilters)) {
+      for (const suite of loadSuites(suiteFiles)) {
         log(`▶ suite: ${suite.name}`)
         await suite.run(env)
         log(`✅ ${suite.name} passed`)

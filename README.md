@@ -366,15 +366,23 @@ Public behavior remains behavior-preserving: `agentteam_receive` is the full-tex
 ## ✅ Checks & Release Readiness
 
 ```bash
-npm test                 # unit/package smoke suites
-npm run typecheck        # tsc --noEmit
-npm run check:boundaries      # import/public-surface boundary guard
-npm run check                 # test + typecheck + git diff --check + boundaries
-npm run release:check         # npm run check + npm pack --dry-run --ignore-scripts
+npm test                    # default developer tier: core + current Go/package guards, no historical audit/bench suites
+npm run test:smoke          # smallest high-signal package/core smoke tier
+npm run test:core           # non-Go, non-benchmark core/tool/UI/runtime suites
+npm run test:go-current     # current Go/kernel guard suites
+npm run test:audit          # historical Go/kernel audit suites removed from the default path
+npm run test:regression     # full suite set, equivalent to the historical flat npm test scope
+npm run test:list           # list suites with tier/tag metadata
+npm run typecheck           # tsc --noEmit
+npm run check:boundaries    # import/public-surface boundary guard
+npm run check               # full regression + typecheck + git diff --check + boundaries
+npm run release:check       # npm run check + npm pack --dry-run --ignore-scripts
 npm run bench:state-read-model # deterministic state/read-model baseline JSON
 npm run bench:team-panel-tmux  # deterministic /team panel/tmux refresh baseline JSON
-npm run test:e2e              # optional manual tmux smoke; requires real tmux/pi runtime
+npm run test:e2e            # optional manual tmux smoke; requires real tmux/pi runtime
 ```
+
+`npm test` is intentionally reduced for the default developer path. It excludes historical/audit and benchmark suites, but no coverage is deleted: `npm run test:regression` still runs the complete suite set, and `npm run check`/`npm run release:check` use that full regression gate. The raw runner keeps focused substring filters (`node tests/run.cjs service-units`) and also accepts `--tier`/`--tag` selectors.
 
 `release:check` is safe for local CI: it does not publish, install, tag, bump versions, or edit user settings. It intentionally does **not** run `test:e2e` because the e2e smoke requires a real tmux/pi environment and is best run manually in a clean `PI_AGENTTEAM_HOME` sandbox.
 
@@ -384,16 +392,17 @@ The package surface is intentionally explicit: `package.json#files` lists requir
 
 Go kernel work is GitHub-only and optional in this release line. `docs/decisions/0001-replaceable-go-kernel.md` records the accepted planning direction: TypeScript remains the mandatory pi/npm control plane, and Go work must be optional, replaceable, disabled/fallback-safe, and limited to profiling-proven compact helper paths. `docs/go-kernel-port-audit.md` records candidate seams and boundaries; `docs/perf/go-kernel-slice7-checkpoint.md` summarizes the older Slice 0-7 benchmark/perf review commands and shadow diagnostics; `docs/perf/v0.4.17-kernel-contract-hardening.md` freezes the current optional-helper contract and parity-corpus hardening; `docs/perf/v0.4.17-kernel-release-checklist.md` is the GitHub-only v0.4.17 reviewer checklist. This is not a native binary commitment, not runtime `/team` UI, and not npm publish guidance.
 
-Current automated/source-level status: FULL PASS only after `npm test`, `npm run typecheck`, `git diff --check`, `npm run check:boundaries`, `npm run check`, and `npm run release:check` pass in the working tree. This is local validation, not publishing.
+Current automated/source-level status: FULL PASS only after `npm run test:regression`, `npm run typecheck`, `git diff --check`, `npm run check:boundaries`, `npm run check`, and `npm run release:check` pass in the working tree. `npm test` is the reduced default developer tier, not the full-release gate. This is local validation, not publishing.
 
-| Suite | Covers |
-|-------|--------|
-| Tools + state flow | create → spawn → send → receive → task lifecycle |
-| Command | /team unified console |
-| Protocol + orchestration | Wake defaults, leader digest injection |
-| Panel rendering | Visual output across terminal widths |
-| Delivery + permission guards | Role-based access control |
-| Service unit helpers | Pure worker/message/task/context helper behavior |
+| Tier / Suite | Covers |
+|--------------|--------|
+| `npm test` / `--tier default` | Default developer path: non-benchmark core/tool/UI/runtime suites plus current Go/kernel package/no-release guards; historical Go audit and benchmark suites are excluded. |
+| `npm run test:smoke` / `--tier smoke` | Smallest package/core safety net, including public vocabulary, package install smoke, public surface/output guards, and Phase 0 tiering checks. |
+| `npm run test:core` / `--tier core` | Non-Go, non-benchmark app/tool/state/command/panel/runtime suites such as tools/state flow, `/team`, protocol/orchestration, panel rendering, delivery guards, and service unit helpers. |
+| `npm run test:go-current` / `--tier go-current` | Current Go/kernel guard suites, including latest release/no-action and worker delivery boundary gates. |
+| `npm run test:audit` / `--tier audit` | Historical Go/kernel checkpoint and cutover suites preserved outside the default developer path. |
+| `npm run test:regression` / `--tier regression` | Complete suite set, equivalent to the former flat default runner scope and used by `check`/`release:check`. |
+| `npm run test:list` | Lists suite files with tier/tag metadata; focused filters still work with `node tests/run.cjs <suite-stem>`. |
 
 ## 🧪 Manual smoke checklist
 
