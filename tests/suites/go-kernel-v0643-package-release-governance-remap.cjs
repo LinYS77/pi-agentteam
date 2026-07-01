@@ -12,6 +12,12 @@ const {
   CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_GUARD_SUITE,
   assertConsolidatedPackageReleaseGovernance,
 } = require('../helpers/packageReleaseGovernanceGuards.cjs')
+const {
+  READINESS_COMMAND_SURFACE_CATEGORIES: HELPER_READINESS_CATEGORIES,
+  READINESS_COMMAND_SURFACE_GUARD_HELPER,
+  READINESS_COMMAND_SURFACE_GUARD_SUITE,
+  assertReadinessCommandSurface,
+} = require('../helpers/readinessCommandSurfaceGuards.cjs')
 const { assertPackageVersion } = require('../helpers/packageGuards.cjs')
 const {
   HISTORICAL_CHECKPOINT_DOCS_V0419_V0427,
@@ -32,6 +38,7 @@ const {
   CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_CATEGORIES,
   CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_CATEGORY_DESCRIPTIONS,
   HISTORICAL_CHECKPOINT_STEP5A_CONSOLIDATED_GUARD_EVIDENCE,
+  HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS,
@@ -40,13 +47,23 @@ const {
   HISTORICAL_CHECKPOINT_STEP5A_STILL_KEEP_SUITES,
   HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES,
   HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES,
+  READINESS_COMMAND_SURFACE_CATEGORIES,
+  READINESS_COMMAND_SURFACE_CATEGORY_DESCRIPTIONS,
   RESIDUAL_REMAP_DETAILS,
 } = require('../fixtures/kernel/historicalCheckpointStep5Remap.cjs')
 
 const EXPECTED_REMAINING_TOTAL = 32
 const EXPECTED_STEP5B_READY = 0
-const EXPECTED_STILL_NEEDS_SPLIT = 31
+const EXPECTED_STEP5C_READY = 4
+const EXPECTED_STILL_NEEDS_SPLIT = 27
 const EXPECTED_STILL_KEEP = 1
+const EXPECTED_STEP5C_DELETION_CANDIDATES = Object.freeze([
+  'tests/suites/go-kernel-v0424-readiness-command-contract-docs.cjs',
+  'tests/suites/go-kernel-v0424-readiness-command-seam-docs.cjs',
+  'tests/suites/go-kernel-v0424-readiness-command-sunset-docs.cjs',
+  'tests/suites/go-kernel-v0424-readiness-command-checkpoint-docs.cjs',
+])
 
 const SCRIPT_FILES_THAT_MUST_REMAIN = Object.freeze([
   'scripts/build-go-helper-artifact.cjs',
@@ -82,8 +99,10 @@ const SOURCE_AND_RUNTIME_FILES_THAT_MUST_REMAIN = Object.freeze([
   'deliveryPolicy.ts',
   'core/kernel.ts',
   'commands/readiness.ts',
+  'commands/team.ts',
   'api/tools.ts',
   'api/commands.ts',
+  'core/kernelDiagnostics.ts',
   'runtime/leaderAttention.ts',
   'runtime/leaderMailboxSignalRuntime.ts',
   'runtime/bridgeDeliveryPump.ts',
@@ -106,7 +125,9 @@ const FIXTURE_AND_HELPER_FILES_THAT_MUST_REMAIN = Object.freeze([
   'tests/helpers/nativeGuards.cjs',
   'tests/helpers/packageGuards.cjs',
   'tests/helpers/packageReleaseGovernanceGuards.cjs',
+  'tests/helpers/readinessCommandSurfaceGuards.cjs',
   'tests/helpers/reviewArtifactWorkflowGuard.cjs',
+  'tests/suites/readiness-command-surface-guard.cjs',
 ])
 
 function sorted(values) {
@@ -154,6 +175,26 @@ function assertConsolidatedGuard(root) {
   }
 }
 
+async function assertReadinessGuard(root, env) {
+  const result = await assertReadinessCommandSurface(root, env)
+  assertSameSet(result.checkedCategories, HELPER_READINESS_CATEGORIES, 'helper checked readiness command surface categories')
+  assertSameSet(READINESS_COMMAND_SURFACE_CATEGORIES, HELPER_READINESS_CATEGORIES, 'remap fixture readiness categories')
+  assert.equal(Object.keys(READINESS_COMMAND_SURFACE_CATEGORY_DESCRIPTIONS).length, HELPER_READINESS_CATEGORIES.length, 'each readiness category should have a description')
+  for (const category of HELPER_READINESS_CATEGORIES) {
+    assert.ok(READINESS_COMMAND_SURFACE_CATEGORY_DESCRIPTIONS[category], `${category} should have a description`)
+  }
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE.suite, READINESS_COMMAND_SURFACE_GUARD_SUITE, 'readiness evidence should point at current guard suite')
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE.helper, READINESS_COMMAND_SURFACE_GUARD_HELPER, 'readiness evidence should point at current guard helper')
+  for (const rel of [
+    HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE.suite,
+    HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE.helper,
+    ...HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE.sourceFiles,
+  ]) {
+    assert.equal(existsRel(root, rel), true, `${rel} should exist as readiness command surface guard evidence`)
+  }
+  assert.ok(HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE.behaviorEvidence.length >= 3, 'readiness guard evidence should include behavioral checks')
+}
+
 function assertRemapCompleteness() {
   const remaining = remainingCandidateSuites()
   const remappedSuites = HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite)
@@ -165,12 +206,14 @@ function assertRemapCompleteness() {
   assert.deepEqual(HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS, {
     totalRemainingCandidates: EXPECTED_REMAINING_TOTAL,
     step5BReady: EXPECTED_STEP5B_READY,
+    step5CReady: EXPECTED_STEP5C_READY,
     stillNeedsSplit: EXPECTED_STILL_NEEDS_SPLIT,
     stillKeep: EXPECTED_STILL_KEEP,
-  }, 'Step 5A remap counts should stay explicit')
-  assertSameSet(HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES, HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES, 'Step 5A still-needs-split suites')
-  assertSameSet(HISTORICAL_CHECKPOINT_STEP5A_STILL_KEEP_SUITES, HISTORICAL_CHECKPOINT_KEEP_SUITES, 'Step 5A still-keep suites')
-  assert.deepEqual(HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES, [], 'Step 5B deletion candidate list should remain empty until residual assertions are migrated')
+  }, 'Step 5 remap counts should stay explicit')
+  assertSameSet(HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES, EXPECTED_STEP5C_DELETION_CANDIDATES, 'Step 5C deletion candidate list')
+  assertSameSet(HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES, HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES.filter(suite => !HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES.includes(suite)), 'Step 5 still-needs-split suites')
+  assertSameSet(HISTORICAL_CHECKPOINT_STEP5A_STILL_KEEP_SUITES, HISTORICAL_CHECKPOINT_KEEP_SUITES, 'Step 5 still-keep suites')
+  assert.deepEqual(HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES, [], 'Step 5B package/release-only deletion candidate list should remain empty')
 
   const validStatuses = new Set(HISTORICAL_CHECKPOINT_STEP5A_STATUS_VALUES)
   const priorBySuite = new Map(HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP.map(entry => [entry.suite, entry]))
@@ -190,16 +233,27 @@ function assertRemapCompleteness() {
       assert.equal(entry.currentStatus, 'step5b-ready', `${entry.suite} Step 5B candidate should have step5b-ready status`)
       assert.deepEqual(entry.residualUniqueAssertions, [], `${entry.suite} Step 5B candidate should have no residual assertions`)
       assert.deepEqual(entry.residualRisks, [], `${entry.suite} Step 5B candidate should have no residual risks`)
+    } else if (entry.step5CDeletionCandidate) {
+      assert.equal(entry.currentStatus, 'step5c-ready', `${entry.suite} Step 5C candidate should have step5c-ready status`)
+      assert.deepEqual(entry.residualUniqueAssertions, [], `${entry.suite} Step 5C candidate should have no residual assertions`)
+      assert.deepEqual(entry.residualRisks, [], `${entry.suite} Step 5C candidate should have no residual risks`)
+      assertSameSet(entry.readinessCommandSurfaceAssertionCategories, HELPER_READINESS_CATEGORIES, `${entry.suite} Step 5C readiness coverage categories`)
+      assert.equal(entry.readinessCommandSurfaceGuardEvidence.suite, READINESS_COMMAND_SURFACE_GUARD_SUITE, `${entry.suite} Step 5C readiness guard suite evidence`)
+      assert.equal(entry.readinessCommandSurfaceGuardEvidence.helper, READINESS_COMMAND_SURFACE_GUARD_HELPER, `${entry.suite} Step 5C readiness guard helper evidence`)
+      assert.ok(entry.rationale.includes('current readiness command surface guard'), `${entry.suite} Step 5C rationale should cite the current readiness guard`)
     } else {
       assert.notEqual(entry.currentStatus, 'step5b-ready', `${entry.suite} non-ready entry must not use step5b-ready status`)
+      assert.notEqual(entry.currentStatus, 'step5c-ready', `${entry.suite} non-ready entry must not use step5c-ready status`)
       assert.ok(entry.residualUniqueAssertions.length >= 1, `${entry.suite} non-ready entry should keep residual assertions`)
       assert.ok(entry.residualRisks.length >= 1, `${entry.suite} non-ready entry should keep residual risks`)
     }
 
     if (HISTORICAL_CHECKPOINT_KEEP_SUITES.includes(entry.suite)) {
-      assert.equal(entry.currentStatus, 'step5a-keep', `${entry.suite} keep suite should remain keep after Step 5A`)
+      assert.equal(entry.currentStatus, 'step5a-keep', `${entry.suite} keep suite should remain keep after Step 5A/5B`)
+    } else if (HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES.includes(entry.suite)) {
+      assert.equal(entry.currentStatus, 'step5c-ready', `${entry.suite} should be Step 5C ready after readiness surface migration`)
     } else {
-      assert.equal(entry.currentStatus, 'step5a-needs-split', `${entry.suite} should remain needs-split after Step 5A`)
+      assert.equal(entry.currentStatus, 'step5a-needs-split', `${entry.suite} should remain needs-split after Step 5B readiness migration`)
     }
   }
 }
@@ -207,10 +261,12 @@ function assertRemapCompleteness() {
 function assertNoDeletionOrReintroduction(root) {
   const remapped = new Set(HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite))
   const step5B = new Set(HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES)
+  const step5C = new Set(HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES)
   for (const suite of HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES) {
     assert.equal(existsRel(root, suite), false, `${suite} should remain absent after T024`)
     assert.equal(remapped.has(suite), false, `${suite} must not be remapped as a remaining candidate`)
     assert.equal(step5B.has(suite), false, `${suite} must not be reintroduced as a Step 5B candidate`)
+    assert.equal(step5C.has(suite), false, `${suite} must not be reintroduced as a Step 5C candidate`)
   }
   for (const suite of remainingCandidateSuites()) {
     assert.equal(existsRel(root, suite), true, `${suite} should remain present; Step 5A is non-destructive`)
@@ -225,6 +281,7 @@ function assertNonCandidatesRemainNonCandidates(root) {
   assert.deepEqual(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, [], 'v0.6.44-v0.6.88 replacement/deletion candidates should remain empty')
   const remapped = new Set(HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite))
   const step5B = new Set(HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES)
+  const step5C = new Set(HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES)
   for (const suite of [
     ...HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0628_V0643,
     ...HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0644_V0688,
@@ -232,6 +289,7 @@ function assertNonCandidatesRemainNonCandidates(root) {
     assert.equal(existsRel(root, suite), true, `${suite} should remain present as a non-candidate`)
     assert.equal(remapped.has(suite), false, `${suite} non-candidate must not appear in Step 5A remaining-candidate remap`)
     assert.equal(step5B.has(suite), false, `${suite} non-candidate must not appear in Step 5B deletion candidates`)
+    assert.equal(step5C.has(suite), false, `${suite} non-candidate must not appear in Step 5C deletion candidates`)
   }
 }
 
@@ -265,6 +323,7 @@ module.exports = {
     assert.equal(path.basename(__filename), path.basename(HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT), 'Step 5A remap audit should stay versioned historical/audit-only')
 
     assertConsolidatedGuard(root)
+    await assertReadinessGuard(root, env)
     assertRemapCompleteness()
     assertNoDeletionOrReintroduction(root)
     assertNonCandidatesRemainNonCandidates(root)

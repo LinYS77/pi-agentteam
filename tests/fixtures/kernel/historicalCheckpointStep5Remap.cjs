@@ -5,6 +5,12 @@ const {
   CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_GUARD_SUITE,
 } = require('../../helpers/packageReleaseGovernanceGuards.cjs')
 const {
+  READINESS_COMMAND_SURFACE_CATEGORIES,
+  READINESS_COMMAND_SURFACE_CATEGORY_DESCRIPTIONS,
+  READINESS_COMMAND_SURFACE_GUARD_HELPER,
+  READINESS_COMMAND_SURFACE_GUARD_SUITE,
+} = require('../../helpers/readinessCommandSurfaceGuards.cjs')
+const {
   HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT,
   HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP,
   HISTORICAL_CHECKPOINT_DELETION_REPLACEMENT_AUDITS,
@@ -18,6 +24,7 @@ const HISTORICAL_CHECKPOINT_STEP5A_STATUS_VALUES = Object.freeze([
   'step5a-needs-split',
   'step5a-keep',
   'step5b-ready',
+  'step5c-ready',
 ])
 
 const HISTORICAL_CHECKPOINT_STEP5A_CONSOLIDATED_GUARD_EVIDENCE = Object.freeze({
@@ -31,6 +38,30 @@ const HISTORICAL_CHECKPOINT_STEP5A_CONSOLIDATED_GUARD_EVIDENCE = Object.freeze({
   ]),
   supportingFixtures: Object.freeze([
     'tests/fixtures/kernel/v0636/defaultGoReadinessLedger.cjs',
+  ]),
+})
+
+const HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE = Object.freeze({
+  suite: READINESS_COMMAND_SURFACE_GUARD_SUITE,
+  helper: READINESS_COMMAND_SURFACE_GUARD_HELPER,
+  sourceFiles: Object.freeze([
+    'commands/readiness.ts',
+    'commands/team.ts',
+    'api/commands.ts',
+    'api/tools.ts',
+    'core/kernelDiagnostics.ts',
+    'teamPanel.ts',
+    'renderers.ts',
+    'teamPanel/dataSource.ts',
+    'teamPanel/input.ts',
+    'teamPanel/layout.ts',
+    'teamPanel/readModel.ts',
+    'teamPanel/viewModel.ts',
+  ]),
+  behaviorEvidence: Object.freeze([
+    'direct buildReadinessText() compact-safe output checks',
+    'direct handleTeamReadinessCommand() parser acceptance/rejection checks',
+    '/team readiness command execution without panel/state mutation',
   ]),
 })
 
@@ -72,39 +103,35 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
     residualRisks: Object.freeze(['Split compact diagnostics source/runtime and behavior-suite evidence before deleting.']),
   },
   'tests/suites/go-kernel-v0424-readiness-command-contract-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'kernel adapter metadata still verifies readiness remains explicit/local and non-default',
-      'diagnostics helper/source seam references remain outside package/release governance',
-    ]),
-    residualRisks: Object.freeze(['Migrate readiness command runtime metadata and diagnostics seam assertions before deleting.']),
+    currentStatus: 'step5c-ready',
+    readinessCommandSurfaceAssertionCategories: Object.freeze([...READINESS_COMMAND_SURFACE_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0424-readiness-command-seam-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'command and tool source-file seam checks for the transitional readiness command remain unique',
-      'readiness model-callable tool/public API surface constraints are command-specific beyond the consolidated pi facade guard',
-    ]),
-    residualRisks: Object.freeze(['Deleting now could broaden the readiness command/tool seam without a dedicated owner.']),
+    currentStatus: 'step5c-ready',
+    readinessCommandSurfaceAssertionCategories: Object.freeze([...READINESS_COMMAND_SURFACE_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0424-readiness-command-sunset-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'readiness command, team command, tool, panel, and renderer source minimality checks remain unique',
-      'parser literal count and absence of nested readiness options/subcommands remain command-sunset-specific',
-    ]),
-    residualRisks: Object.freeze(['Migrate transitional readiness command minimality checks before deleting.']),
+    currentStatus: 'step5c-ready',
+    readinessCommandSurfaceAssertionCategories: Object.freeze([...READINESS_COMMAND_SURFACE_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0424-readiness-command-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'readiness command and public-surface source containment checks remain unique',
-      'integration and sunset suite evidence links remain checkpoint-specific behavior evidence',
-    ]),
-    residualRisks: Object.freeze(['Deleting now would lose command containment and integration/sunset evidence checks.']),
+    currentStatus: 'step5c-ready',
+    readinessCommandSurfaceAssertionCategories: Object.freeze([...READINESS_COMMAND_SURFACE_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0425-native-availability-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
       'core/kernel.ts explicit helper-path and fallback behavior checks remain source-specific',
-      'readiness command/team command source checks preventing command expansion remain unique',
+      'v0.4.25 native availability checkpoint source/evidence assertions remain broader than the current readiness surface guard',
     ]),
-    residualRisks: Object.freeze(['Split helper-path/fallback and readiness command source assertions before deleting.']),
+    residualRisks: Object.freeze(['Readiness command expansion is covered by the current guard; split remaining helper-path/fallback and native availability source assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0426-storage-release-policy-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -114,17 +141,17 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
   },
   'tests/suites/go-kernel-v0426-artifact-pipeline-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'core/kernel.ts and readiness command source checks for unchanged production behavior remain unique',
+      'core/kernel.ts production behavior source checks remain unique',
       'artifact pipeline behavior/prototype suite links remain checkpoint-specific evidence',
     ]),
-    residualRisks: Object.freeze(['Deleting now would remove production-behavior source checks and artifact pipeline evidence links.']),
+    residualRisks: Object.freeze(['Readiness command containment is covered by the current guard; deleting now would still remove production-behavior source checks and artifact pipeline evidence links.']),
   },
   'tests/suites/go-kernel-v0427-clean-install-consumption-contract-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'core/kernel.ts and readiness source checks for production resolver behavior remain unique',
-      'clean-install behavior suites and resolver discovery contracts remain linked evidence outside package/release governance',
+      'core/kernel.ts production resolver behavior checks remain unique',
+      'clean-install behavior suites and resolver discovery contracts remain linked evidence outside package/release/readiness governance',
     ]),
-    residualRisks: Object.freeze(['Migrate clean-install source/resolver behavior evidence before deleting.']),
+    residualRisks: Object.freeze(['Readiness command containment is covered by the current guard; migrate clean-install source/resolver behavior evidence before deleting.']),
   },
   'tests/suites/go-kernel-v0427-install-layout-matrix-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -136,11 +163,11 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
   },
   'tests/suites/go-kernel-v0427-consumption-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'core/kernel.ts and readiness source checks for helper-path/default behavior remain unique',
-      'artifact bundle hash checks remain outside package/release governance',
+      'core/kernel.ts helper-path/default behavior checks remain unique',
+      'artifact bundle hash checks remain outside package/release/readiness governance',
       'clean-install, resolver discovery, rollback, and package-native behavior suite links remain checkpoint-specific',
     ]),
-    residualRisks: Object.freeze(['Split helper/default source checks, artifact hashes, and behavior-suite evidence before deleting.']),
+    residualRisks: Object.freeze(['Readiness command containment is covered by the current guard; split helper/default source checks, artifact hashes, and behavior-suite evidence before deleting.']),
   },
   'tests/suites/go-kernel-v0629-real-implementation-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -181,10 +208,10 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
   },
   'tests/suites/go-kernel-v0633-clean-install-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'core kernel, resolver, fingerprint, readiness, team command, and Go helper source reads remain unique',
-      'roadmap future gating and tool/control-plane non-expansion assertions remain checkpoint-specific',
+      'core kernel, resolver, fingerprint, and Go helper source reads remain unique',
+      'roadmap future gating and broad tool/control-plane non-expansion assertions remain checkpoint-specific beyond readiness command containment',
     ]),
-    residualRisks: Object.freeze(['Deleting now would remove broad source/control-plane and roadmap-gating checks.']),
+    residualRisks: Object.freeze(['Readiness command containment is covered by the current guard; deleting now would still remove broad source/control-plane and roadmap-gating checks.']),
   },
   'tests/suites/go-kernel-v0634-ownership-install-layout-contract-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -215,17 +242,17 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
   },
   'tests/suites/go-kernel-v0634-package-release-decision-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'kernel/resolver/readiness/team command and Go helper source checks for package/release/default boundaries remain unique',
-      'tool control-plane invariants remain broader than package/release governance mechanics',
+      'kernel/resolver and Go helper source checks for package/release/default boundaries remain unique',
+      'tool control-plane invariants remain broader than package/release governance mechanics and readiness command containment',
     ]),
-    residualRisks: Object.freeze(['Migrate broad source and tool-control-plane assertions before deleting.']),
+    residualRisks: Object.freeze(['Readiness command containment is covered by the current guard; migrate broader source and tool-control-plane assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0635-pi-extension-compliance-contract-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'index.ts, kernel/resolver, readiness, and tool fixture source checks for pi extension boundaries remain unique',
-      'named public API surface assertions remain broader than package manifest/facade checks',
+      'index.ts, kernel/resolver, and tool fixture source checks for pi extension boundaries remain unique',
+      'named public API surface assertions remain broader than package manifest/facade and readiness command surface checks',
     ]),
-    residualRisks: Object.freeze(['Move pi extension public surface and source/tool fixture assertions before deleting.']),
+    residualRisks: Object.freeze(['Readiness command containment is covered by the current guard; move pi extension public surface and source/tool fixture assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0635-pi-extension-compliance-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -282,6 +309,8 @@ function remapEntryForSuite(suite) {
   if (!residual) throw new Error(`Missing Step 5A residual remap details for ${suite}`)
   const currentStatus = residual.currentStatus || 'step5a-needs-split'
   const step5BDeletionCandidate = currentStatus === 'step5b-ready'
+  const step5CDeletionCandidate = currentStatus === 'step5c-ready'
+  const readinessCommandSurfaceAssertionCategories = residual.readinessCommandSurfaceAssertionCategories || []
   return Object.freeze({
     suite,
     priorDeleteReadiness: prior.deleteReadiness,
@@ -292,12 +321,19 @@ function remapEntryForSuite(suite) {
     deletionParityAuditSuite: HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT,
     packageReleaseGovernanceAssertionCategories: Object.freeze([...CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_CATEGORIES]),
     consolidatedGuardEvidence: HISTORICAL_CHECKPOINT_STEP5A_CONSOLIDATED_GUARD_EVIDENCE,
+    readinessCommandSurfaceAssertionCategories: Object.freeze([...readinessCommandSurfaceAssertionCategories]),
+    readinessCommandSurfaceGuardEvidence: readinessCommandSurfaceAssertionCategories.length > 0
+      ? HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE
+      : null,
     residualUniqueAssertions: residual.residualUniqueAssertions,
     residualRisks: residual.residualRisks,
     step5BDeletionCandidate,
+    step5CDeletionCandidate,
     rationale: step5BDeletionCandidate
       ? 'Existing historical audits/parity plus the consolidated package/release governance guard cover this suite; no residual unique assertions remain.'
-      : 'The consolidated package/release governance guard covers shared package/release mechanics, but residual source/runtime/script/workflow/fixture/path-safety/behavior assertions still require migration or explicit acceptance before deletion.',
+      : step5CDeletionCandidate
+        ? 'Existing historical audits/parity, the consolidated package/release governance guard, and the current readiness command surface guard cover this suite; no residual unique assertions remain.'
+        : 'The consolidated package/release governance guard and any migrated readiness command surface coverage cover shared mechanics, but residual source/runtime/script/workflow/fixture/path-safety/behavior assertions still require migration or explicit acceptance before deletion.',
   })
 }
 
@@ -308,6 +344,10 @@ const HISTORICAL_CHECKPOINT_STEP5A_REMAP = Object.freeze([
 
 const HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES = Object.freeze(HISTORICAL_CHECKPOINT_STEP5A_REMAP
   .filter(entry => entry.step5BDeletionCandidate)
+  .map(entry => entry.suite))
+
+const HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES = Object.freeze(HISTORICAL_CHECKPOINT_STEP5A_REMAP
+  .filter(entry => entry.step5CDeletionCandidate)
   .map(entry => entry.suite))
 
 const HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES = Object.freeze(HISTORICAL_CHECKPOINT_STEP5A_REMAP
@@ -321,6 +361,7 @@ const HISTORICAL_CHECKPOINT_STEP5A_STILL_KEEP_SUITES = Object.freeze(HISTORICAL_
 const HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS = Object.freeze({
   totalRemainingCandidates: HISTORICAL_CHECKPOINT_STEP5A_REMAP.length,
   step5BReady: HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES.length,
+  step5CReady: HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES.length,
   stillNeedsSplit: HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES.length,
   stillKeep: HISTORICAL_CHECKPOINT_STEP5A_STILL_KEEP_SUITES.length,
 })
@@ -336,6 +377,7 @@ module.exports = {
   CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_CATEGORIES,
   CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_CATEGORY_DESCRIPTIONS,
   HISTORICAL_CHECKPOINT_STEP5A_CONSOLIDATED_GUARD_EVIDENCE,
+  HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS,
@@ -344,6 +386,9 @@ module.exports = {
   HISTORICAL_CHECKPOINT_STEP5A_STILL_KEEP_SUITES,
   HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES,
   HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES,
+  READINESS_COMMAND_SURFACE_CATEGORIES,
+  READINESS_COMMAND_SURFACE_CATEGORY_DESCRIPTIONS,
   RESIDUAL_REMAP_DETAILS,
   sorted,
 }

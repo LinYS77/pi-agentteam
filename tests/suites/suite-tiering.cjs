@@ -11,6 +11,9 @@ const {
 } = require('../fixtures/kernel/historicalCheckpointStep5Remap.cjs')
 const { assertPackageVersion } = require('../helpers/packageGuards.cjs')
 const {
+  READINESS_COMMAND_SURFACE_GUARD_SUITE,
+} = require('../helpers/readinessCommandSurfaceGuards.cjs')
+const {
   classifySuite,
   discoverSuiteFiles,
   isCurrentGoKernelSuite,
@@ -20,14 +23,14 @@ const {
   summarizeSelection,
 } = require('../suiteManifest.cjs')
 
-const EXPECTED_TIER_COUNTS_POST_T026 = Object.freeze({
-  default: 76,
+const EXPECTED_TIER_COUNTS_POST_T027 = Object.freeze({
+  default: 77,
   smoke: 10,
-  core: 57,
+  core: 58,
   'go-current': 19,
   audit: 158,
   benchmark: 3,
-  regression: 237,
+  regression: 238,
 })
 
 const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
@@ -38,6 +41,7 @@ const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
 
 const HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE = normalizeSuiteFile(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT)
 const HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT_FILE = normalizeSuiteFile(HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT)
+const READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE = normalizeSuiteFile(READINESS_COMMAND_SURFACE_GUARD_SUITE)
 const HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES = HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES.map(normalizeSuiteFile)
 const HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITE_FILES = HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES.map(normalizeSuiteFile)
 const HISTORICAL_CHECKPOINT_KEEP_SUITE_FILES = HISTORICAL_CHECKPOINT_KEEP_SUITES.map(normalizeSuiteFile)
@@ -76,10 +80,10 @@ module.exports = {
       regression: regressionSuites,
     }
 
-    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T026.regression, 'manifest should encode the post-T026 discovered suite count')
-    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T026, 'suite tier summary should encode the post-T026 topology')
+    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T027.regression, 'manifest should encode the post-T027 discovered suite count')
+    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T027, 'suite tier summary should encode the post-T027 topology')
     for (const [tier, suites] of Object.entries(tierSelections)) {
-      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T026[tier], `${tier} tier count should match post-T026 topology`)
+      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T027[tier], `${tier} tier count should match post-T027 topology`)
     }
     assert.deepEqual(regressionSuites, allSuites, 'regression tier should preserve every suite')
     assert.ok(defaultSuites.length < regressionSuites.length, 'default tier should be reduced from full regression')
@@ -89,6 +93,11 @@ module.exports = {
 
     assert.ok(defaultSuites.includes('service-units.cjs'), 'default tier should keep non-Go core integration coverage')
     assert.ok(defaultSuites.includes('package-install-smoke.cjs'), 'default tier should keep package/no-release smoke coverage')
+    assert.deepEqual(classifySuite(READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE).tiers, ['core', 'default', 'regression'], 'readiness command surface guard should remain current core/default coverage')
+    assert.ok(defaultSuites.includes(READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE), 'default tier should include current readiness command surface guard')
+    assert.ok(coreSuites.includes(READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE), 'core tier should include current readiness command surface guard')
+    assert.ok(regressionSuites.includes(READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE), 'regression tier should include current readiness command surface guard')
+    assert.equal(auditSuites.includes(READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE), false, 'audit tier should not classify the current readiness command surface guard as historical audit')
     assert.ok(smokeSuites.includes('package-install-smoke.cjs'), 'smoke tier should include package smoke coverage')
     assert.ok(goCurrentSuites.includes('go-kernel-v0696-v07-release-decision-package.cjs'), 'go-current tier should keep latest release/no-action guard')
     assert.ok(defaultSuites.includes('go-kernel-v0696-v07-release-decision-package.cjs'), 'default tier should keep current Go release guard')
