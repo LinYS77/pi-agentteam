@@ -32,6 +32,9 @@ const {
   READINESS_COMMAND_SURFACE_GUARD_SUITE,
 } = require('../helpers/readinessCommandSurfaceGuards.cjs')
 const {
+  GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE,
+} = require('../helpers/goTmuxCutoverBatch3Guards.cjs')
+const {
   classifySuite,
   discoverSuiteFiles,
   isCurrentGoKernelSuite,
@@ -41,14 +44,14 @@ const {
   summarizeSelection,
 } = require('../suiteManifest.cjs')
 
-const EXPECTED_TIER_COUNTS_POST_T034 = Object.freeze({
-  default: 83,
+const EXPECTED_TIER_COUNTS_POST_T035 = Object.freeze({
+  default: 84,
   smoke: 10,
   core: 59,
-  'go-current': 24,
+  'go-current': 25,
   audit: 131,
   benchmark: 3,
-  regression: 217,
+  regression: 218,
 })
 
 const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
@@ -66,6 +69,7 @@ const DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE_FILE = normalizeSuiteFile(DEFAULT
 const PARSER_DIAGNOSTICS_GUARD_SUITE_FILE = normalizeSuiteFile(PARSER_DIAGNOSTICS_GUARD_SUITE)
 const KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE_FILE = normalizeSuiteFile(KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE)
 const READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE = normalizeSuiteFile(READINESS_COMMAND_SURFACE_GUARD_SUITE)
+const GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE_FILE = normalizeSuiteFile(GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE)
 const HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES = HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES.map(normalizeSuiteFile)
 const HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITE_FILES = HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES.map(normalizeSuiteFile)
 const HISTORICAL_CHECKPOINT_KEEP_SUITE_FILES = HISTORICAL_CHECKPOINT_KEEP_SUITES.map(normalizeSuiteFile)
@@ -104,10 +108,10 @@ module.exports = {
       regression: regressionSuites,
     }
 
-    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T034.regression, 'manifest should encode the post-T034 discovered suite count')
-    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T034, 'suite tier summary should encode the post-T034 topology')
+    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T035.regression, 'manifest should encode the post-T035 discovered suite count')
+    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T035, 'suite tier summary should encode the post-T035 topology')
     for (const [tier, suites] of Object.entries(tierSelections)) {
-      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T034[tier], `${tier} tier count should match post-T034 topology`)
+      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T035[tier], `${tier} tier count should match post-T035 topology`)
     }
     assert.deepEqual(regressionSuites, allSuites, 'regression tier should preserve every suite')
     assert.ok(defaultSuites.length < regressionSuites.length, 'default tier should be reduced from full regression')
@@ -154,6 +158,12 @@ module.exports = {
     assert.ok(coreSuites.includes(READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE), 'core tier should include current readiness command surface guard')
     assert.ok(regressionSuites.includes(READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE), 'regression tier should include current readiness command surface guard')
     assert.equal(auditSuites.includes(READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE), false, 'audit tier should not classify the current readiness command surface guard as historical audit')
+    assert.deepEqual(classifySuite(GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE_FILE).tiers, ['default', 'go-current', 'regression'], 'Step 6 batch 3 tmux cutover guard should be current Go/default coverage')
+    assert.ok(defaultSuites.includes(GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE_FILE), 'default tier should include current Step 6 batch 3 tmux cutover guard')
+    assert.ok(goCurrentSuites.includes(GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE_FILE), 'go-current tier should include current Step 6 batch 3 tmux cutover guard')
+    assert.ok(regressionSuites.includes(GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE_FILE), 'regression tier should include current Step 6 batch 3 tmux cutover guard')
+    assert.equal(auditSuites.includes(GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE_FILE), false, 'audit tier should not classify the current Step 6 batch 3 tmux cutover guard as historical audit')
+    assert.equal(coreSuites.includes(GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE_FILE), false, 'core tier should not classify the Step 6 batch 3 tmux cutover guard as non-Go core coverage')
     assert.ok(smokeSuites.includes('package-install-smoke.cjs'), 'smoke tier should include package smoke coverage')
     assert.ok(goCurrentSuites.includes('go-kernel-v0696-v07-release-decision-package.cjs'), 'go-current tier should keep latest release/no-action guard')
     assert.ok(defaultSuites.includes('go-kernel-v0696-v07-release-decision-package.cjs'), 'default tier should keep current Go release guard')
