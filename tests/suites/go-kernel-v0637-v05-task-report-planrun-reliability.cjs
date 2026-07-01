@@ -15,6 +15,7 @@ const {
   taskReportPlanRunReliability,
   taskReportPlanRunRequirements,
 } = require('../fixtures/kernel/v0637/taskReportPlanRunReliability.cjs')
+const { HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES } = require('../fixtures/kernel/historicalCheckpointDeletionMap.cjs')
 
 const DOC = 'docs/perf/v0.6.37-v0.5-release-readiness-burndown.md'
 const FIXTURE = 'tests/fixtures/kernel/v0637/taskReportPlanRunReliability.cjs'
@@ -247,7 +248,7 @@ function assertRequirements(root) {
       assert.equal(/^(app|tools|runtime|teamPanel|state|tests|docs|workerTurnPrompt\.ts)/.test(rel), true, `${row.id} source path should stay within mapped source/docs/tests areas: ${rel}`)
     }
     assert.equal(Array.isArray(row.existingEvidence), true, `${row.id} evidence`)
-    assert.ok(row.existingEvidence.length >= 2, `${row.id} should cite existing evidence`) 
+    assert.ok(row.existingEvidence.length >= 2, `${row.id} should cite existing evidence`)
     assert.ok(row.existingEvidence.some(item => item.startsWith('tests/') || item.startsWith('docs/')), `${row.id} should cite tests/docs evidence`)
     assert.ok(row.releaseRisk.length > 50, `${row.id} release risk should be meaningful`)
     assert.ok(row.requiredProof.length > 60, `${row.id} required proof should be meaningful`)
@@ -342,7 +343,9 @@ function assertGitignore(root) {
 }
 
 function assertSliceFiles(root) {
-  for (const rel of [DOC, FIXTURE, SUITE, P0_LEDGER_FIXTURE, P0_LEDGER_SUITE, BASELINE_FIXTURE, BASELINE_SUITE, P95_FIXTURE, P95_SUITE, HOT_PATH_FIXTURE, HOT_PATH_SUITE, MANUAL_RC_FIXTURE, MANUAL_RC_SUITE, VALIDATION_FIXTURE, VALIDATION_SUITE, FINAL_CHECKPOINT_FIXTURE, FINAL_CHECKPOINT_SUITE]) assert.equal(exists(root, rel), true, `${rel} should exist`)
+  for (const rel of [DOC, FIXTURE, SUITE, P0_LEDGER_FIXTURE, P0_LEDGER_SUITE, BASELINE_FIXTURE, BASELINE_SUITE, P95_FIXTURE, P95_SUITE, HOT_PATH_FIXTURE, HOT_PATH_SUITE, MANUAL_RC_FIXTURE, MANUAL_RC_SUITE, VALIDATION_FIXTURE, VALIDATION_SUITE, FINAL_CHECKPOINT_FIXTURE]) assert.equal(exists(root, rel), true, `${rel} should exist`)
+  assert.ok(HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES.includes(FINAL_CHECKPOINT_SUITE), `${FINAL_CHECKPOINT_SUITE} should be accounted for by Step5C deletion evidence`)
+  assert.equal(exists(root, FINAL_CHECKPOINT_SUITE), false, `${FINAL_CHECKPOINT_SUITE} should remain absent after Step5C deletion`)
 }
 
 module.exports = {

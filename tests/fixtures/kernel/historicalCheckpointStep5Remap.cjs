@@ -70,6 +70,8 @@ const {
   HISTORICAL_CHECKPOINT_DELETION_REPLACEMENT_AUDITS,
   HISTORICAL_CHECKPOINT_KEEP_SUITES,
   HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS,
 } = require('./historicalCheckpointDeletionMap.cjs')
 
 const HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT = CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_GUARD_SUITE
@@ -198,143 +200,11 @@ const HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE =
 })
 
 const RESIDUAL_REMAP_DETAILS = Object.freeze({
-  'tests/suites/go-kernel-v0419-tmux-readiness-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    parserDiagnosticsAssertionCategories: Object.freeze([...PARSER_DIAGNOSTICS_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0419-readiness-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    parserDiagnosticsAssertionCategories: Object.freeze([...PARSER_DIAGNOSTICS_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0421-runtime-availability-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0422-native-package-metadata-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0423-compact-diagnostics-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    parserDiagnosticsAssertionCategories: Object.freeze([...PARSER_DIAGNOSTICS_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0424-readiness-command-contract-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    readinessCommandSurfaceAssertionCategories: Object.freeze([...READINESS_COMMAND_SURFACE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0424-readiness-command-seam-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    readinessCommandSurfaceAssertionCategories: Object.freeze([...READINESS_COMMAND_SURFACE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0424-readiness-command-sunset-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    readinessCommandSurfaceAssertionCategories: Object.freeze([...READINESS_COMMAND_SURFACE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0424-readiness-command-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    readinessCommandSurfaceAssertionCategories: Object.freeze([...READINESS_COMMAND_SURFACE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0425-native-availability-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
   'tests/suites/go-kernel-v0426-storage-release-policy-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
       'future storage/release policy matrix details remain historical policy content beyond executable package/release guardrails',
     ]),
     residualRisks: Object.freeze(['Consolidated workflow/package guards cover mechanics, but the storage/release policy matrix still needs an owner.']),
-  },
-  'tests/suites/go-kernel-v0426-artifact-pipeline-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0427-clean-install-consumption-contract-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0427-install-layout-matrix-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    installLayoutPathSafetyAssertionCategories: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0427-consumption-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0629-real-implementation-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    artifactCiProvenanceAssertionCategories: Object.freeze([...ARTIFACT_CI_PROVENANCE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0630-ci-review-artifact-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    artifactCiProvenanceAssertionCategories: Object.freeze([...ARTIFACT_CI_PROVENANCE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0631-ci-review-artifact-hardening-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    artifactCiProvenanceAssertionCategories: Object.freeze([...ARTIFACT_CI_PROVENANCE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0632-ci-review-provenance-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    artifactCiProvenanceAssertionCategories: Object.freeze([...ARTIFACT_CI_PROVENANCE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0633-clean-install-proof-contract-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    installLayoutPathSafetyAssertionCategories: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0633-clean-install-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    installLayoutPathSafetyAssertionCategories: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0634-ownership-install-layout-contract-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    installLayoutPathSafetyAssertionCategories: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0634-distribution-option-matrix-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    installLayoutPathSafetyAssertionCategories: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0634-rollback-default-disable-policy-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -356,36 +226,6 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
     ]),
     residualRisks: Object.freeze(['Install-layout/path-safety decisions are covered by the current guard; migrate broader package-release/default, rollback/security, and tool-control-plane checkpoint assertions before deleting.']),
   },
-  'tests/suites/go-kernel-v0635-pi-extension-compliance-contract-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    piExtensionPublicSurfaceAssertionCategories: Object.freeze([...PI_EXTENSION_PUBLIC_SURFACE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0635-pi-extension-compliance-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    piExtensionPublicSurfaceAssertionCategories: Object.freeze([...PI_EXTENSION_PUBLIC_SURFACE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0636-default-go-dry-run-contract-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    defaultGoReadinessFixtureAssertionCategories: Object.freeze([...DEFAULT_GO_READINESS_FIXTURE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0636-final-readiness-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    defaultGoReadinessFixtureAssertionCategories: Object.freeze([...DEFAULT_GO_READINESS_FIXTURE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
-  'tests/suites/go-kernel-v0637-v05-final-readiness-checkpoint-docs.cjs': {
-    currentStatus: 'step5c-ready',
-    defaultGoReadinessFixtureAssertionCategories: Object.freeze([...DEFAULT_GO_READINESS_FIXTURE_CATEGORIES]),
-    residualUniqueAssertions: Object.freeze([]),
-    residualRisks: Object.freeze([]),
-  },
   'tests/suites/go-kernel-v0419-refresh-parser-unavailable-safety.cjs': {
     currentStatus: 'step5a-keep',
     residualUniqueAssertions: Object.freeze([
@@ -406,6 +246,28 @@ function priorEntryForSuite(suite) {
   if (!entry) throw new Error(`Missing prior deletion parity entry for ${suite}`)
   return entry
 }
+
+function step5cDeletedAuditEntryForSuite(suite) {
+  const prior = priorEntryForSuite(suite)
+  const deletionDetails = HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS[suite]
+  if (!deletionDetails) throw new Error(`Missing Step 5C deleted guard audit details for ${suite}`)
+  return Object.freeze({
+    suite,
+    currentStatus: 'step5c-deleted',
+    priorDeleteReadiness: prior.deleteReadiness,
+    familyId: prior.familyId,
+    scope: prior.scope,
+    replacementAuditSuite: prior.replacementAuditSuite,
+    deletionParityAuditSuite: HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT,
+    deletedSuiteExpectedAbsent: true,
+    currentGuardEvidence: Object.freeze([...deletionDetails.currentGuardEvidence]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
+    rationale: deletionDetails.rationale,
+  })
+}
+
+const HISTORICAL_CHECKPOINT_STEP5C_DELETED_GUARD_AUDIT = Object.freeze(HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES.map(step5cDeletedAuditEntryForSuite))
 
 function describeStep5CCurrentGuards(readinessCategories, parserDiagnosticsCategories, kernelResolverCategories, artifactCiProvenanceCategories, installLayoutPathSafetyCategories, piExtensionPublicSurfaceCategories, defaultGoReadinessFixtureCategories) {
   const guards = []
@@ -537,6 +399,8 @@ module.exports = {
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_INPUTS,
   HISTORICAL_CHECKPOINT_STEP5A_STATUS_VALUES,
   HISTORICAL_CHECKPOINT_STEP5A_STILL_KEEP_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5C_DELETED_GUARD_AUDIT,
+  HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES,
   HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES,
   HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES,

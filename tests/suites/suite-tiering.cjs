@@ -41,19 +41,19 @@ const {
   summarizeSelection,
 } = require('../suiteManifest.cjs')
 
-const EXPECTED_TIER_COUNTS_POST_T033 = Object.freeze({
+const EXPECTED_TIER_COUNTS_POST_T034 = Object.freeze({
   default: 83,
   smoke: 10,
   core: 59,
   'go-current': 24,
-  audit: 158,
+  audit: 131,
   benchmark: 3,
-  regression: 244,
+  regression: 217,
 })
 
 const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
-  ready: 15,
-  'needs-split': 31,
+  ready: 42,
+  'needs-split': 4,
   keep: 1,
 })
 
@@ -104,10 +104,10 @@ module.exports = {
       regression: regressionSuites,
     }
 
-    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T033.regression, 'manifest should encode the post-T033 discovered suite count')
-    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T033, 'suite tier summary should encode the post-T033 topology')
+    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T034.regression, 'manifest should encode the post-T034 discovered suite count')
+    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T034, 'suite tier summary should encode the post-T034 topology')
     for (const [tier, suites] of Object.entries(tierSelections)) {
-      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T033[tier], `${tier} tier count should match post-T033 topology`)
+      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T034[tier], `${tier} tier count should match post-T034 topology`)
     }
     assert.deepEqual(regressionSuites, allSuites, 'regression tier should preserve every suite')
     assert.ok(defaultSuites.length < regressionSuites.length, 'default tier should be reduced from full regression')
@@ -183,14 +183,14 @@ module.exports = {
     assert.equal(isHistoricalGoKernelSuite('go-kernel-v0689-go-worker-delivery-boundary-gate.cjs'), false)
 
     assert.deepEqual(HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS, EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS, 'historical checkpoint deletion readiness counts should remain explicit')
-    assert.equal(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES.length, EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS.ready, 'T024 ready-deleted suite list should remain exactly 15 suites')
+    assert.equal(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES.length, EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS.ready, 'T024+Step5C ready/deleted suite list should remain exactly 42 suites')
     for (const file of HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES) {
-      assert.equal(allSuites.includes(file), false, `${file} should remain absent after the T024 ready-suite deletion slice`)
-      assert.equal(auditSuites.includes(file), false, `${file} should not reappear in audit after the T024 deletion slice`)
-      assert.equal(regressionSuites.includes(file), false, `${file} should not reappear in regression after the T024 deletion slice`)
+      assert.equal(allSuites.includes(file), false, `${file} should remain absent after the T024/Step5C ready-suite deletion slices`)
+      assert.equal(auditSuites.includes(file), false, `${file} should not reappear in audit after the T024/Step5C deletion slices`)
+      assert.equal(regressionSuites.includes(file), false, `${file} should not reappear in regression after the T024/Step5C deletion slices`)
     }
     for (const file of [...HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITE_FILES, ...HISTORICAL_CHECKPOINT_KEEP_SUITE_FILES]) {
-      assert.ok(allSuites.includes(file), `${file} should remain discoverable after the T024 deletion slice`)
+      assert.ok(allSuites.includes(file), `${file} should remain discoverable after the T024/Step5C deletion slices`)
       assert.ok(auditSuites.includes(file), `${file} should remain in audit until separately migrated or accepted`)
       assert.ok(regressionSuites.includes(file), `${file} should remain in regression until separately migrated or accepted`)
       assert.equal(defaultSuites.includes(file), false, `${file} should remain historical/audit-only and absent from default`)

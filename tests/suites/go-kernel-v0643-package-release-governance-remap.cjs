@@ -69,6 +69,8 @@ const {
   HISTORICAL_CHECKPOINT_KEEP_SUITES,
   HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES,
   HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES: DELETION_MAP_STEP5C_DELETED_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS,
 } = require('../fixtures/kernel/historicalCheckpointDeletionMap.cjs')
 const {
   CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_CATEGORIES,
@@ -88,6 +90,8 @@ const {
   HISTORICAL_CHECKPOINT_STEP5A_STATUS_VALUES,
   HISTORICAL_CHECKPOINT_STEP5A_STILL_KEEP_SUITES,
   HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5C_DELETED_GUARD_AUDIT,
+  HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES,
   HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES,
   ARTIFACT_CI_PROVENANCE_CATEGORIES,
@@ -107,9 +111,10 @@ const {
   RESIDUAL_REMAP_DETAILS,
 } = require('../fixtures/kernel/historicalCheckpointStep5Remap.cjs')
 
-const EXPECTED_REMAINING_TOTAL = 32
+const EXPECTED_REMAINING_TOTAL = 5
 const EXPECTED_STEP5B_READY = 0
-const EXPECTED_STEP5C_READY = 27
+const EXPECTED_STEP5C_READY = 0
+const EXPECTED_STEP5C_DELETED = 27
 const EXPECTED_STILL_NEEDS_SPLIT = 4
 const EXPECTED_STILL_KEEP = 1
 const EXPECTED_STEP5C_PARSER_DIAGNOSTICS_CANDIDATES = Object.freeze([
@@ -453,11 +458,11 @@ function assertDefaultGoReadinessFixtureGuardCoverage(root) {
 function assertRemapCompleteness() {
   const remaining = remainingCandidateSuites()
   const remappedSuites = HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite)
-  assert.equal(remaining.length, EXPECTED_REMAINING_TOTAL, 'remaining candidate input count should stay 31 needs-split + 1 keep')
-  assert.equal(HISTORICAL_CHECKPOINT_STEP5A_REMAP.length, EXPECTED_REMAINING_TOTAL, 'Step 5A remap should enumerate every remaining candidate')
+  assert.equal(remaining.length, EXPECTED_REMAINING_TOTAL, 'remaining candidate input count should stay 4 needs-split + 1 keep after Step5C deletion')
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5A_REMAP.length, EXPECTED_REMAINING_TOTAL, 'post-Step5C remap should enumerate every retained candidate')
   assertUnique(remappedSuites, 'Step 5A remap suites')
   assertSameSet(remappedSuites, remaining, 'Step 5A remap suites vs remaining candidates')
-  assertSameSet(Object.keys(RESIDUAL_REMAP_DETAILS), remaining, 'Step 5A residual detail keys')
+  assertSameSet(Object.keys(RESIDUAL_REMAP_DETAILS), remaining, 'post-Step5C residual detail keys')
   assert.deepEqual(HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS, {
     totalRemainingCandidates: EXPECTED_REMAINING_TOTAL,
     step5BReady: EXPECTED_STEP5B_READY,
@@ -465,8 +470,13 @@ function assertRemapCompleteness() {
     stillNeedsSplit: EXPECTED_STILL_NEEDS_SPLIT,
     stillKeep: EXPECTED_STILL_KEEP,
   }, 'Step 5 remap counts should stay explicit')
-  assertSameSet(HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES, EXPECTED_STEP5C_DELETION_CANDIDATES, 'Step 5C deletion candidate list')
-  assertSameSet(HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES, HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES.filter(suite => !HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES.includes(suite)), 'Step 5 still-needs-split suites')
+  assert.deepEqual(HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES, [], 'Step 5C pending deletion candidate list should be empty after deletion')
+  assertSameSet(HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES, EXPECTED_STEP5C_DELETION_CANDIDATES, 'Step 5C deleted suite audit list')
+  assertSameSet(DELETION_MAP_STEP5C_DELETED_SUITES, EXPECTED_STEP5C_DELETION_CANDIDATES, 'deletion map Step 5C deleted suite list')
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5C_DELETED_GUARD_AUDIT.length, EXPECTED_STEP5C_DELETED, 'Step 5C deleted guard audit count')
+  assertSameSet(HISTORICAL_CHECKPOINT_STEP5C_DELETED_GUARD_AUDIT.map(entry => entry.suite), EXPECTED_STEP5C_DELETION_CANDIDATES, 'Step 5C deleted guard audit suites')
+  assertSameSet(Object.keys(HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS), EXPECTED_STEP5C_DELETION_CANDIDATES, 'deletion map Step 5C guard evidence suites')
+  assertSameSet(HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES, HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES, 'Step 5 still-needs-split suites')
   assertSameSet(HISTORICAL_CHECKPOINT_STEP5A_STILL_KEEP_SUITES, HISTORICAL_CHECKPOINT_KEEP_SUITES, 'Step 5 still-keep suites')
   assert.deepEqual(HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES, [], 'Step 5B package/release-only deletion candidate list should remain empty')
 
@@ -594,18 +604,35 @@ function assertRemapCompleteness() {
   }
 }
 
+function assertStep5CDeletedGuardAudit(root) {
+  for (const entry of HISTORICAL_CHECKPOINT_STEP5C_DELETED_GUARD_AUDIT) {
+    assert.equal(entry.currentStatus, 'step5c-deleted', `${entry.suite} should be marked as Step5C deleted audit evidence`)
+    assert.equal(entry.deletedSuiteExpectedAbsent, true, `${entry.suite} should be expected absent after Step5C deletion`)
+    assert.equal(existsRel(root, entry.suite), false, `${entry.suite} should be absent after Step5C deletion`)
+    assert.deepEqual(entry.residualUniqueAssertions, [], `${entry.suite} Step5C deleted audit should have no residual assertions`)
+    assert.deepEqual(entry.residualRisks, [], `${entry.suite} Step5C deleted audit should have no residual risks`)
+    assert.ok(entry.currentGuardEvidence.length >= 1, `${entry.suite} Step5C deleted audit should keep current guard evidence`)
+    assert.ok(entry.rationale.includes('Step 5B current'), `${entry.suite} Step5C deleted audit should cite Step 5B current guard evidence`)
+    for (const evidence of entry.currentGuardEvidence) {
+      assert.equal(existsRel(root, evidence.suite), true, `${entry.suite} current guard suite should remain: ${evidence.suite}`)
+      assert.equal(existsRel(root, evidence.helper), true, `${entry.suite} current guard helper should remain: ${evidence.helper}`)
+      assert.ok(evidence.categories.length >= 1, `${entry.suite} current guard evidence should include categories`)
+    }
+  }
+}
+
 function assertNoDeletionOrReintroduction(root) {
   const remapped = new Set(HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite))
   const step5B = new Set(HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES)
   const step5C = new Set(HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES)
   for (const suite of HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES) {
-    assert.equal(existsRel(root, suite), false, `${suite} should remain absent after T024`)
+    assert.equal(existsRel(root, suite), false, `${suite} should remain absent after T024/Step5C deletion`)
     assert.equal(remapped.has(suite), false, `${suite} must not be remapped as a remaining candidate`)
     assert.equal(step5B.has(suite), false, `${suite} must not be reintroduced as a Step 5B candidate`)
     assert.equal(step5C.has(suite), false, `${suite} must not be reintroduced as a Step 5C candidate`)
   }
   for (const suite of remainingCandidateSuites()) {
-    assert.equal(existsRel(root, suite), true, `${suite} should remain present; Step 5A is non-destructive`)
+    assert.equal(existsRel(root, suite), true, `${suite} should remain present after Step5C because it is still needs-split/keep`)
   }
   for (const entry of HISTORICAL_CHECKPOINT_STEP5A_REMAP) {
     assert.equal(existsRel(root, entry.replacementAuditSuite), true, `${entry.replacementAuditSuite} should exist for ${entry.suite}`)
@@ -618,6 +645,7 @@ function assertNonCandidatesRemainNonCandidates(root) {
   const remapped = new Set(HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite))
   const step5B = new Set(HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES)
   const step5C = new Set(HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES)
+  const ready = new Set(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES)
   for (const suite of [
     ...HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0628_V0643,
     ...HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0644_V0688,
@@ -625,7 +653,8 @@ function assertNonCandidatesRemainNonCandidates(root) {
     assert.equal(existsRel(root, suite), true, `${suite} should remain present as a non-candidate`)
     assert.equal(remapped.has(suite), false, `${suite} non-candidate must not appear in Step 5A remaining-candidate remap`)
     assert.equal(step5B.has(suite), false, `${suite} non-candidate must not appear in Step 5B deletion candidates`)
-    assert.equal(step5C.has(suite), false, `${suite} non-candidate must not appear in Step 5C deletion candidates`)
+    assert.equal(step5C.has(suite), false, `${suite} non-candidate must not appear in Step 5C pending deletion candidates`)
+    assert.equal(ready.has(suite), false, `${suite} non-candidate must not appear in ready/deleted suites`)
   }
 }
 
@@ -635,7 +664,7 @@ function assertNoDocsFixturesScriptsSourceRuntimeNativeDeletion(root) {
     ...HISTORICAL_CHECKPOINT_DOCS_V0628_V0643,
     ...HISTORICAL_CHECKPOINT_DOCS_V0644_V0688,
   ]) {
-    assert.equal(existsRel(root, doc), true, `${doc} should still exist; Step 5A must not delete docs`)
+    assert.equal(existsRel(root, doc), true, `${doc} should still exist; Step5C must not delete docs`)
   }
   for (const rel of [
     '.gitignore',
@@ -645,7 +674,7 @@ function assertNoDocsFixturesScriptsSourceRuntimeNativeDeletion(root) {
     ...SOURCE_AND_RUNTIME_FILES_THAT_MUST_REMAIN,
     ...APPROVED_EMBEDDED_NATIVE_FILES,
   ]) {
-    assert.equal(existsRel(root, rel), true, `${rel} should still exist; Step 5A must not delete fixtures/scripts/source/runtime/native files`)
+    assert.equal(existsRel(root, rel), true, `${rel} should still exist; Step5C must not delete fixtures/scripts/source/runtime/native files`)
   }
   assertIncludes(readRel(root, 'package.json'), '"version": "0.6.8"', 'package.json')
 }
@@ -667,6 +696,7 @@ module.exports = {
     assertPiExtensionPublicSurfaceGuardCoverage(root, env)
     assertDefaultGoReadinessFixtureGuardCoverage(root)
     assertRemapCompleteness()
+    assertStep5CDeletedGuardAudit(root)
     assertNoDeletionOrReintroduction(root)
     assertNonCandidatesRemainNonCandidates(root)
     assertNoDocsFixturesScriptsSourceRuntimeNativeDeletion(root)

@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { assertNoUnapprovedWorkflowReleaseOrPackageBehavior } = require('../helpers/reviewArtifactWorkflowGuard.cjs')
+const { HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES } = require('../fixtures/kernel/historicalCheckpointDeletionMap.cjs')
 
 const DOC = 'docs/perf/v0.4.27-generated-artifact-clean-install-consumption.md'
 const PLAN = 'docs/agentteam方案书.md'
@@ -264,7 +265,8 @@ function assertFinalCheckpointAllowed(root) {
   const plan = read(root, PLAN)
   for (const link of CHECKPOINT_LINKS) assertIncludes(doc, link, 'Slice 8 checkpoint link')
   assert.equal(fs.existsSync(path.join(root, CHECKPOINT_LINKS[0])), true, 'checkpoint doc should exist')
-  assert.equal(fs.existsSync(path.join(root, CHECKPOINT_LINKS[1])), true, 'checkpoint guard should exist')
+  assert.ok(HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES.includes(CHECKPOINT_LINKS[1]), 'checkpoint guard should be accounted for by Step5C deletion evidence')
+  assert.equal(fs.existsSync(path.join(root, CHECKPOINT_LINKS[1])), false, 'checkpoint guard should remain absent after Step5C deletion')
   assert.match(doc, /^## Slice 8 — Final Checkpoint$/m, 'approved Slice 8 final checkpoint section should be present')
   assert.equal(/^## v0\.4\.28\b/im.test(doc), false, 'Slice 7 guard must not allow v0.4.28 implementation')
   assert.equal(/^### v0\.4\.28\b/im.test(plan), false, 'roadmap must not start v0.4.28 implementation')
