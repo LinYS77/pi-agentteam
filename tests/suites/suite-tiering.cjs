@@ -20,6 +20,9 @@ const {
   PI_EXTENSION_PUBLIC_SURFACE_GUARD_SUITE,
 } = require('../helpers/piExtensionPublicSurfaceGuards.cjs')
 const {
+  DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE,
+} = require('../helpers/defaultGoReadinessFixtureGuards.cjs')
+const {
   PARSER_DIAGNOSTICS_GUARD_SUITE,
 } = require('../helpers/parserDiagnosticsGuards.cjs')
 const {
@@ -38,14 +41,14 @@ const {
   summarizeSelection,
 } = require('../suiteManifest.cjs')
 
-const EXPECTED_TIER_COUNTS_POST_T032 = Object.freeze({
-  default: 82,
+const EXPECTED_TIER_COUNTS_POST_T033 = Object.freeze({
+  default: 83,
   smoke: 10,
   core: 59,
-  'go-current': 23,
+  'go-current': 24,
   audit: 158,
   benchmark: 3,
-  regression: 243,
+  regression: 244,
 })
 
 const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
@@ -59,6 +62,7 @@ const HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT_FILE = normalizeSuiteFile(HISTORI
 const ARTIFACT_CI_PROVENANCE_GUARD_SUITE_FILE = normalizeSuiteFile(ARTIFACT_CI_PROVENANCE_GUARD_SUITE)
 const INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE_FILE = normalizeSuiteFile(INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE)
 const PI_EXTENSION_PUBLIC_SURFACE_GUARD_SUITE_FILE = normalizeSuiteFile(PI_EXTENSION_PUBLIC_SURFACE_GUARD_SUITE)
+const DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE_FILE = normalizeSuiteFile(DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE)
 const PARSER_DIAGNOSTICS_GUARD_SUITE_FILE = normalizeSuiteFile(PARSER_DIAGNOSTICS_GUARD_SUITE)
 const KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE_FILE = normalizeSuiteFile(KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE)
 const READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE = normalizeSuiteFile(READINESS_COMMAND_SURFACE_GUARD_SUITE)
@@ -100,10 +104,10 @@ module.exports = {
       regression: regressionSuites,
     }
 
-    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T032.regression, 'manifest should encode the post-T032 discovered suite count')
-    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T032, 'suite tier summary should encode the post-T032 topology')
+    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T033.regression, 'manifest should encode the post-T033 discovered suite count')
+    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T033, 'suite tier summary should encode the post-T033 topology')
     for (const [tier, suites] of Object.entries(tierSelections)) {
-      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T032[tier], `${tier} tier count should match post-T032 topology`)
+      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T033[tier], `${tier} tier count should match post-T033 topology`)
     }
     assert.deepEqual(regressionSuites, allSuites, 'regression tier should preserve every suite')
     assert.ok(defaultSuites.length < regressionSuites.length, 'default tier should be reduced from full regression')
@@ -129,6 +133,12 @@ module.exports = {
     assert.ok(regressionSuites.includes(PI_EXTENSION_PUBLIC_SURFACE_GUARD_SUITE_FILE), 'regression tier should include current pi extension public-surface guard')
     assert.equal(goCurrentSuites.includes(PI_EXTENSION_PUBLIC_SURFACE_GUARD_SUITE_FILE), false, 'go-current tier should not classify the pi extension public-surface guard as Go-kernel coverage')
     assert.equal(auditSuites.includes(PI_EXTENSION_PUBLIC_SURFACE_GUARD_SUITE_FILE), false, 'audit tier should not classify the current pi extension public-surface guard as historical audit')
+    assert.deepEqual(classifySuite(DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE_FILE).tiers, ['default', 'go-current', 'regression'], 'default-Go readiness fixture guard should remain current Go/default coverage')
+    assert.ok(defaultSuites.includes(DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE_FILE), 'default tier should include current default-Go readiness fixture guard')
+    assert.ok(goCurrentSuites.includes(DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE_FILE), 'go-current tier should include current default-Go readiness fixture guard')
+    assert.ok(regressionSuites.includes(DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE_FILE), 'regression tier should include current default-Go readiness fixture guard')
+    assert.equal(coreSuites.includes(DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE_FILE), false, 'core tier should not classify the default-Go readiness fixture guard as non-Go core coverage')
+    assert.equal(auditSuites.includes(DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE_FILE), false, 'audit tier should not classify the current default-Go readiness fixture guard as historical audit')
     assert.deepEqual(classifySuite(PARSER_DIAGNOSTICS_GUARD_SUITE_FILE).tiers, ['default', 'go-current', 'regression'], 'parser diagnostics guard should remain current Go/default coverage')
     assert.ok(defaultSuites.includes(PARSER_DIAGNOSTICS_GUARD_SUITE_FILE), 'default tier should include current parser diagnostics guard')
     assert.ok(goCurrentSuites.includes(PARSER_DIAGNOSTICS_GUARD_SUITE_FILE), 'go-current tier should include current parser diagnostics guard')

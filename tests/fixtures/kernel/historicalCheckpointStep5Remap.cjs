@@ -56,6 +56,15 @@ const {
   PI_EXTENSION_PUBLIC_SURFACE_SUPPORTING_SUITES,
 } = require('../../helpers/piExtensionPublicSurfaceGuards.cjs')
 const {
+  DEFAULT_GO_READINESS_FIXTURE_CATEGORIES,
+  DEFAULT_GO_READINESS_FIXTURE_CATEGORY_DESCRIPTIONS,
+  DEFAULT_GO_READINESS_FIXTURE_GUARD_HELPER,
+  DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE,
+  DEFAULT_GO_READINESS_FIXTURE_SOURCE_FILES,
+  DEFAULT_GO_READINESS_FIXTURE_SUPPORTING_DOCS,
+  DEFAULT_GO_READINESS_FIXTURE_SUPPORTING_SUITES,
+} = require('../../helpers/defaultGoReadinessFixtureGuards.cjs')
+const {
   HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT,
   HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP,
   HISTORICAL_CHECKPOINT_DELETION_REPLACEMENT_AUDITS,
@@ -172,6 +181,19 @@ const HISTORICAL_CHECKPOINT_STEP5C_PI_EXTENSION_PUBLIC_SURFACE_GUARD_EVIDENCE = 
     'current pi extension entrypoint, public facade export, command/tool registration, and read-boundary checks',
     'bridge-only worker delivery plus no model-callable readiness/native/default/package/release/signing tool surface',
     'bounded temp install/load proof script and evidence registry proof-only checks with approved embedded helper path preservation',
+  ]),
+})
+
+const HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE = Object.freeze({
+  suite: DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE,
+  helper: DEFAULT_GO_READINESS_FIXTURE_GUARD_HELPER,
+  sourceFiles: Object.freeze([...DEFAULT_GO_READINESS_FIXTURE_SOURCE_FILES]),
+  supportingDocs: Object.freeze([...DEFAULT_GO_READINESS_FIXTURE_SUPPORTING_DOCS]),
+  supportingSuites: Object.freeze([...DEFAULT_GO_READINESS_FIXTURE_SUPPORTING_SUITES]),
+  behaviorEvidence: Object.freeze([
+    'current default-Go dry-run verifier summary/fail-closed/source-boundary checks with no mutation, helper execution, release, tag, hosted query, or network behavior',
+    'v0.6.36 readiness ledger, install/load registry, rollback/default-disable policy, and tag gate fixtures kept proof-only/non-applied/non-release',
+    'v0.6.37 v0.5 P0/final readiness, p95/manual RC/performance/reliability/validation fixtures kept evidence-only and not imported by production sources',
   ]),
 })
 
@@ -347,25 +369,22 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
     residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0636-default-go-dry-run-contract-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'default-Go dry-run verifier/source/script boundaries remain unique',
-      'runtime authority checks tied to dry-run implementation remain outside the consolidated readiness ledger guard',
-    ]),
-    residualRisks: Object.freeze(['Keep until dry-run verifier/script and runtime-authority assertions have a non-historical owner.']),
+    currentStatus: 'step5c-ready',
+    defaultGoReadinessFixtureAssertionCategories: Object.freeze([...DEFAULT_GO_READINESS_FIXTURE_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0636-final-readiness-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'v0.6.36 default-Go readiness fixtures, dry-run verifier/script, rollback/default-disable, and tag ledger suite links remain unique beyond pi extension install/load evidence coverage',
-      'runtime/command source assertions tied to default-Go dry-run readiness remain outside package/release governance and pi extension public-surface guards',
-    ]),
-    residualRisks: Object.freeze(['Pi extension install/load proof-only evidence is covered by the current guard; migrate default-Go dry-run readiness fixture/tag-ledger/runtime/script checks before deleting.']),
+    currentStatus: 'step5c-ready',
+    defaultGoReadinessFixtureAssertionCategories: Object.freeze([...DEFAULT_GO_READINESS_FIXTURE_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0637-v05-final-readiness-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'final release-readiness fixture content and supporting v0.6.37 fixture/suite existence checks remain unique',
-      'assertions that fixtures are not used by production panel/renderer sources remain unique',
-    ]),
-    residualRisks: Object.freeze(['Keep until v0.6.37 fixture integrity and production-not-used assertions are separately owned.']),
+    currentStatus: 'step5c-ready',
+    defaultGoReadinessFixtureAssertionCategories: Object.freeze([...DEFAULT_GO_READINESS_FIXTURE_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0419-refresh-parser-unavailable-safety.cjs': {
     currentStatus: 'step5a-keep',
@@ -388,7 +407,7 @@ function priorEntryForSuite(suite) {
   return entry
 }
 
-function describeStep5CCurrentGuards(readinessCategories, parserDiagnosticsCategories, kernelResolverCategories, artifactCiProvenanceCategories, installLayoutPathSafetyCategories, piExtensionPublicSurfaceCategories) {
+function describeStep5CCurrentGuards(readinessCategories, parserDiagnosticsCategories, kernelResolverCategories, artifactCiProvenanceCategories, installLayoutPathSafetyCategories, piExtensionPublicSurfaceCategories, defaultGoReadinessFixtureCategories) {
   const guards = []
   if (readinessCategories.length > 0) guards.push('the current readiness command surface guard')
   if (parserDiagnosticsCategories.length > 0) guards.push('the current parser parity/compact diagnostics guard')
@@ -396,6 +415,7 @@ function describeStep5CCurrentGuards(readinessCategories, parserDiagnosticsCateg
   if (artifactCiProvenanceCategories.length > 0) guards.push('the current artifact/CI/provenance guard')
   if (installLayoutPathSafetyCategories.length > 0) guards.push('the current install-layout/platform path-safety guard')
   if (piExtensionPublicSurfaceCategories.length > 0) guards.push('the current pi extension public-surface/install-load guard')
+  if (defaultGoReadinessFixtureCategories.length > 0) guards.push('the current default-Go readiness fixture guard')
   return guards.join(' and ')
 }
 
@@ -412,7 +432,8 @@ function remapEntryForSuite(suite) {
   const artifactCiProvenanceAssertionCategories = residual.artifactCiProvenanceAssertionCategories || []
   const installLayoutPathSafetyAssertionCategories = residual.installLayoutPathSafetyAssertionCategories || []
   const piExtensionPublicSurfaceAssertionCategories = residual.piExtensionPublicSurfaceAssertionCategories || []
-  const step5CCurrentGuardDescription = describeStep5CCurrentGuards(readinessCommandSurfaceAssertionCategories, parserDiagnosticsAssertionCategories, kernelResolverSourceBoundaryAssertionCategories, artifactCiProvenanceAssertionCategories, installLayoutPathSafetyAssertionCategories, piExtensionPublicSurfaceAssertionCategories)
+  const defaultGoReadinessFixtureAssertionCategories = residual.defaultGoReadinessFixtureAssertionCategories || []
+  const step5CCurrentGuardDescription = describeStep5CCurrentGuards(readinessCommandSurfaceAssertionCategories, parserDiagnosticsAssertionCategories, kernelResolverSourceBoundaryAssertionCategories, artifactCiProvenanceAssertionCategories, installLayoutPathSafetyAssertionCategories, piExtensionPublicSurfaceAssertionCategories, defaultGoReadinessFixtureAssertionCategories)
   return Object.freeze({
     suite,
     priorDeleteReadiness: prior.deleteReadiness,
@@ -446,6 +467,10 @@ function remapEntryForSuite(suite) {
     piExtensionPublicSurfaceAssertionCategories: Object.freeze([...piExtensionPublicSurfaceAssertionCategories]),
     piExtensionPublicSurfaceGuardEvidence: piExtensionPublicSurfaceAssertionCategories.length > 0
       ? HISTORICAL_CHECKPOINT_STEP5C_PI_EXTENSION_PUBLIC_SURFACE_GUARD_EVIDENCE
+      : null,
+    defaultGoReadinessFixtureAssertionCategories: Object.freeze([...defaultGoReadinessFixtureAssertionCategories]),
+    defaultGoReadinessFixtureGuardEvidence: defaultGoReadinessFixtureAssertionCategories.length > 0
+      ? HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE
       : null,
     residualUniqueAssertions: residual.residualUniqueAssertions,
     residualRisks: residual.residualRisks,
@@ -505,6 +530,7 @@ module.exports = {
   HISTORICAL_CHECKPOINT_STEP5C_ARTIFACT_CI_PROVENANCE_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_PI_EXTENSION_PUBLIC_SURFACE_GUARD_EVIDENCE,
+  HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS,
@@ -520,6 +546,8 @@ module.exports = {
   INSTALL_LAYOUT_PATH_SAFETY_CATEGORY_DESCRIPTIONS,
   PI_EXTENSION_PUBLIC_SURFACE_CATEGORIES,
   PI_EXTENSION_PUBLIC_SURFACE_CATEGORY_DESCRIPTIONS,
+  DEFAULT_GO_READINESS_FIXTURE_CATEGORIES,
+  DEFAULT_GO_READINESS_FIXTURE_CATEGORY_DESCRIPTIONS,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORY_DESCRIPTIONS,
   PARSER_DIAGNOSTICS_CATEGORIES,

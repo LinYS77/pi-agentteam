@@ -48,6 +48,12 @@ const {
   PI_EXTENSION_PUBLIC_SURFACE_GUARD_SUITE,
   assertPiExtensionPublicSurfaceGuard,
 } = require('../helpers/piExtensionPublicSurfaceGuards.cjs')
+const {
+  DEFAULT_GO_READINESS_FIXTURE_CATEGORIES: HELPER_DEFAULT_GO_READINESS_FIXTURE_CATEGORIES,
+  DEFAULT_GO_READINESS_FIXTURE_GUARD_HELPER,
+  DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE,
+  assertDefaultGoReadinessFixtureGuard,
+} = require('../helpers/defaultGoReadinessFixtureGuards.cjs')
 const { assertPackageVersion } = require('../helpers/packageGuards.cjs')
 const {
   HISTORICAL_CHECKPOINT_DOCS_V0419_V0427,
@@ -74,6 +80,7 @@ const {
   HISTORICAL_CHECKPOINT_STEP5C_ARTIFACT_CI_PROVENANCE_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_PI_EXTENSION_PUBLIC_SURFACE_GUARD_EVIDENCE,
+  HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS,
@@ -89,6 +96,8 @@ const {
   INSTALL_LAYOUT_PATH_SAFETY_CATEGORY_DESCRIPTIONS,
   PI_EXTENSION_PUBLIC_SURFACE_CATEGORIES,
   PI_EXTENSION_PUBLIC_SURFACE_CATEGORY_DESCRIPTIONS,
+  DEFAULT_GO_READINESS_FIXTURE_CATEGORIES,
+  DEFAULT_GO_READINESS_FIXTURE_CATEGORY_DESCRIPTIONS,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORY_DESCRIPTIONS,
   PARSER_DIAGNOSTICS_CATEGORIES,
@@ -100,8 +109,8 @@ const {
 
 const EXPECTED_REMAINING_TOTAL = 32
 const EXPECTED_STEP5B_READY = 0
-const EXPECTED_STEP5C_READY = 24
-const EXPECTED_STILL_NEEDS_SPLIT = 7
+const EXPECTED_STEP5C_READY = 27
+const EXPECTED_STILL_NEEDS_SPLIT = 4
 const EXPECTED_STILL_KEEP = 1
 const EXPECTED_STEP5C_PARSER_DIAGNOSTICS_CANDIDATES = Object.freeze([
   'tests/suites/go-kernel-v0419-tmux-readiness-docs.cjs',
@@ -139,6 +148,11 @@ const EXPECTED_STEP5C_PI_EXTENSION_PUBLIC_SURFACE_CANDIDATES = Object.freeze([
   'tests/suites/go-kernel-v0635-pi-extension-compliance-contract-docs.cjs',
   'tests/suites/go-kernel-v0635-pi-extension-compliance-checkpoint-docs.cjs',
 ])
+const EXPECTED_STEP5C_DEFAULT_GO_READINESS_FIXTURE_CANDIDATES = Object.freeze([
+  'tests/suites/go-kernel-v0636-default-go-dry-run-contract-docs.cjs',
+  'tests/suites/go-kernel-v0636-final-readiness-checkpoint-docs.cjs',
+  'tests/suites/go-kernel-v0637-v05-final-readiness-checkpoint-docs.cjs',
+])
 const EXPECTED_STEP5C_DELETION_CANDIDATES = Object.freeze([
   ...EXPECTED_STEP5C_PARSER_DIAGNOSTICS_CANDIDATES,
   ...EXPECTED_STEP5C_READINESS_CANDIDATES,
@@ -146,6 +160,7 @@ const EXPECTED_STEP5C_DELETION_CANDIDATES = Object.freeze([
   ...EXPECTED_STEP5C_ARTIFACT_CI_PROVENANCE_CANDIDATES,
   ...EXPECTED_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_CANDIDATES,
   ...EXPECTED_STEP5C_PI_EXTENSION_PUBLIC_SURFACE_CANDIDATES,
+  ...EXPECTED_STEP5C_DEFAULT_GO_READINESS_FIXTURE_CANDIDATES,
 ])
 
 const SCRIPT_FILES_THAT_MUST_REMAIN = Object.freeze([
@@ -225,6 +240,7 @@ const FIXTURE_AND_HELPER_FILES_THAT_MUST_REMAIN = Object.freeze([
   'tests/helpers/parserDiagnosticsGuards.cjs',
   'tests/helpers/installLayoutPathSafetyGuards.cjs',
   'tests/helpers/piExtensionPublicSurfaceGuards.cjs',
+  'tests/helpers/defaultGoReadinessFixtureGuards.cjs',
   'tests/helpers/kernelResolverSourceBoundaryGuards.cjs',
   'tests/helpers/readinessCommandSurfaceGuards.cjs',
   'tests/helpers/reviewArtifactWorkflowGuard.cjs',
@@ -233,6 +249,7 @@ const FIXTURE_AND_HELPER_FILES_THAT_MUST_REMAIN = Object.freeze([
   'tests/suites/go-kernel-parser-diagnostics-guard.cjs',
   'tests/suites/go-kernel-resolver-source-boundary-guard.cjs',
   'tests/suites/pi-extension-public-surface-install-load-guard.cjs',
+  'tests/suites/go-kernel-default-go-readiness-fixture-guard.cjs',
   'tests/suites/readiness-command-surface-guard.cjs',
 ])
 
@@ -411,6 +428,28 @@ function assertPiExtensionPublicSurfaceGuardCoverage(root, env) {
   assert.ok(HISTORICAL_CHECKPOINT_STEP5C_PI_EXTENSION_PUBLIC_SURFACE_GUARD_EVIDENCE.behaviorEvidence.length >= 3, 'pi extension public-surface guard evidence should include behavioral checks')
 }
 
+function assertDefaultGoReadinessFixtureGuardCoverage(root) {
+  const result = assertDefaultGoReadinessFixtureGuard(root)
+  assertSameSet(result.checkedCategories, HELPER_DEFAULT_GO_READINESS_FIXTURE_CATEGORIES, 'helper checked default-Go readiness fixture categories')
+  assertSameSet(DEFAULT_GO_READINESS_FIXTURE_CATEGORIES, HELPER_DEFAULT_GO_READINESS_FIXTURE_CATEGORIES, 'remap fixture default-Go readiness fixture categories')
+  assert.equal(Object.keys(DEFAULT_GO_READINESS_FIXTURE_CATEGORY_DESCRIPTIONS).length, HELPER_DEFAULT_GO_READINESS_FIXTURE_CATEGORIES.length, 'each default-Go readiness fixture category should have a description')
+  for (const category of HELPER_DEFAULT_GO_READINESS_FIXTURE_CATEGORIES) {
+    assert.ok(DEFAULT_GO_READINESS_FIXTURE_CATEGORY_DESCRIPTIONS[category], `${category} should have a description`)
+  }
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE.suite, DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE, 'default-Go readiness fixture evidence should point at current guard suite')
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE.helper, DEFAULT_GO_READINESS_FIXTURE_GUARD_HELPER, 'default-Go readiness fixture evidence should point at current guard helper')
+  for (const rel of [
+    HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE.suite,
+    HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE.helper,
+    ...HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE.sourceFiles,
+    ...HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE.supportingDocs,
+    ...HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE.supportingSuites,
+  ]) {
+    assert.equal(existsRel(root, rel), true, `${rel} should exist as default-Go readiness fixture guard evidence`)
+  }
+  assert.ok(HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE.behaviorEvidence.length >= 3, 'default-Go readiness fixture guard evidence should include behavioral checks')
+}
+
 function assertRemapCompleteness() {
   const remaining = remainingCandidateSuites()
   const remappedSuites = HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite)
@@ -456,8 +495,9 @@ function assertRemapCompleteness() {
       const artifactCiProvenanceCandidate = EXPECTED_STEP5C_ARTIFACT_CI_PROVENANCE_CANDIDATES.includes(entry.suite)
       const installLayoutPathSafetyCandidate = EXPECTED_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_CANDIDATES.includes(entry.suite)
       const piExtensionPublicSurfaceCandidate = EXPECTED_STEP5C_PI_EXTENSION_PUBLIC_SURFACE_CANDIDATES.includes(entry.suite)
+      const defaultGoReadinessFixtureCandidate = EXPECTED_STEP5C_DEFAULT_GO_READINESS_FIXTURE_CANDIDATES.includes(entry.suite)
       assert.equal(entry.currentStatus, 'step5c-ready', `${entry.suite} Step 5C candidate should have step5c-ready status`)
-      assert.equal(readinessCandidate || parserDiagnosticsCandidate || kernelResolverCandidate || artifactCiProvenanceCandidate || installLayoutPathSafetyCandidate || piExtensionPublicSurfaceCandidate, true, `${entry.suite} Step 5C candidate should be backed by a known migrated current guard`)
+      assert.equal(readinessCandidate || parserDiagnosticsCandidate || kernelResolverCandidate || artifactCiProvenanceCandidate || installLayoutPathSafetyCandidate || piExtensionPublicSurfaceCandidate || defaultGoReadinessFixtureCandidate, true, `${entry.suite} Step 5C candidate should be backed by a known migrated current guard`)
       assert.deepEqual(entry.residualUniqueAssertions, [], `${entry.suite} Step 5C candidate should have no residual assertions`)
       assert.deepEqual(entry.residualRisks, [], `${entry.suite} Step 5C candidate should have no residual risks`)
       if (readinessCandidate) {
@@ -514,6 +554,15 @@ function assertRemapCompleteness() {
         assert.deepEqual(entry.piExtensionPublicSurfaceAssertionCategories, [], `${entry.suite} non-pi-extension Step 5C candidate should not claim pi extension public-surface categories`)
         assert.equal(entry.piExtensionPublicSurfaceGuardEvidence, null, `${entry.suite} non-pi-extension Step 5C candidate should not claim pi extension public-surface guard evidence`)
       }
+      if (defaultGoReadinessFixtureCandidate) {
+        assertSameSet(entry.defaultGoReadinessFixtureAssertionCategories, HELPER_DEFAULT_GO_READINESS_FIXTURE_CATEGORIES, `${entry.suite} Step 5C default-Go readiness fixture coverage categories`)
+        assert.equal(entry.defaultGoReadinessFixtureGuardEvidence.suite, DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE, `${entry.suite} Step 5C default-Go readiness fixture guard suite evidence`)
+        assert.equal(entry.defaultGoReadinessFixtureGuardEvidence.helper, DEFAULT_GO_READINESS_FIXTURE_GUARD_HELPER, `${entry.suite} Step 5C default-Go readiness fixture guard helper evidence`)
+        assert.ok(entry.rationale.includes('current default-Go readiness fixture guard'), `${entry.suite} Step 5C rationale should cite the current default-Go readiness fixture guard`)
+      } else {
+        assert.deepEqual(entry.defaultGoReadinessFixtureAssertionCategories, [], `${entry.suite} non-default-Go-readiness Step 5C candidate should not claim default-Go readiness fixture categories`)
+        assert.equal(entry.defaultGoReadinessFixtureGuardEvidence, null, `${entry.suite} non-default-Go-readiness Step 5C candidate should not claim default-Go readiness fixture guard evidence`)
+      }
     } else {
       assert.notEqual(entry.currentStatus, 'step5b-ready', `${entry.suite} non-ready entry must not use step5b-ready status`)
       assert.notEqual(entry.currentStatus, 'step5c-ready', `${entry.suite} non-ready entry must not use step5c-ready status`)
@@ -529,6 +578,8 @@ function assertRemapCompleteness() {
       assert.equal(entry.installLayoutPathSafetyGuardEvidence, null, `${entry.suite} non-ready entry must not claim install-layout/path-safety evidence`)
       assert.deepEqual(entry.piExtensionPublicSurfaceAssertionCategories, [], `${entry.suite} non-ready entry must not claim pi extension public-surface categories`)
       assert.equal(entry.piExtensionPublicSurfaceGuardEvidence, null, `${entry.suite} non-ready entry must not claim pi extension public-surface evidence`)
+      assert.deepEqual(entry.defaultGoReadinessFixtureAssertionCategories, [], `${entry.suite} non-ready entry must not claim default-Go readiness fixture categories`)
+      assert.equal(entry.defaultGoReadinessFixtureGuardEvidence, null, `${entry.suite} non-ready entry must not claim default-Go readiness fixture evidence`)
       assert.ok(entry.residualUniqueAssertions.length >= 1, `${entry.suite} non-ready entry should keep residual assertions`)
       assert.ok(entry.residualRisks.length >= 1, `${entry.suite} non-ready entry should keep residual risks`)
     }
@@ -614,6 +665,7 @@ module.exports = {
     await assertArtifactCiProvenanceGuardCoverage(root)
     await assertInstallLayoutPathSafetyGuardCoverage(root, env)
     assertPiExtensionPublicSurfaceGuardCoverage(root, env)
+    assertDefaultGoReadinessFixtureGuardCoverage(root)
     assertRemapCompleteness()
     assertNoDeletionOrReintroduction(root)
     assertNonCandidatesRemainNonCandidates(root)
