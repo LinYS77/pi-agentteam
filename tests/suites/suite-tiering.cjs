@@ -6,6 +6,9 @@ const {
   HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES,
   HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES,
 } = require('../fixtures/kernel/historicalCheckpointDeletionMap.cjs')
+const {
+  HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
+} = require('../fixtures/kernel/historicalCheckpointStep5Remap.cjs')
 const { assertPackageVersion } = require('../helpers/packageGuards.cjs')
 const {
   classifySuite,
@@ -17,14 +20,14 @@ const {
   summarizeSelection,
 } = require('../suiteManifest.cjs')
 
-const EXPECTED_TIER_COUNTS_POST_T024 = Object.freeze({
+const EXPECTED_TIER_COUNTS_POST_T026 = Object.freeze({
   default: 76,
   smoke: 10,
   core: 57,
   'go-current': 19,
-  audit: 157,
+  audit: 158,
   benchmark: 3,
-  regression: 236,
+  regression: 237,
 })
 
 const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
@@ -34,6 +37,7 @@ const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
 })
 
 const HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE = normalizeSuiteFile(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT)
+const HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT_FILE = normalizeSuiteFile(HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT)
 const HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES = HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES.map(normalizeSuiteFile)
 const HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITE_FILES = HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES.map(normalizeSuiteFile)
 const HISTORICAL_CHECKPOINT_KEEP_SUITE_FILES = HISTORICAL_CHECKPOINT_KEEP_SUITES.map(normalizeSuiteFile)
@@ -72,10 +76,10 @@ module.exports = {
       regression: regressionSuites,
     }
 
-    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T024.regression, 'manifest should encode the post-T024 discovered suite count')
-    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T024, 'suite tier summary should encode the post-T024 topology')
+    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T026.regression, 'manifest should encode the post-T026 discovered suite count')
+    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T026, 'suite tier summary should encode the post-T026 topology')
     for (const [tier, suites] of Object.entries(tierSelections)) {
-      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T024[tier], `${tier} tier count should match post-T024 topology`)
+      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T026[tier], `${tier} tier count should match post-T026 topology`)
     }
     assert.deepEqual(regressionSuites, allSuites, 'regression tier should preserve every suite')
     assert.ok(defaultSuites.length < regressionSuites.length, 'default tier should be reduced from full regression')
@@ -93,9 +97,13 @@ module.exports = {
     assert.deepEqual(classifySuite(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE).tiers, ['audit', 'regression'], 'deletion parity suite must remain audit/regression only')
     assert.ok(auditSuites.includes(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE), 'audit tier should include the historical checkpoint deletion parity audit')
     assert.ok(regressionSuites.includes(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE), 'regression tier should include the historical checkpoint deletion parity audit')
+    assert.deepEqual(classifySuite(HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT_FILE).tiers, ['audit', 'regression'], 'Step 5A package/release remap suite must remain audit/regression only')
+    assert.ok(auditSuites.includes(HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT_FILE), 'audit tier should include the Step 5A package/release remap audit')
+    assert.ok(regressionSuites.includes(HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT_FILE), 'regression tier should include the Step 5A package/release remap audit')
     assert.equal(defaultSuites.includes('go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs'), false, 'default tier should remove historical audit coverage')
     assert.equal(defaultSuites.includes('go-kernel-v0688-historical-checkpoints-audit.cjs'), false, 'default tier should exclude the historical checkpoint manifest audit')
     assert.equal(defaultSuites.includes(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE), false, 'default tier should exclude the historical checkpoint deletion parity audit')
+    assert.equal(defaultSuites.includes(HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT_FILE), false, 'default tier should exclude the Step 5A package/release remap audit')
     assert.ok(auditSuites.includes('go-kernel-release-checklist-docs.cjs'), 'audit tier should retain older release checklist docs')
     assert.equal(defaultSuites.includes('go-kernel-release-checklist-docs.cjs'), false, 'default tier should remove older release checklist docs')
 
