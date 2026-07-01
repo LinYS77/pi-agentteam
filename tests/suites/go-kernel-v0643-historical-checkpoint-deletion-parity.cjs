@@ -27,6 +27,8 @@ const {
   HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS,
+  HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5D_READY_DELETION_CANDIDATE_DETAILS,
   HISTORICAL_CHECKPOINT_T024_DELETED_SUITES,
   KEEP_DELETION_CANDIDATE_DETAILS,
   NEEDS_SPLIT_DELETION_CANDIDATE_DETAILS,
@@ -35,10 +37,11 @@ const {
 } = require('../fixtures/kernel/historicalCheckpointDeletionMap.cjs')
 
 const EXPECTED_CANDIDATE_TOTAL = 47
-const EXPECTED_READY_COUNT = 42
+const EXPECTED_READY_COUNT = 46
 const EXPECTED_T024_DELETED_COUNT = 15
 const EXPECTED_STEP5C_DELETED_COUNT = 27
-const EXPECTED_NEEDS_SPLIT_COUNT = 4
+const EXPECTED_STEP5D_DELETED_COUNT = 4
+const EXPECTED_NEEDS_SPLIT_COUNT = 0
 const EXPECTED_KEEP_COUNT = 1
 
 function assertUnique(values, label) {
@@ -89,15 +92,18 @@ function assertMapShape() {
   assert.equal(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES.length, EXPECTED_READY_COUNT, 'ready-to-delete list length should match count')
   assert.equal(HISTORICAL_CHECKPOINT_T024_DELETED_SUITES.length, EXPECTED_T024_DELETED_COUNT, 'T024 deleted suite count should remain explicit')
   assert.equal(HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES.length, EXPECTED_STEP5C_DELETED_COUNT, 'Step5C deleted suite count should remain explicit')
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES.length, EXPECTED_STEP5D_DELETED_COUNT, 'Step5D deleted suite count should remain explicit')
   assert.equal(HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES.length, EXPECTED_NEEDS_SPLIT_COUNT, 'needs-split list length should match count')
   assert.equal(HISTORICAL_CHECKPOINT_KEEP_SUITES.length, EXPECTED_KEEP_COUNT, 'keep list length should match count')
   assertSameSet(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES, READY_DELETION_CANDIDATE_SUITES, 'ready-to-delete suite export')
-  assertSameSet(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES, [...HISTORICAL_CHECKPOINT_T024_DELETED_SUITES, ...HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES], 'ready-to-delete suite slices')
+  assertSameSet(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES, [...HISTORICAL_CHECKPOINT_T024_DELETED_SUITES, ...HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES, ...HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES], 'ready-to-delete suite slices')
   assertSameSet(Object.keys(HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS), HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES, 'Step5C guard-evidence details')
+  assertSameSet(Object.keys(HISTORICAL_CHECKPOINT_STEP5D_READY_DELETION_CANDIDATE_DETAILS), HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES, 'Step5D guard-evidence details')
 
   const detailSuites = [
     ...HISTORICAL_CHECKPOINT_T024_DELETED_SUITES,
     ...Object.keys(HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS),
+    ...Object.keys(HISTORICAL_CHECKPOINT_STEP5D_READY_DELETION_CANDIDATE_DETAILS),
     ...Object.keys(NEEDS_SPLIT_DELETION_CANDIDATE_DETAILS),
     ...Object.keys(KEEP_DELETION_CANDIDATE_DETAILS),
   ]
@@ -136,9 +142,19 @@ function assertEntryShape(root) {
         }
         assertIncludes(entry.rationale, 'Step 5B current', `${entry.suite} Step5C ready rationale`)
         assertIncludes(entry.rationale, 'guard evidence', `${entry.suite} Step5C ready rationale`)
+      } else if (HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES.includes(entry.suite)) {
+        assert.equal(entry.deletionSlice, 'T036-step5d', `${entry.suite} should record Step5D deletion slice`)
+        assert.ok(entry.currentGuardEvidence.length >= 1, `${entry.suite} Step5D entry should record current guard evidence`)
+        for (const evidence of entry.currentGuardEvidence) {
+          assert.equal(existsRel(root, evidence.suite), true, `${entry.suite} guard suite should exist: ${evidence.suite}`)
+          assert.equal(existsRel(root, evidence.helper), true, `${entry.suite} guard helper should exist: ${evidence.helper}`)
+          assert.ok(evidence.categories.length >= 1, `${entry.suite} guard evidence should list categories`)
+        }
+        assertIncludes(entry.rationale, 'Step 5D', `${entry.suite} Step5D ready rationale`)
+        assertIncludes(entry.rationale, 'current package/release/security/rollback guard', `${entry.suite} Step5D ready rationale`)
       } else {
         assert.equal(entry.deletionSlice, 'T024-ready', `${entry.suite} should record T024 ready deletion slice`)
-        assert.deepEqual(entry.currentGuardEvidence, [], `${entry.suite} T024-ready entry should not claim Step5C guard evidence`)
+        assert.deepEqual(entry.currentGuardEvidence, [], `${entry.suite} T024-ready entry should not claim current guard evidence`)
         assertIncludes(entry.rationale, 'docs/checkpoint/evidence-only', `${entry.suite} ready rationale`)
       }
     } else {
@@ -179,7 +195,7 @@ function assertPostDeletionFileState(root) {
   ], allCandidateSuites, 'post-deletion suite accounting')
 
   for (const suite of HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES) {
-    assert.equal(existsRel(root, suite), false, `${suite} should be absent after the T024 + Step5C ready-suite deletion slices`)
+    assert.equal(existsRel(root, suite), false, `${suite} should be absent after the T024 + Step5C + Step5D ready-suite deletion slices`)
   }
   for (const suite of notDeletedSuites) {
     assert.equal(existsRel(root, suite), true, `${suite} should remain because it is needs-split/keep, not ready-to-delete`)
@@ -195,7 +211,7 @@ function assertPostDeletionFileState(root) {
     ...HISTORICAL_CHECKPOINT_DOCS_V0628_V0643,
     ...HISTORICAL_CHECKPOINT_DOCS_V0644_V0688,
   ]) {
-    assert.equal(existsRel(root, doc), true, `${doc} should still exist; T024/Step5C must not delete historical docs`)
+    assert.equal(existsRel(root, doc), true, `${doc} should still exist; T024/Step5C/Step5D must not delete historical docs`)
   }
   for (const suite of [
     ...HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.nonCandidatesV0628V0643,

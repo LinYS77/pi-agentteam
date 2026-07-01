@@ -23,6 +23,9 @@ const {
   DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE,
 } = require('../helpers/defaultGoReadinessFixtureGuards.cjs')
 const {
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE,
+} = require('../helpers/packageReleaseSecurityRollbackGuards.cjs')
+const {
   PARSER_DIAGNOSTICS_GUARD_SUITE,
 } = require('../helpers/parserDiagnosticsGuards.cjs')
 const {
@@ -44,19 +47,19 @@ const {
   summarizeSelection,
 } = require('../suiteManifest.cjs')
 
-const EXPECTED_TIER_COUNTS_POST_T035 = Object.freeze({
-  default: 84,
+const EXPECTED_TIER_COUNTS_POST_T036 = Object.freeze({
+  default: 85,
   smoke: 10,
   core: 59,
-  'go-current': 25,
-  audit: 131,
+  'go-current': 26,
+  audit: 127,
   benchmark: 3,
-  regression: 218,
+  regression: 215,
 })
 
 const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
-  ready: 42,
-  'needs-split': 4,
+  ready: 46,
+  'needs-split': 0,
   keep: 1,
 })
 
@@ -66,6 +69,7 @@ const ARTIFACT_CI_PROVENANCE_GUARD_SUITE_FILE = normalizeSuiteFile(ARTIFACT_CI_P
 const INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE_FILE = normalizeSuiteFile(INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE)
 const PI_EXTENSION_PUBLIC_SURFACE_GUARD_SUITE_FILE = normalizeSuiteFile(PI_EXTENSION_PUBLIC_SURFACE_GUARD_SUITE)
 const DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE_FILE = normalizeSuiteFile(DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE)
+const PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE_FILE = normalizeSuiteFile(PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE)
 const PARSER_DIAGNOSTICS_GUARD_SUITE_FILE = normalizeSuiteFile(PARSER_DIAGNOSTICS_GUARD_SUITE)
 const KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE_FILE = normalizeSuiteFile(KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE)
 const READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE = normalizeSuiteFile(READINESS_COMMAND_SURFACE_GUARD_SUITE)
@@ -108,10 +112,10 @@ module.exports = {
       regression: regressionSuites,
     }
 
-    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T035.regression, 'manifest should encode the post-T035 discovered suite count')
-    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T035, 'suite tier summary should encode the post-T035 topology')
+    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T036.regression, 'manifest should encode the post-T036 discovered suite count')
+    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T036, 'suite tier summary should encode the post-T036 topology')
     for (const [tier, suites] of Object.entries(tierSelections)) {
-      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T035[tier], `${tier} tier count should match post-T035 topology`)
+      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T036[tier], `${tier} tier count should match post-T036 topology`)
     }
     assert.deepEqual(regressionSuites, allSuites, 'regression tier should preserve every suite')
     assert.ok(defaultSuites.length < regressionSuites.length, 'default tier should be reduced from full regression')
@@ -143,6 +147,12 @@ module.exports = {
     assert.ok(regressionSuites.includes(DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE_FILE), 'regression tier should include current default-Go readiness fixture guard')
     assert.equal(coreSuites.includes(DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE_FILE), false, 'core tier should not classify the default-Go readiness fixture guard as non-Go core coverage')
     assert.equal(auditSuites.includes(DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE_FILE), false, 'audit tier should not classify the current default-Go readiness fixture guard as historical audit')
+    assert.deepEqual(classifySuite(PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE_FILE).tiers, ['default', 'go-current', 'regression'], 'package/release/security/rollback guard should be current Go/default coverage')
+    assert.ok(defaultSuites.includes(PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE_FILE), 'default tier should include current package/release/security/rollback guard')
+    assert.ok(goCurrentSuites.includes(PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE_FILE), 'go-current tier should include current package/release/security/rollback guard')
+    assert.ok(regressionSuites.includes(PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE_FILE), 'regression tier should include current package/release/security/rollback guard')
+    assert.equal(coreSuites.includes(PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE_FILE), false, 'core tier should not classify the package/release/security/rollback guard as non-Go core coverage')
+    assert.equal(auditSuites.includes(PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE_FILE), false, 'audit tier should not classify the current package/release/security/rollback guard as historical audit')
     assert.deepEqual(classifySuite(PARSER_DIAGNOSTICS_GUARD_SUITE_FILE).tiers, ['default', 'go-current', 'regression'], 'parser diagnostics guard should remain current Go/default coverage')
     assert.ok(defaultSuites.includes(PARSER_DIAGNOSTICS_GUARD_SUITE_FILE), 'default tier should include current parser diagnostics guard')
     assert.ok(goCurrentSuites.includes(PARSER_DIAGNOSTICS_GUARD_SUITE_FILE), 'go-current tier should include current parser diagnostics guard')
@@ -193,14 +203,14 @@ module.exports = {
     assert.equal(isHistoricalGoKernelSuite('go-kernel-v0689-go-worker-delivery-boundary-gate.cjs'), false)
 
     assert.deepEqual(HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS, EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS, 'historical checkpoint deletion readiness counts should remain explicit')
-    assert.equal(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES.length, EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS.ready, 'T024+Step5C ready/deleted suite list should remain exactly 42 suites')
+    assert.equal(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES.length, EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS.ready, 'T024+Step5C+Step5D ready/deleted suite list should remain exactly 46 suites')
     for (const file of HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES) {
-      assert.equal(allSuites.includes(file), false, `${file} should remain absent after the T024/Step5C ready-suite deletion slices`)
-      assert.equal(auditSuites.includes(file), false, `${file} should not reappear in audit after the T024/Step5C deletion slices`)
-      assert.equal(regressionSuites.includes(file), false, `${file} should not reappear in regression after the T024/Step5C deletion slices`)
+      assert.equal(allSuites.includes(file), false, `${file} should remain absent after the T024/Step5C/Step5D ready-suite deletion slices`)
+      assert.equal(auditSuites.includes(file), false, `${file} should not reappear in audit after the T024/Step5C/Step5D deletion slices`)
+      assert.equal(regressionSuites.includes(file), false, `${file} should not reappear in regression after the T024/Step5C/Step5D deletion slices`)
     }
     for (const file of [...HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITE_FILES, ...HISTORICAL_CHECKPOINT_KEEP_SUITE_FILES]) {
-      assert.ok(allSuites.includes(file), `${file} should remain discoverable after the T024/Step5C deletion slices`)
+      assert.ok(allSuites.includes(file), `${file} should remain discoverable after the T024/Step5C/Step5D deletion slices`)
       assert.ok(auditSuites.includes(file), `${file} should remain in audit until separately migrated or accepted`)
       assert.ok(regressionSuites.includes(file), `${file} should remain in regression until separately migrated or accepted`)
       assert.equal(defaultSuites.includes(file), false, `${file} should remain historical/audit-only and absent from default`)

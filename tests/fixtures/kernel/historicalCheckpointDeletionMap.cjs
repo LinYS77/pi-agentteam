@@ -42,6 +42,11 @@ const {
   DEFAULT_GO_READINESS_FIXTURE_GUARD_HELPER,
   DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE,
 } = require('../../helpers/defaultGoReadinessFixtureGuards.cjs')
+const {
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_HELPER,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE,
+} = require('../../helpers/packageReleaseSecurityRollbackGuards.cjs')
 
 const DELETE_READINESS_VALUES = ['ready', 'needs-split', 'keep']
 
@@ -124,9 +129,17 @@ const HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES = [
   'tests/suites/go-kernel-v0637-v05-final-readiness-checkpoint-docs.cjs',
 ]
 
+const HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES = [
+  'tests/suites/go-kernel-v0426-storage-release-policy-docs.cjs',
+  'tests/suites/go-kernel-v0634-rollback-default-disable-policy-docs.cjs',
+  'tests/suites/go-kernel-v0634-security-signing-ownership-docs.cjs',
+  'tests/suites/go-kernel-v0634-package-release-decision-checkpoint-docs.cjs',
+]
+
 const READY_DELETION_CANDIDATE_SUITES = [
   ...HISTORICAL_CHECKPOINT_T024_DELETED_SUITES,
   ...HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES,
+  ...HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES,
 ]
 
 const KEEP_DELETION_CANDIDATE_DETAILS = {
@@ -180,36 +193,26 @@ const HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS = {
   'tests/suites/go-kernel-v0637-v05-final-readiness-checkpoint-docs.cjs': step5cReadyDetails('default-Go readiness fixture', DEFAULT_GO_READINESS_FIXTURE_GUARD_SUITE, DEFAULT_GO_READINESS_FIXTURE_GUARD_HELPER, DEFAULT_GO_READINESS_FIXTURE_CATEGORIES),
 }
 
-const NEEDS_SPLIT_DELETION_CANDIDATE_DETAILS = {
-  'tests/suites/go-kernel-v0426-storage-release-policy-docs.cjs': {
-    uniqueAssertions: [
-      'uses review artifact workflow guard helpers to prevent CI release/package scripts',
-      'checks future storage/release policy matrix details beyond compact manifest themes',
-    ],
-    risks: ['Migrate workflow/release-script guard coverage and assign ownership for the storage/release policy matrix before deletion.'],
-  },
-  'tests/suites/go-kernel-v0634-rollback-default-disable-policy-docs.cjs': {
-    uniqueAssertions: [
-      'reads kernel/resolver/readiness source to assert fail-closed and no rollback/default UI behavior',
-      'checks fixture/tool surfaces for no default/release/signing control plane',
-    ],
-    risks: ['Keep until rollback/default-disable source and tool-surface assertions have a current owner.'],
-  },
-  'tests/suites/go-kernel-v0634-security-signing-ownership-docs.cjs': {
-    uniqueAssertions: [
-      'reads kernel/resolver/readiness source and tool fixtures for no signing/security control plane',
-      'checks workflow has no signing/cosign/SLSA behavior and no generated security artifacts',
-    ],
-    risks: ['Migrate security/signing workflow and source guardrails before deletion.'],
-  },
-  'tests/suites/go-kernel-v0634-package-release-decision-checkpoint-docs.cjs': {
-    uniqueAssertions: [
-      'reads kernel/resolver/readiness/team command and Go helper source for package/release/default boundaries',
-      'checks workflow, native/security scans, package surface, and tool control-plane invariants',
-    ],
-    risks: ['Split broad package/release/runtime/workflow guardrails before deleting checkpoint docs coverage.'],
-  },
+function step5dReadyDetails() {
+  return {
+    currentGuardEvidence: [{
+      guardLabel: 'package/release/security/rollback current guard',
+      suite: PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE,
+      helper: PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_HELPER,
+      categories: PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES,
+    }],
+    rationale: 'Ready/absent after Step 5D because historical audits/parity plus the current package/release/security/rollback guard cover the migrated storage/release policy, rollback/default-disable, security/signing ownership, tag/hosted action, package/runtime/tool-surface, and checked-in artifact residual assertions; no unique source/runtime/script/workflow/fixture behavior remains in this historical docs suite.',
+  }
 }
+
+const HISTORICAL_CHECKPOINT_STEP5D_READY_DELETION_CANDIDATE_DETAILS = {
+  'tests/suites/go-kernel-v0426-storage-release-policy-docs.cjs': step5dReadyDetails(),
+  'tests/suites/go-kernel-v0634-rollback-default-disable-policy-docs.cjs': step5dReadyDetails(),
+  'tests/suites/go-kernel-v0634-security-signing-ownership-docs.cjs': step5dReadyDetails(),
+  'tests/suites/go-kernel-v0634-package-release-decision-checkpoint-docs.cjs': step5dReadyDetails(),
+}
+
+const NEEDS_SPLIT_DELETION_CANDIDATE_DETAILS = {}
 
 const READY_DELETION_CANDIDATE_SET = new Set(READY_DELETION_CANDIDATE_SUITES)
 
@@ -226,8 +229,9 @@ function entryForCandidate(family, suite) {
   const keepDetails = KEEP_DELETION_CANDIDATE_DETAILS[suite]
   const needsSplitDetails = NEEDS_SPLIT_DELETION_CANDIDATE_DETAILS[suite]
   const step5cReadyDetails = HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS[suite]
+  const step5dReadyDetails = HISTORICAL_CHECKPOINT_STEP5D_READY_DELETION_CANDIDATE_DETAILS[suite]
   const isReady = READY_DELETION_CANDIDATE_SET.has(suite)
-  const details = keepDetails || needsSplitDetails || step5cReadyDetails || {}
+  const details = keepDetails || needsSplitDetails || step5cReadyDetails || step5dReadyDetails || {}
   const deleteReadiness = keepDetails ? 'keep' : isReady ? 'ready' : 'needs-split'
 
   return {
@@ -238,8 +242,8 @@ function entryForCandidate(family, suite) {
     replacementAuditSuite: HISTORICAL_CHECKPOINT_DELETION_REPLACEMENT_AUDITS[scope],
     supplementalAuditSuites: [HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT],
     deleteReadiness,
-    deletionSlice: step5cReadyDetails ? 'T034-step5c' : isReady ? 'T024-ready' : null,
-    currentGuardEvidence: Object.freeze([...(step5cReadyDetails?.currentGuardEvidence || [])]),
+    deletionSlice: step5dReadyDetails ? 'T036-step5d' : step5cReadyDetails ? 'T034-step5c' : isReady ? 'T024-ready' : null,
+    currentGuardEvidence: Object.freeze([...(step5cReadyDetails?.currentGuardEvidence || []), ...(step5dReadyDetails?.currentGuardEvidence || [])]),
     replacedAssertionCategories: deleteReadiness === 'ready'
       ? READY_REPLACED_ASSERTION_CATEGORIES
       : PARTIAL_REPLACED_ASSERTION_CATEGORIES,
@@ -294,6 +298,8 @@ module.exports = {
   HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS,
+  HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5D_READY_DELETION_CANDIDATE_DETAILS,
   HISTORICAL_CHECKPOINT_T024_DELETED_SUITES,
   KEEP_DELETION_CANDIDATE_DETAILS,
   NEEDS_SPLIT_DELETION_CANDIDATE_DETAILS,

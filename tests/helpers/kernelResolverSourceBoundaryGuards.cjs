@@ -67,7 +67,6 @@ const KERNEL_RESOLVER_SUPPORTING_SUITES = Object.freeze([
   'tests/suites/go-kernel-v0426-artifact-output-policy.cjs',
   'tests/suites/go-kernel-v0426-artifact-smoke-handoff.cjs',
   'tests/suites/go-kernel-v0426-manifest-provenance-generator.cjs',
-  'tests/suites/go-kernel-v0426-storage-release-policy-docs.cjs',
   'tests/suites/go-kernel-v0427-artifact-bundle-contract.cjs',
   'tests/suites/go-kernel-v0427-clean-install-consumption.cjs',
   'tests/suites/go-kernel-v0427-consumption-failure-rollback-no-leak.cjs',

@@ -65,6 +65,15 @@ const {
   DEFAULT_GO_READINESS_FIXTURE_SUPPORTING_SUITES,
 } = require('../../helpers/defaultGoReadinessFixtureGuards.cjs')
 const {
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORY_DESCRIPTIONS,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_HELPER,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_SOURCE_FILES,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_SUPPORTING_DOCS,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_SUPPORTING_FIXTURES,
+} = require('../../helpers/packageReleaseSecurityRollbackGuards.cjs')
+const {
   HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT,
   HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP,
   HISTORICAL_CHECKPOINT_DELETION_REPLACEMENT_AUDITS,
@@ -72,6 +81,8 @@ const {
   HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS,
+  HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5D_READY_DELETION_CANDIDATE_DETAILS,
 } = require('./historicalCheckpointDeletionMap.cjs')
 
 const HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT = CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_GUARD_SUITE
@@ -199,33 +210,20 @@ const HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE =
   ]),
 })
 
+const HISTORICAL_CHECKPOINT_STEP5D_PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_EVIDENCE = Object.freeze({
+  suite: PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE,
+  helper: PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_HELPER,
+  sourceFiles: Object.freeze([...PACKAGE_RELEASE_SECURITY_ROLLBACK_SOURCE_FILES]),
+  supportingDocs: Object.freeze([...PACKAGE_RELEASE_SECURITY_ROLLBACK_SUPPORTING_DOCS]),
+  supportingFixtures: Object.freeze([...PACKAGE_RELEASE_SECURITY_ROLLBACK_SUPPORTING_FIXTURES]),
+  behaviorEvidence: Object.freeze([
+    'current package/release/security/rollback guard executes storage/release non-applied policy, review-only workflow, and no checked-in artifact scans',
+    'rollback/default-disable, default-Go readiness, readiness evidence, and tag-gate fixtures remain blocked/non-applied/non-release and cannot be approved by repo state alone',
+    'security/signing ownership remains placeholder-only while package/runtime/tool/Go surfaces expose no release/native/signing/default control plane',
+  ]),
+})
+
 const RESIDUAL_REMAP_DETAILS = Object.freeze({
-  'tests/suites/go-kernel-v0426-storage-release-policy-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'future storage/release policy matrix details remain historical policy content beyond executable package/release guardrails',
-    ]),
-    residualRisks: Object.freeze(['Consolidated workflow/package guards cover mechanics, but the storage/release policy matrix still needs an owner.']),
-  },
-  'tests/suites/go-kernel-v0634-rollback-default-disable-policy-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'rollback/default-disable policy and UI behavior checks remain unique',
-      'fixture/tool-surface checks for default/release/signing control-plane remain source-fixture-specific beyond current readiness and parser-boundary guards',
-    ]),
-    residualRisks: Object.freeze(['Kernel/resolver parser boundaries are covered by the current guard; do not delete until rollback/default-disable policy and fixture/tool-surface coverage is migrated.']),
-  },
-  'tests/suites/go-kernel-v0634-security-signing-ownership-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'tool fixture checks for signing/security control-plane remain unique beyond consolidated mechanics and parser-boundary source coverage',
-    ]),
-    residualRisks: Object.freeze(['Consolidated guard covers signing mechanics and the current guard covers parser boundaries, but not source/tool fixture ownership assertions.']),
-  },
-  'tests/suites/go-kernel-v0634-package-release-decision-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'final package/release/default decision checkpoint, rollback/default-disable, and signing/security ownership synthesis remain broader than install-layout path-safety coverage',
-      'tool control-plane invariants remain broader than package/release governance, readiness command containment, kernel/resolver, and install-layout guards',
-    ]),
-    residualRisks: Object.freeze(['Install-layout/path-safety decisions are covered by the current guard; migrate broader package-release/default, rollback/security, and tool-control-plane checkpoint assertions before deleting.']),
-  },
   'tests/suites/go-kernel-v0419-refresh-parser-unavailable-safety.cjs': {
     currentStatus: 'step5a-keep',
     residualUniqueAssertions: Object.freeze([
@@ -268,6 +266,28 @@ function step5cDeletedAuditEntryForSuite(suite) {
 }
 
 const HISTORICAL_CHECKPOINT_STEP5C_DELETED_GUARD_AUDIT = Object.freeze(HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES.map(step5cDeletedAuditEntryForSuite))
+
+function step5dDeletedAuditEntryForSuite(suite) {
+  const prior = priorEntryForSuite(suite)
+  const deletionDetails = HISTORICAL_CHECKPOINT_STEP5D_READY_DELETION_CANDIDATE_DETAILS[suite]
+  if (!deletionDetails) throw new Error(`Missing Step 5D deleted guard audit details for ${suite}`)
+  return Object.freeze({
+    suite,
+    currentStatus: 'step5d-deleted',
+    priorDeleteReadiness: prior.deleteReadiness,
+    familyId: prior.familyId,
+    scope: prior.scope,
+    replacementAuditSuite: prior.replacementAuditSuite,
+    deletionParityAuditSuite: HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT,
+    deletedSuiteExpectedAbsent: true,
+    currentGuardEvidence: Object.freeze([...deletionDetails.currentGuardEvidence]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
+    rationale: deletionDetails.rationale,
+  })
+}
+
+const HISTORICAL_CHECKPOINT_STEP5D_DELETED_GUARD_AUDIT = Object.freeze(HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES.map(step5dDeletedAuditEntryForSuite))
 
 function describeStep5CCurrentGuards(readinessCategories, parserDiagnosticsCategories, kernelResolverCategories, artifactCiProvenanceCategories, installLayoutPathSafetyCategories, piExtensionPublicSurfaceCategories, defaultGoReadinessFixtureCategories) {
   const guards = []
@@ -393,6 +413,7 @@ module.exports = {
   HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_PI_EXTENSION_PUBLIC_SURFACE_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE,
+  HISTORICAL_CHECKPOINT_STEP5D_PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS,
@@ -401,6 +422,8 @@ module.exports = {
   HISTORICAL_CHECKPOINT_STEP5A_STILL_KEEP_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETED_GUARD_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5D_DELETED_GUARD_AUDIT,
+  HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES,
   HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES,
   HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES,
@@ -412,6 +435,8 @@ module.exports = {
   PI_EXTENSION_PUBLIC_SURFACE_CATEGORY_DESCRIPTIONS,
   DEFAULT_GO_READINESS_FIXTURE_CATEGORIES,
   DEFAULT_GO_READINESS_FIXTURE_CATEGORY_DESCRIPTIONS,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORY_DESCRIPTIONS,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORY_DESCRIPTIONS,
   PARSER_DIAGNOSTICS_CATEGORIES,

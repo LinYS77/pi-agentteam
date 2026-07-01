@@ -13,6 +13,12 @@ const {
   assertConsolidatedPackageReleaseGovernance,
 } = require('../helpers/packageReleaseGovernanceGuards.cjs')
 const {
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES: HELPER_PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_HELPER,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE,
+  assertPackageReleaseSecurityRollbackGuard,
+} = require('../helpers/packageReleaseSecurityRollbackGuards.cjs')
+const {
   READINESS_COMMAND_SURFACE_CATEGORIES: HELPER_READINESS_CATEGORIES,
   READINESS_COMMAND_SURFACE_GUARD_HELPER,
   READINESS_COMMAND_SURFACE_GUARD_SUITE,
@@ -71,6 +77,8 @@ const {
   HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES: DELETION_MAP_STEP5C_DELETED_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS,
+  HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES: DELETION_MAP_STEP5D_DELETED_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5D_READY_DELETION_CANDIDATE_DETAILS,
 } = require('../fixtures/kernel/historicalCheckpointDeletionMap.cjs')
 const {
   CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_CATEGORIES,
@@ -83,6 +91,7 @@ const {
   HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_PI_EXTENSION_PUBLIC_SURFACE_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_DEFAULT_GO_READINESS_FIXTURE_GUARD_EVIDENCE,
+  HISTORICAL_CHECKPOINT_STEP5D_PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS,
@@ -92,6 +101,8 @@ const {
   HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETED_GUARD_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5C_DELETED_SUITES,
+  HISTORICAL_CHECKPOINT_STEP5D_DELETED_GUARD_AUDIT,
+  HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES,
   HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES,
   ARTIFACT_CI_PROVENANCE_CATEGORIES,
@@ -102,6 +113,8 @@ const {
   PI_EXTENSION_PUBLIC_SURFACE_CATEGORY_DESCRIPTIONS,
   DEFAULT_GO_READINESS_FIXTURE_CATEGORIES,
   DEFAULT_GO_READINESS_FIXTURE_CATEGORY_DESCRIPTIONS,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES,
+  PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORY_DESCRIPTIONS,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORY_DESCRIPTIONS,
   PARSER_DIAGNOSTICS_CATEGORIES,
@@ -111,11 +124,12 @@ const {
   RESIDUAL_REMAP_DETAILS,
 } = require('../fixtures/kernel/historicalCheckpointStep5Remap.cjs')
 
-const EXPECTED_REMAINING_TOTAL = 5
+const EXPECTED_REMAINING_TOTAL = 1
 const EXPECTED_STEP5B_READY = 0
 const EXPECTED_STEP5C_READY = 0
 const EXPECTED_STEP5C_DELETED = 27
-const EXPECTED_STILL_NEEDS_SPLIT = 4
+const EXPECTED_STEP5D_DELETED = 4
+const EXPECTED_STILL_NEEDS_SPLIT = 0
 const EXPECTED_STILL_KEEP = 1
 const EXPECTED_STEP5C_PARSER_DIAGNOSTICS_CANDIDATES = Object.freeze([
   'tests/suites/go-kernel-v0419-tmux-readiness-docs.cjs',
@@ -166,6 +180,12 @@ const EXPECTED_STEP5C_DELETION_CANDIDATES = Object.freeze([
   ...EXPECTED_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_CANDIDATES,
   ...EXPECTED_STEP5C_PI_EXTENSION_PUBLIC_SURFACE_CANDIDATES,
   ...EXPECTED_STEP5C_DEFAULT_GO_READINESS_FIXTURE_CANDIDATES,
+])
+const EXPECTED_STEP5D_DELETION_CANDIDATES = Object.freeze([
+  'tests/suites/go-kernel-v0426-storage-release-policy-docs.cjs',
+  'tests/suites/go-kernel-v0634-rollback-default-disable-policy-docs.cjs',
+  'tests/suites/go-kernel-v0634-security-signing-ownership-docs.cjs',
+  'tests/suites/go-kernel-v0634-package-release-decision-checkpoint-docs.cjs',
 ])
 
 const SCRIPT_FILES_THAT_MUST_REMAIN = Object.freeze([
@@ -242,6 +262,7 @@ const FIXTURE_AND_HELPER_FILES_THAT_MUST_REMAIN = Object.freeze([
   'tests/helpers/nativeGuards.cjs',
   'tests/helpers/packageGuards.cjs',
   'tests/helpers/packageReleaseGovernanceGuards.cjs',
+  'tests/helpers/packageReleaseSecurityRollbackGuards.cjs',
   'tests/helpers/parserDiagnosticsGuards.cjs',
   'tests/helpers/installLayoutPathSafetyGuards.cjs',
   'tests/helpers/piExtensionPublicSurfaceGuards.cjs',
@@ -255,6 +276,7 @@ const FIXTURE_AND_HELPER_FILES_THAT_MUST_REMAIN = Object.freeze([
   'tests/suites/go-kernel-resolver-source-boundary-guard.cjs',
   'tests/suites/pi-extension-public-surface-install-load-guard.cjs',
   'tests/suites/go-kernel-default-go-readiness-fixture-guard.cjs',
+  'tests/suites/go-kernel-package-release-security-rollback-guard.cjs',
   'tests/suites/readiness-command-surface-guard.cjs',
 ])
 
@@ -301,6 +323,28 @@ function assertConsolidatedGuard(root) {
   ]) {
     assert.equal(existsRel(root, rel), true, `${rel} should exist as consolidated guard evidence`)
   }
+}
+
+function assertPackageReleaseSecurityRollbackGuardCoverage(root, env) {
+  const result = assertPackageReleaseSecurityRollbackGuard(root, env)
+  assertSameSet(result.checkedCategories, HELPER_PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES, 'helper checked package/release/security/rollback categories')
+  assertSameSet(PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES, HELPER_PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES, 'remap fixture package/release/security/rollback categories')
+  assert.equal(Object.keys(PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORY_DESCRIPTIONS).length, HELPER_PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES.length, 'each package/release/security/rollback category should have a description')
+  for (const category of HELPER_PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES) {
+    assert.ok(PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORY_DESCRIPTIONS[category], `${category} should have a description`)
+  }
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5D_PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_EVIDENCE.suite, PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE, 'Step 5D evidence should point at current guard suite')
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5D_PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_EVIDENCE.helper, PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_HELPER, 'Step 5D evidence should point at current guard helper')
+  for (const rel of [
+    HISTORICAL_CHECKPOINT_STEP5D_PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_EVIDENCE.suite,
+    HISTORICAL_CHECKPOINT_STEP5D_PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_EVIDENCE.helper,
+    ...HISTORICAL_CHECKPOINT_STEP5D_PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_EVIDENCE.sourceFiles,
+    ...HISTORICAL_CHECKPOINT_STEP5D_PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_EVIDENCE.supportingDocs,
+    ...HISTORICAL_CHECKPOINT_STEP5D_PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_EVIDENCE.supportingFixtures,
+  ]) {
+    assert.equal(existsRel(root, rel), true, `${rel} should exist as Step 5D guard evidence`)
+  }
+  assert.ok(HISTORICAL_CHECKPOINT_STEP5D_PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_EVIDENCE.behaviorEvidence.length >= 3, 'Step 5D guard evidence should include behavioral/source checks')
 }
 
 async function assertReadinessGuard(root, env) {
@@ -458,7 +502,7 @@ function assertDefaultGoReadinessFixtureGuardCoverage(root) {
 function assertRemapCompleteness() {
   const remaining = remainingCandidateSuites()
   const remappedSuites = HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite)
-  assert.equal(remaining.length, EXPECTED_REMAINING_TOTAL, 'remaining candidate input count should stay 4 needs-split + 1 keep after Step5C deletion')
+  assert.equal(remaining.length, EXPECTED_REMAINING_TOTAL, 'remaining candidate input count should stay only the keep suite after Step5D deletion')
   assert.equal(HISTORICAL_CHECKPOINT_STEP5A_REMAP.length, EXPECTED_REMAINING_TOTAL, 'post-Step5C remap should enumerate every retained candidate')
   assertUnique(remappedSuites, 'Step 5A remap suites')
   assertSameSet(remappedSuites, remaining, 'Step 5A remap suites vs remaining candidates')
@@ -476,6 +520,11 @@ function assertRemapCompleteness() {
   assert.equal(HISTORICAL_CHECKPOINT_STEP5C_DELETED_GUARD_AUDIT.length, EXPECTED_STEP5C_DELETED, 'Step 5C deleted guard audit count')
   assertSameSet(HISTORICAL_CHECKPOINT_STEP5C_DELETED_GUARD_AUDIT.map(entry => entry.suite), EXPECTED_STEP5C_DELETION_CANDIDATES, 'Step 5C deleted guard audit suites')
   assertSameSet(Object.keys(HISTORICAL_CHECKPOINT_STEP5C_READY_DELETION_CANDIDATE_DETAILS), EXPECTED_STEP5C_DELETION_CANDIDATES, 'deletion map Step 5C guard evidence suites')
+  assertSameSet(HISTORICAL_CHECKPOINT_STEP5D_DELETED_SUITES, EXPECTED_STEP5D_DELETION_CANDIDATES, 'Step 5D deleted suite audit list')
+  assertSameSet(DELETION_MAP_STEP5D_DELETED_SUITES, EXPECTED_STEP5D_DELETION_CANDIDATES, 'deletion map Step 5D deleted suite list')
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5D_DELETED_GUARD_AUDIT.length, EXPECTED_STEP5D_DELETED, 'Step 5D deleted guard audit count')
+  assertSameSet(HISTORICAL_CHECKPOINT_STEP5D_DELETED_GUARD_AUDIT.map(entry => entry.suite), EXPECTED_STEP5D_DELETION_CANDIDATES, 'Step 5D deleted guard audit suites')
+  assertSameSet(Object.keys(HISTORICAL_CHECKPOINT_STEP5D_READY_DELETION_CANDIDATE_DETAILS), EXPECTED_STEP5D_DELETION_CANDIDATES, 'deletion map Step 5D guard evidence suites')
   assertSameSet(HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES, HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES, 'Step 5 still-needs-split suites')
   assertSameSet(HISTORICAL_CHECKPOINT_STEP5A_STILL_KEEP_SUITES, HISTORICAL_CHECKPOINT_KEEP_SUITES, 'Step 5 still-keep suites')
   assert.deepEqual(HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES, [], 'Step 5B package/release-only deletion candidate list should remain empty')
@@ -621,18 +670,37 @@ function assertStep5CDeletedGuardAudit(root) {
   }
 }
 
+function assertStep5DDeletedGuardAudit(root) {
+  for (const entry of HISTORICAL_CHECKPOINT_STEP5D_DELETED_GUARD_AUDIT) {
+    assert.equal(entry.currentStatus, 'step5d-deleted', `${entry.suite} should be marked as Step5D deleted audit evidence`)
+    assert.equal(entry.deletedSuiteExpectedAbsent, true, `${entry.suite} should be expected absent after Step5D deletion`)
+    assert.equal(existsRel(root, entry.suite), false, `${entry.suite} should be absent after Step5D deletion`)
+    assert.deepEqual(entry.residualUniqueAssertions, [], `${entry.suite} Step5D deleted audit should have no residual assertions`)
+    assert.deepEqual(entry.residualRisks, [], `${entry.suite} Step5D deleted audit should have no residual risks`)
+    assert.ok(entry.currentGuardEvidence.length >= 1, `${entry.suite} Step5D deleted audit should keep current guard evidence`)
+    assert.ok(entry.rationale.includes('Step 5D'), `${entry.suite} Step5D deleted audit should cite Step 5D current guard evidence`)
+    for (const evidence of entry.currentGuardEvidence) {
+      assert.equal(evidence.suite, PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_SUITE, `${entry.suite} should cite the Step 5D guard suite`)
+      assert.equal(evidence.helper, PACKAGE_RELEASE_SECURITY_ROLLBACK_GUARD_HELPER, `${entry.suite} should cite the Step 5D guard helper`)
+      assertSameSet(evidence.categories, HELPER_PACKAGE_RELEASE_SECURITY_ROLLBACK_CATEGORIES, `${entry.suite} Step 5D guard categories`)
+      assert.equal(existsRel(root, evidence.suite), true, `${entry.suite} current guard suite should remain: ${evidence.suite}`)
+      assert.equal(existsRel(root, evidence.helper), true, `${entry.suite} current guard helper should remain: ${evidence.helper}`)
+    }
+  }
+}
+
 function assertNoDeletionOrReintroduction(root) {
   const remapped = new Set(HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite))
   const step5B = new Set(HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES)
   const step5C = new Set(HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES)
   for (const suite of HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES) {
-    assert.equal(existsRel(root, suite), false, `${suite} should remain absent after T024/Step5C deletion`)
+    assert.equal(existsRel(root, suite), false, `${suite} should remain absent after T024/Step5C/Step5D deletion`)
     assert.equal(remapped.has(suite), false, `${suite} must not be remapped as a remaining candidate`)
     assert.equal(step5B.has(suite), false, `${suite} must not be reintroduced as a Step 5B candidate`)
     assert.equal(step5C.has(suite), false, `${suite} must not be reintroduced as a Step 5C candidate`)
   }
   for (const suite of remainingCandidateSuites()) {
-    assert.equal(existsRel(root, suite), true, `${suite} should remain present after Step5C because it is still needs-split/keep`)
+    assert.equal(existsRel(root, suite), true, `${suite} should remain present after Step5D because it is still keep`)
   }
   for (const entry of HISTORICAL_CHECKPOINT_STEP5A_REMAP) {
     assert.equal(existsRel(root, entry.replacementAuditSuite), true, `${entry.replacementAuditSuite} should exist for ${entry.suite}`)
@@ -664,7 +732,7 @@ function assertNoDocsFixturesScriptsSourceRuntimeNativeDeletion(root) {
     ...HISTORICAL_CHECKPOINT_DOCS_V0628_V0643,
     ...HISTORICAL_CHECKPOINT_DOCS_V0644_V0688,
   ]) {
-    assert.equal(existsRel(root, doc), true, `${doc} should still exist; Step5C must not delete docs`)
+    assert.equal(existsRel(root, doc), true, `${doc} should still exist; Step5D must not delete docs`)
   }
   for (const rel of [
     '.gitignore',
@@ -674,7 +742,7 @@ function assertNoDocsFixturesScriptsSourceRuntimeNativeDeletion(root) {
     ...SOURCE_AND_RUNTIME_FILES_THAT_MUST_REMAIN,
     ...APPROVED_EMBEDDED_NATIVE_FILES,
   ]) {
-    assert.equal(existsRel(root, rel), true, `${rel} should still exist; Step5C must not delete fixtures/scripts/source/runtime/native files`)
+    assert.equal(existsRel(root, rel), true, `${rel} should still exist; Step5D must not delete fixtures/scripts/source/runtime/native files`)
   }
   assertIncludes(readRel(root, 'package.json'), '"version": "0.6.8"', 'package.json')
 }
@@ -688,6 +756,7 @@ module.exports = {
     assert.equal(path.basename(__filename), path.basename(HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT), 'Step 5A remap audit should stay versioned historical/audit-only')
 
     assertConsolidatedGuard(root)
+    assertPackageReleaseSecurityRollbackGuardCoverage(root, env)
     await assertReadinessGuard(root, env)
     await assertParserDiagnosticsGuardCoverage(root, env)
     await assertKernelResolverGuardCoverage(root, env)
@@ -697,6 +766,7 @@ module.exports = {
     assertDefaultGoReadinessFixtureGuardCoverage(root)
     assertRemapCompleteness()
     assertStep5CDeletedGuardAudit(root)
+    assertStep5DDeletedGuardAudit(root)
     assertNoDeletionOrReintroduction(root)
     assertNonCandidatesRemainNonCandidates(root)
     assertNoDocsFixturesScriptsSourceRuntimeNativeDeletion(root)
