@@ -47,14 +47,14 @@ const {
   summarizeSelection,
 } = require('../suiteManifest.cjs')
 
-const EXPECTED_TIER_COUNTS_POST_T036 = Object.freeze({
+const EXPECTED_TIER_COUNTS_POST_T038 = Object.freeze({
   default: 85,
   smoke: 10,
   core: 59,
   'go-current': 26,
-  audit: 127,
+  audit: 122,
   benchmark: 3,
-  regression: 215,
+  regression: 210,
 })
 
 const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
@@ -77,6 +77,19 @@ const GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE_FILE = normalizeSuiteFile(GO_TMUX_CUTOV
 const HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES = HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES.map(normalizeSuiteFile)
 const HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITE_FILES = HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES.map(normalizeSuiteFile)
 const HISTORICAL_CHECKPOINT_KEEP_SUITE_FILES = HISTORICAL_CHECKPOINT_KEEP_SUITES.map(normalizeSuiteFile)
+const STEP6_BATCH1_DELETED_READ_ONLY_FACADE_SUITE_FILES = Object.freeze([
+  'go-kernel-v0655-go-list-agentteam-panes-facade-cutover.cjs',
+  'go-kernel-v0656-go-inspect-pane-facade-cutover.cjs',
+  'go-kernel-v0657-go-pane-exists-facade-cutover.cjs',
+  'go-kernel-v0658-go-resolve-pane-binding-facade-cutover.cjs',
+  'go-kernel-v0659-go-target-for-pane-facade-cutover.cjs',
+])
+const STEP6_BATCH1_OUT_OF_SCOPE_READ_ONLY_FACADE_SUITE_FILES = Object.freeze([
+  'go-kernel-v0653-go-inspect-pane-worker-lifecycle.cjs',
+  'go-kernel-v0654-go-list-agentteam-panes-worker-lifecycle.cjs',
+  'go-kernel-v0660-go-current-pane-binding-facade-cutover.cjs',
+  'go-kernel-v0661-go-async-pane-binding-facade-cutover.cjs',
+])
 
 module.exports = {
   name: 'suite tiering manifest',
@@ -112,10 +125,10 @@ module.exports = {
       regression: regressionSuites,
     }
 
-    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T036.regression, 'manifest should encode the post-T036 discovered suite count')
-    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T036, 'suite tier summary should encode the post-T036 topology')
+    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T038.regression, 'manifest should encode the post-T038 discovered suite count')
+    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T038, 'suite tier summary should encode the post-T038 topology')
     for (const [tier, suites] of Object.entries(tierSelections)) {
-      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T036[tier], `${tier} tier count should match post-T036 topology`)
+      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T038[tier], `${tier} tier count should match post-T038 topology`)
     }
     assert.deepEqual(regressionSuites, allSuites, 'regression tier should preserve every suite')
     assert.ok(defaultSuites.length < regressionSuites.length, 'default tier should be reduced from full regression')
@@ -179,6 +192,16 @@ module.exports = {
     assert.ok(defaultSuites.includes('go-kernel-v0696-v07-release-decision-package.cjs'), 'default tier should keep current Go release guard')
     assert.ok(auditSuites.includes('go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs'), 'audit tier should retain historical cutover coverage')
     assert.ok(auditSuites.includes('go-kernel-v0688-historical-checkpoints-audit.cjs'), 'audit tier should include the historical checkpoint manifest audit')
+    for (const file of STEP6_BATCH1_DELETED_READ_ONLY_FACADE_SUITE_FILES) {
+      assert.equal(allSuites.includes(file), false, `${file} should be absent after Step 6 batch 1 read-only facade deletion`)
+      assert.equal(auditSuites.includes(file), false, `${file} should not remain in audit after Step 6 batch 1 read-only facade deletion`)
+      assert.equal(regressionSuites.includes(file), false, `${file} should not remain in regression after Step 6 batch 1 read-only facade deletion`)
+    }
+    for (const file of STEP6_BATCH1_OUT_OF_SCOPE_READ_ONLY_FACADE_SUITE_FILES) {
+      assert.ok(allSuites.includes(file), `${file} should remain discoverable because it is out of T038 scope`)
+      assert.ok(auditSuites.includes(file), `${file} should remain audit coverage because it is out of T038 scope`)
+      assert.ok(regressionSuites.includes(file), `${file} should remain regression coverage because it is out of T038 scope`)
+    }
     assert.deepEqual(classifySuite(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE).tiers, ['audit', 'regression'], 'deletion parity suite must remain audit/regression only')
     assert.ok(auditSuites.includes(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE), 'audit tier should include the historical checkpoint deletion parity audit')
     assert.ok(regressionSuites.includes(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE), 'regression tier should include the historical checkpoint deletion parity audit')

@@ -48,6 +48,14 @@ const EXPECTED_V0644_V0688_VERSIONS = Array.from(
   (_, index) => `v0.6.${44 + index}`,
 )
 
+const EXPECTED_STEP6_BATCH1_DELETED_READ_ONLY_FACADE_SUITES = [
+  'tests/suites/go-kernel-v0655-go-list-agentteam-panes-facade-cutover.cjs',
+  'tests/suites/go-kernel-v0656-go-inspect-pane-facade-cutover.cjs',
+  'tests/suites/go-kernel-v0657-go-pane-exists-facade-cutover.cjs',
+  'tests/suites/go-kernel-v0658-go-resolve-pane-binding-facade-cutover.cjs',
+  'tests/suites/go-kernel-v0659-go-target-for-pane-facade-cutover.cjs',
+]
+
 function assertUnique(values, label) {
   const seen = new Set()
   const duplicates = []
@@ -58,6 +66,14 @@ function assertUnique(values, label) {
   assert.deepEqual(duplicates, [], `${label} should not contain duplicates`)
 }
 
+function sorted(values) {
+  return [...values].sort((a, b) => a.localeCompare(b))
+}
+
+function assertSameSet(actual, expected, label) {
+  assert.deepEqual(sorted(actual), sorted(expected), `${label} should match exactly`)
+}
+
 function suitePrefixForVersion(version) {
   return `tests/suites/go-kernel-${String(version).replace('v0.', 'v0').replace(/\./g, '')}`
 }
@@ -66,8 +82,9 @@ function assertManifestShape() {
   assert.equal(HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688.length, EXPECTED_V0644_V0688_VERSIONS.length, 'manifest should cover every historical checkpoint from v0.6.44 through v0.6.88')
   assert.deepEqual(HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688.map(family => family.version), EXPECTED_V0644_V0688_VERSIONS, 'manifest should preserve chronological v0.6.44-v0.6.88 coverage')
   assert.equal(HISTORICAL_CHECKPOINT_DOCS_V0644_V0688.length, EXPECTED_V0644_V0688_VERSIONS.length, 'v0.6.44-v0.6.88 scope should have one canonical perf doc per historical version')
-  assert.equal(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688.length, 0, 'v0.6.44-v0.6.88 contains source/runtime/gate suites, so this conservative manifest should not mark deletion candidates yet')
-  assert.equal(HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0644_V0688.length, EXPECTED_V0644_V0688_VERSIONS.length, 'v0.6.44-v0.6.88 should explicitly preserve each existing behavior/gate suite as a cautious non-candidate')
+  assert.equal(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688.length, EXPECTED_STEP6_BATCH1_DELETED_READ_ONLY_FACADE_SUITES.length, 'v0.6.44-v0.6.88 should mark only Step 6 batch 1 deleted low-risk read-only facade wrappers as replacement candidates')
+  assert.equal(HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0644_V0688.length, EXPECTED_V0644_V0688_VERSIONS.length - EXPECTED_STEP6_BATCH1_DELETED_READ_ONLY_FACADE_SUITES.length, 'v0.6.44-v0.6.88 should preserve all non-deleted behavior/gate suites as cautious non-candidates')
+  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_STEP6_BATCH1_DELETED_READ_ONLY_FACADE_SUITES, 'v0.6.44-v0.6.88 Step 6 batch 1 replacement candidates')
   assertUnique(HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688.map(family => family.id), 'v0.6.44-v0.6.88 family ids')
   assertUnique(HISTORICAL_CHECKPOINT_DOCS_V0644_V0688, 'v0.6.44-v0.6.88 historical checkpoint docs')
   assertUnique(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, 'v0.6.44-v0.6.88 replacement candidate suites')
@@ -81,15 +98,21 @@ function assertManifestShape() {
     assert.ok(family.id.startsWith(family.version.replace(/\./g, '').replace('v', 'v')), `${family.id} should carry version identity`)
     assert.ok(family.checkpointLabel, `${family.id} should have a checkpoint label`)
     assert.deepEqual(family.docs, [family.checkpointDoc], `${family.id} should map to one canonical historical perf doc`)
+    const isStep6Batch1DeletedFamily = family.replacementCandidateSuites.length === 1
     assert.ok(Array.isArray(family.replacementCandidateSuites), `${family.id} should explicitly name replacement candidates, even when empty`)
     assert.ok(Array.isArray(family.nonCandidateSuites), `${family.id} should explicitly preserve cautious non-candidates`)
-    assert.equal(family.replacementCandidateSuites.length, 0, `${family.id} should not mark a deletion candidate in this source/runtime cutover scope`)
-    assert.equal(family.nonCandidateSuites.length, 1, `${family.id} should preserve its existing suite as a non-candidate`)
+    assert.equal(family.replacementCandidateSuites.length, isStep6Batch1DeletedFamily ? 1 : 0, `${family.id} replacement candidate count should match Step 6 batch 1 deletion scope`)
+    assert.equal(family.nonCandidateSuites.length, isStep6Batch1DeletedFamily ? 0 : 1, `${family.id} non-candidate count should match Step 6 batch 1 deletion scope`)
     assert.ok(family.requiredThemes.length >= 3, `${family.id} should define compact required themes`)
 
     for (const doc of family.docs) {
       assert.ok(doc.startsWith(`docs/perf/${family.version}-`), `${doc} should stay under its historical version prefix`)
       assert.ok(doc.endsWith('.md'), `${doc} should be a markdown checkpoint/audit doc`)
+    }
+    for (const suite of family.replacementCandidateSuites) {
+      assert.ok(EXPECTED_STEP6_BATCH1_DELETED_READ_ONLY_FACADE_SUITES.includes(suite), `${suite} should be an approved Step 6 batch 1 deleted replacement candidate`)
+      assert.ok(suite.startsWith(suitePrefixForVersion(family.version)), `${suite} should carry the historical suite version prefix`)
+      assert.ok(suite.endsWith('.cjs'), `${suite} should be a CommonJS suite path`)
     }
     for (const suite of family.nonCandidateSuites) {
       assert.ok(suite.startsWith(suitePrefixForVersion(family.version)), `${suite} should carry the historical suite version prefix`)
@@ -147,7 +170,7 @@ module.exports = {
     assertGitignoreAllowList(root)
 
     for (const suitePath of HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688) {
-      assert.equal(existsRel(root, suitePath), true, `${suitePath} should remain in place until a later deletion slice`)
+      assert.equal(existsRel(root, suitePath), false, `${suitePath} should be absent after Step 6 batch 1 read-only facade deletion`)
     }
     for (const suitePath of HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0644_V0688) {
       assert.equal(existsRel(root, suitePath), true, `${suitePath} should remain preserved as a cautious non-candidate`)

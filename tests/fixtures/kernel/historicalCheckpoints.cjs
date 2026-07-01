@@ -980,9 +980,10 @@ function historicalGoKernelSuite(version, slug) {
   return `tests/suites/go-kernel-${compactHistoricalVersion(version)}-${slug}.cjs`
 }
 
-function historicalGoKernelFamily({ version, slug, title, requiredThemes, continuityTargets = [], suiteSlug = slug }) {
+function historicalGoKernelFamily({ version, slug, title, requiredThemes, continuityTargets = [], suiteSlug = slug, replacementCandidateSuites, nonCandidateSuites }) {
   const doc = historicalPerfDoc(version, slug)
   const continuityLinks = continuityTargets.length > 0 ? [{ from: doc, to: continuityTargets }] : []
+  const defaultSuite = historicalGoKernelSuite(version, suiteSlug)
 
   return {
     id: `${compactHistoricalVersion(version)}-${slug}`,
@@ -993,8 +994,8 @@ function historicalGoKernelFamily({ version, slug, title, requiredThemes, contin
     planBacklinks: [doc],
     continuityLinks,
     requiredThemes: [title, ...requiredThemes],
-    replacementCandidateSuites: [],
-    nonCandidateSuites: [historicalGoKernelSuite(version, suiteSlug)],
+    replacementCandidateSuites: replacementCandidateSuites || [],
+    nonCandidateSuites: nonCandidateSuites || (replacementCandidateSuites ? [] : [defaultSuite]),
   }
 }
 
@@ -1116,6 +1117,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "- No `wakePane`, `syncPaneLabels`, `createTeammatePane`, `killPane`, `clearPaneLabel`, `targetForPaneId`, `captureCurrentPaneBinding`, or non-inspect `display-message` path is migrated in this slice.",
     ],
     continuityTargets: ["v0.6.54"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.55", "go-list-agentteam-panes-facade-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.56",
@@ -1125,6 +1127,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.56 cuts over the TypeScript `inspectPane(paneId)` facade/default path to the existing Go `workerLifecycle.inspectPane` adapter.",
       "- State repository, task/report/PlanRun governance, team panel view-model, release/package verification, and package/native ownership remain unmigrated.",
     ],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.56", "go-inspect-pane-facade-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.57",
@@ -1134,6 +1137,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.57 cuts over the TypeScript `paneExists(paneId)` facade/default path to the already Go-backed `inspectPane(paneId)` facade.",
       "- State repository, task/report/PlanRun governance, team panel view-model, release/package verification, and package/native ownership remain unmigrated.",
     ],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.57", "go-pane-exists-facade-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.58",
@@ -1143,6 +1147,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.58 cuts over the TypeScript `resolvePaneBinding(paneId)` facade/default path to the Go-backed `workerLifecycle.inspectPane` adapter after extending that compact inspect result with `target`.",
       "The target field belongs on the universal read-only `inspectPane` operation, not on `listAgentTeamPanes()` lookup behavior. `resolvePaneBinding()` must support arbitrary tmux pane ids, including panes without `@agentteam-name`; `listAgentTeamPanes()` remains intentionally filtered to labeled agentteam panes only.",
     ],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.58", "go-resolve-pane-binding-facade-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.59",
@@ -1152,6 +1157,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.59 cuts over the TypeScript `targetForPaneId(paneId)` facade/default path to the existing Go-backed `resolvePaneBinding(paneId)` / `workerLifecycle.inspectPane` path.",
       "- State repository, task/report/PlanRun governance, team panel view-model, release/package verification, and package/native ownership remain unmigrated.",
     ],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.59", "go-target-for-pane-facade-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.60",
