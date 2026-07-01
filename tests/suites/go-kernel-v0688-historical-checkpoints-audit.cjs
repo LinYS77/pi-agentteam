@@ -48,7 +48,7 @@ const EXPECTED_V0644_V0688_VERSIONS = Array.from(
   (_, index) => `v0.6.${44 + index}`,
 )
 
-const EXPECTED_STEP6_DELETED_READ_ONLY_FACADE_SUITES = [
+const EXPECTED_STEP6_DELETED_READ_ONLY_AND_WINDOW_LABEL_SUITES = [
   'tests/suites/go-kernel-v0655-go-list-agentteam-panes-facade-cutover.cjs',
   'tests/suites/go-kernel-v0656-go-inspect-pane-facade-cutover.cjs',
   'tests/suites/go-kernel-v0657-go-pane-exists-facade-cutover.cjs',
@@ -63,6 +63,14 @@ const EXPECTED_STEP6_DELETED_READ_ONLY_FACADE_SUITES = [
   'tests/suites/go-kernel-v0668-go-detached-leader-binding-cutover.cjs',
   'tests/suites/go-kernel-v0669-go-detached-first-pane-cutover.cjs',
   'tests/suites/go-kernel-v0670-go-window-name-lookup-cutover.cjs',
+  'tests/suites/go-kernel-v0671-go-mutating-window-marking-gate.cjs',
+  'tests/suites/go-kernel-v0672-go-window-marking-cutover.cjs',
+  'tests/suites/go-kernel-v0673-go-refresh-window-pane-labels-gate.cjs',
+  'tests/suites/go-kernel-v0674-go-refresh-window-pane-labels-cutover.cjs',
+  'tests/suites/go-kernel-v0675-go-pane-label-setting-gate.cjs',
+  'tests/suites/go-kernel-v0676-go-pane-label-setting-cutover.cjs',
+  'tests/suites/go-kernel-v0677-go-pane-label-clearing-gate.cjs',
+  'tests/suites/go-kernel-v0678-go-pane-label-clearing-cutover.cjs',
 ]
 
 function assertUnique(values, label) {
@@ -91,9 +99,9 @@ function assertManifestShape() {
   assert.equal(HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688.length, EXPECTED_V0644_V0688_VERSIONS.length, 'manifest should cover every historical checkpoint from v0.6.44 through v0.6.88')
   assert.deepEqual(HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688.map(family => family.version), EXPECTED_V0644_V0688_VERSIONS, 'manifest should preserve chronological v0.6.44-v0.6.88 coverage')
   assert.equal(HISTORICAL_CHECKPOINT_DOCS_V0644_V0688.length, EXPECTED_V0644_V0688_VERSIONS.length, 'v0.6.44-v0.6.88 scope should have one canonical perf doc per historical version')
-  assert.equal(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688.length, EXPECTED_STEP6_DELETED_READ_ONLY_FACADE_SUITES.length, 'v0.6.44-v0.6.88 should mark only Step 6 deleted read-only facade/orchestration wrappers as replacement candidates')
-  assert.equal(HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0644_V0688.length, EXPECTED_V0644_V0688_VERSIONS.length - EXPECTED_STEP6_DELETED_READ_ONLY_FACADE_SUITES.length, 'v0.6.44-v0.6.88 should preserve all non-deleted behavior/gate suites as cautious non-candidates')
-  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_STEP6_DELETED_READ_ONLY_FACADE_SUITES, 'v0.6.44-v0.6.88 Step 6 replacement candidates')
+  assert.equal(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688.length, EXPECTED_STEP6_DELETED_READ_ONLY_AND_WINDOW_LABEL_SUITES.length, 'v0.6.44-v0.6.88 should mark only Step 6 deleted read-only facade/orchestration and non-destructive window/label suites as replacement candidates')
+  assert.equal(HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0644_V0688.length, EXPECTED_V0644_V0688_VERSIONS.length - EXPECTED_STEP6_DELETED_READ_ONLY_AND_WINDOW_LABEL_SUITES.length, 'v0.6.44-v0.6.88 should preserve all non-deleted behavior/gate suites as cautious non-candidates')
+  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_STEP6_DELETED_READ_ONLY_AND_WINDOW_LABEL_SUITES, 'v0.6.44-v0.6.88 Step 6 replacement candidates')
   assertUnique(HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688.map(family => family.id), 'v0.6.44-v0.6.88 family ids')
   assertUnique(HISTORICAL_CHECKPOINT_DOCS_V0644_V0688, 'v0.6.44-v0.6.88 historical checkpoint docs')
   assertUnique(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, 'v0.6.44-v0.6.88 replacement candidate suites')
@@ -119,7 +127,7 @@ function assertManifestShape() {
       assert.ok(doc.endsWith('.md'), `${doc} should be a markdown checkpoint/audit doc`)
     }
     for (const suite of family.replacementCandidateSuites) {
-      assert.ok(EXPECTED_STEP6_DELETED_READ_ONLY_FACADE_SUITES.includes(suite), `${suite} should be an approved Step 6 deleted replacement candidate`)
+      assert.ok(EXPECTED_STEP6_DELETED_READ_ONLY_AND_WINDOW_LABEL_SUITES.includes(suite), `${suite} should be an approved Step 6 deleted replacement candidate`)
       assert.ok(suite.startsWith(suitePrefixForVersion(family.version)), `${suite} should carry the historical suite version prefix`)
       assert.ok(suite.endsWith('.cjs'), `${suite} should be a CommonJS suite path`)
     }
@@ -179,7 +187,7 @@ module.exports = {
     assertGitignoreAllowList(root)
 
     for (const suitePath of HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688) {
-      assert.equal(existsRel(root, suitePath), false, `${suitePath} should be absent after Step 6 read-only facade/orchestration deletion`)
+      assert.equal(existsRel(root, suitePath), false, `${suitePath} should be absent after Step 6 read-only facade/orchestration and non-destructive window/label deletion`)
     }
     for (const suitePath of HISTORICAL_CHECKPOINT_NON_CANDIDATE_SUITES_V0644_V0688) {
       assert.equal(existsRel(root, suitePath), true, `${suitePath} should remain preserved as a cautious non-candidate`)

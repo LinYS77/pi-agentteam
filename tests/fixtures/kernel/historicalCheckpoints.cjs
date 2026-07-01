@@ -1285,6 +1285,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.71 defines the first explicit mutating tmux Go cutover gate without implementing runtime mutation.",
     ],
     continuityTargets: ["v0.6.70"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.71", "go-mutating-window-marking-gate")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.72",
@@ -1295,6 +1296,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "No other Go mutating tmux commands are introduced by this slice.",
     ],
     continuityTargets: ["v0.6.71"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.72", "go-window-marking-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.73",
@@ -1305,6 +1307,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.73 defines the second explicit mutating tmux Go cutover gate without implementing runtime mutation.",
     ],
     continuityTargets: ["v0.6.72"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.73", "go-refresh-window-pane-labels-gate")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.74",
@@ -1315,6 +1318,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "No other Go mutating tmux commands are introduced by this slice.",
     ],
     continuityTargets: ["v0.6.73"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.74", "go-refresh-window-pane-labels-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.75",
@@ -1325,6 +1329,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.75 defines the next narrow mutating tmux Go cutover gate without implementing runtime mutation.",
     ],
     continuityTargets: ["v0.6.74"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.75", "go-pane-label-setting-gate")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.76",
@@ -1335,6 +1340,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "No other Go mutating tmux commands are introduced by this slice.",
     ],
     continuityTargets: ["v0.6.75"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.76", "go-pane-label-setting-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.77",
@@ -1345,6 +1351,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.77 defines the next narrow mutating tmux Go cutover gate without implementing runtime mutation.",
     ],
     continuityTargets: ["v0.6.76"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.77", "go-pane-label-clearing-gate")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.78",
@@ -1355,6 +1362,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "No other Go mutating tmux commands are introduced by this slice.",
     ],
     continuityTargets: ["v0.6.77"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.78", "go-pane-label-clearing-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.79",

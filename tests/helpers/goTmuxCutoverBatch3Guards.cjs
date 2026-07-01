@@ -29,6 +29,14 @@ const {
   STEP6_BATCH3_SCOPE_DOCS,
   STEP6_BATCH3_SCOPE_FIXTURES,
 } = require('../fixtures/kernel/goCutoverStep6Batch3Audit.cjs')
+const { goMutatingWindowMarkingGate } = require('../fixtures/kernel/v0671/goMutatingWindowMarkingGate.cjs')
+const { goWindowMarkingCutover } = require('../fixtures/kernel/v0672/goWindowMarkingCutover.cjs')
+const { goRefreshWindowPaneLabelsGate } = require('../fixtures/kernel/v0673/goRefreshWindowPaneLabelsGate.cjs')
+const { goRefreshWindowPaneLabelsCutover } = require('../fixtures/kernel/v0674/goRefreshWindowPaneLabelsCutover.cjs')
+const { goPaneLabelSettingGate } = require('../fixtures/kernel/v0675/goPaneLabelSettingGate.cjs')
+const { goPaneLabelSettingCutover } = require('../fixtures/kernel/v0676/goPaneLabelSettingCutover.cjs')
+const { goPaneLabelClearingGate } = require('../fixtures/kernel/v0677/goPaneLabelClearingGate.cjs')
+const { goPaneLabelClearingCutover } = require('../fixtures/kernel/v0678/goPaneLabelClearingCutover.cjs')
 
 const GO_TMUX_CUTOVER_BATCH3_GUARD_HELPER = STEP6_BATCH3_GUARD_HELPER
 const GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE = STEP6_BATCH3_GUARD_SUITE
@@ -45,10 +53,10 @@ const GO_TMUX_CUTOVER_BATCH3_GUARD_CATEGORIES = Object.freeze([
 const GO_TMUX_CUTOVER_BATCH3_CATEGORY_DESCRIPTIONS = Object.freeze({
   'step6-batch3-audit-map-complete': 'v0.6.53-v0.6.88 suites are mapped to clusters with duplicated assertions, unique assertions, current owner evidence, and keep/delete recommendations.',
   'read-only-worker-lifecycle-facades': 'Current TypeScript tmux read-only pane/window/session facades delegate through the Go kernel adapter without direct tmux fallback or hidden fallback after cutover.',
-  'mutation-facade-authority-exact': 'Current mutating window/label/pane/session facades keep TypeScript authority, exact helper operations, compact fail-closed public behavior, and no wake/send-keys expansion.',
+  'mutation-facade-authority-exact': 'Current non-destructive window/label mutation facades keep TypeScript authority, exact helper operations, compact fail-closed public behavior, and no wake/send-keys/destructive lifecycle expansion.',
   'go-helper-operation-surface-exact': 'The Go helper exposes only the approved workerLifecycle/tmuxAvailability operation surface and exact tmux argv snippets for Step 6 batch-3 cutovers.',
   'package-native-release-boundaries-preserved': 'Package/native/release boundaries remain unchanged: package version 0.6.8, approved embedded helper path, no package/release/signing mechanics.',
-  'historical-suite-retention-honest': 'Step 6 deletion accounting is honest: replaced read-only facade/orchestration suites are expected absent, retained v0.6.53-v0.6.88 suites stay present, and prior historical deletions remain absent.',
+  'historical-suite-retention-honest': 'Step 6 deletion accounting is honest: replaced read-only facade/orchestration and non-destructive window/label suites are expected absent, retained v0.6.53-v0.6.88 suites stay present, and prior historical deletions remain absent.',
 })
 
 const GO_TMUX_CUTOVER_BATCH3_SOURCE_FILES = Object.freeze([
@@ -97,10 +105,42 @@ const EXPECTED_STEP6_BATCH2_DELETED_SUITES = Object.freeze([
   'tests/suites/go-kernel-v0670-go-window-name-lookup-cutover.cjs',
 ])
 
+const EXPECTED_STEP6_BATCH3_DELETED_SUITES = Object.freeze([
+  'tests/suites/go-kernel-v0671-go-mutating-window-marking-gate.cjs',
+  'tests/suites/go-kernel-v0672-go-window-marking-cutover.cjs',
+  'tests/suites/go-kernel-v0673-go-refresh-window-pane-labels-gate.cjs',
+  'tests/suites/go-kernel-v0674-go-refresh-window-pane-labels-cutover.cjs',
+  'tests/suites/go-kernel-v0675-go-pane-label-setting-gate.cjs',
+  'tests/suites/go-kernel-v0676-go-pane-label-setting-cutover.cjs',
+  'tests/suites/go-kernel-v0677-go-pane-label-clearing-gate.cjs',
+  'tests/suites/go-kernel-v0678-go-pane-label-clearing-cutover.cjs',
+])
+
 const EXPECTED_STEP6_DELETED_SUITES = Object.freeze([
   ...EXPECTED_STEP6_BATCH1_DELETED_SUITES,
   ...EXPECTED_STEP6_BATCH2_DELETED_SUITES,
+  ...EXPECTED_STEP6_BATCH3_DELETED_SUITES,
 ])
+
+const STEP6_WINDOW_MARKING_COMMANDS = Object.freeze([
+  'tmux set-option -w -t <target> automatic-rename off',
+  'tmux set-option -w -t <target> allow-rename off',
+  'tmux set-option -w -t <target> @agentteam-window 1',
+])
+const STEP6_WINDOW_PANE_LABEL_REFRESH_COMMANDS = Object.freeze([
+  'tmux set-option -w -t <target> pane-border-status top',
+  "tmux set-option -w -t <target> pane-border-format '#{?@agentteam-name,#{@agentteam-name},#{pane_title}}'",
+])
+const STEP6_PANE_LABEL_SETTING_COMMANDS = Object.freeze([
+  'tmux set-option -p -t <paneId> @agentteam-name <label>',
+  'tmux select-pane -t <paneId> -T <label>',
+])
+const STEP6_PANE_LABEL_CLEARING_COMMANDS = Object.freeze([
+  'tmux set-option -up -t <paneId> @agentteam-name',
+  "tmux select-pane -t <paneId> -T ''",
+])
+const STEP6_RAW_LABEL_CANARY = 'raw-unicode-pane-label-canary 🧪'
+const STEP6_BAD_HELPER_OUTPUT = 'STEP6_BAD_HELPER_OUTPUT_SHOULD_NOT_LEAK'
 
 const EXPECTED_WORKER_LIFECYCLE_OPERATIONS = Object.freeze([
   'inspectPane',
@@ -153,6 +193,14 @@ function sorted(values) {
 
 function assertUnique(values, label) {
   assert.deepEqual(sorted(values), sorted([...new Set(values)]), `${label} should not contain duplicates`)
+}
+
+function commandRenderings(commands) {
+  return commands.map(command => command.rendered)
+}
+
+function assertNoRawCanary(value, canary, label) {
+  assert.equal(JSON.stringify(value).includes(canary), false, `${label} must not leak raw canary text`)
 }
 
 function functionBody(source, name) {
@@ -259,14 +307,79 @@ function assertCompactInspectResult(result) {
   assert.equal(/stdout|stderr|stack|cwd|MAILBOX_BODY|REPORT_BODY|worker transcript|rawState|stateArchive|terminal raw/i.test(JSON.stringify(result)), false, 'direct Go inspect result must not leak raw output')
 }
 
+function assertWindowLabelMutationFixtureContracts() {
+  assert.deepEqual(commandRenderings(goMutatingWindowMarkingGate.authorizedFutureTmuxCommands), [...STEP6_WINDOW_MARKING_COMMANDS], 'v0671 gate authorized future mark commands')
+  assert.equal(goMutatingWindowMarkingGate.gateOnly, true, 'v0671 should remain gate-only historical evidence')
+  assert.equal(goMutatingWindowMarkingGate.noRuntimeMigrationInThisSlice, true, 'v0671 should not claim runtime migration in that slice')
+  assert.equal(goMutatingWindowMarkingGate.futureCandidateDestructive, false, 'v0671 mark command should be non-destructive')
+  assert.equal(goMutatingWindowMarkingGate.futureFacadeRule.hiddenTypeScriptFallbackAllowedAfterCutover, false, 'v0671 should forbid hidden TS fallback after cutover')
+  assert.ok(goMutatingWindowMarkingGate.stillForbiddenMutatingScope.includes('send-keys'), 'v0671 should keep send-keys forbidden')
+  assert.ok(goMutatingWindowMarkingGate.stillForbiddenMutatingScope.includes('kill-pane'), 'v0671 should keep destructive kill-pane forbidden')
+
+  assert.deepEqual(commandRenderings(goWindowMarkingCutover.authorizedTmuxCommands), [...STEP6_WINDOW_MARKING_COMMANDS], 'v0672 cutover authorized mark commands')
+  assert.equal(goWindowMarkingCutover.operation, 'markWindowAsAgentTeam', 'v0672 operation')
+  assert.equal(goWindowMarkingCutover.facadeCutoverMigrated, true, 'v0672 should record migrated facade cutover')
+  assert.equal(goWindowMarkingCutover.typescriptSetOptionFallbackRemoved, true, 'v0672 should record TS set-option fallback removal')
+  assert.equal(goWindowMarkingCutover.noThrowVoidFacadePreserved, true, 'v0672 public facade should remain no-throw void')
+  assert.equal(goWindowMarkingCutover.refreshWindowPaneLabelsMigrated, false, 'v0672 should not claim refresh migration')
+  assert.equal(goWindowMarkingCutover.newSessionMigrated, false, 'v0672 should not authorize detached new-session')
+
+  assert.deepEqual(commandRenderings(goRefreshWindowPaneLabelsGate.authorizedFutureTmuxCommands), [...STEP6_WINDOW_PANE_LABEL_REFRESH_COMMANDS], 'v0673 gate authorized future refresh commands')
+  assert.equal(goRefreshWindowPaneLabelsGate.gateOnly, true, 'v0673 should remain gate-only historical evidence')
+  assert.equal(goRefreshWindowPaneLabelsGate.markWindowAsAgentTeamMigrated, true, 'v0673 should preserve prior mark cutover state')
+  assert.equal(goRefreshWindowPaneLabelsGate.refreshWindowPaneLabelsMigrated, false, 'v0673 should not claim runtime migration in that slice')
+  assert.equal(goRefreshWindowPaneLabelsGate.futureCandidateDestructive, false, 'v0673 refresh command should be non-destructive')
+  assert.ok(goRefreshWindowPaneLabelsGate.stillForbiddenMutatingScope.includes('set-option -p pane labels'), 'v0673 should keep pane labels forbidden')
+
+  assert.deepEqual(commandRenderings(goRefreshWindowPaneLabelsCutover.authorizedTmuxCommands), [...STEP6_WINDOW_PANE_LABEL_REFRESH_COMMANDS], 'v0674 cutover authorized refresh commands')
+  assert.deepEqual(commandRenderings(goRefreshWindowPaneLabelsCutover.existingMarkWindowTmuxCommands), [...STEP6_WINDOW_MARKING_COMMANDS], 'v0674 should preserve mark command surface')
+  assert.equal(goRefreshWindowPaneLabelsCutover.operation, 'refreshWindowPaneLabels', 'v0674 operation')
+  assert.equal(goRefreshWindowPaneLabelsCutover.facadeCutoverMigrated, true, 'v0674 should record migrated facade cutover')
+  assert.equal(goRefreshWindowPaneLabelsCutover.typescriptSetOptionFallbackRemoved, true, 'v0674 should record TS pane-border fallback removal')
+  assert.equal(goRefreshWindowPaneLabelsCutover.noThrowVoidFacadePreserved, true, 'v0674 public facade should remain no-throw void')
+  assert.equal(goRefreshWindowPaneLabelsCutover.paneLabelsMigrated, false, 'v0674 should not claim pane label migration')
+
+  assert.deepEqual(commandRenderings(goPaneLabelSettingGate.authorizedFutureTmuxCommands), [...STEP6_PANE_LABEL_SETTING_COMMANDS], 'v0675 gate authorized future setPaneLabel commands')
+  assert.equal(goPaneLabelSettingGate.gateOnly, true, 'v0675 should remain gate-only historical evidence')
+  assert.equal(goPaneLabelSettingGate.setPaneLabelMigrated, false, 'v0675 should not claim runtime migration in that slice')
+  assert.equal(goPaneLabelSettingGate.clearPaneLabelMigrated, false, 'v0675 should not authorize clearing')
+  assert.equal(goPaneLabelSettingGate.futureInputPolicy.labelMayContainUnicode, true, 'v0675 should keep Unicode label policy')
+  assert.equal(goPaneLabelSettingGate.futureInputPolicy.labelMayContainEmoji, true, 'v0675 should keep emoji label policy')
+  assert.equal(goPaneLabelSettingGate.futureInputPolicy.labelShellInterpolationAllowed, false, 'v0675 should forbid shell interpolation')
+  assert.equal(goPaneLabelSettingGate.futurePublicBehavior.rawLabelLeakageAllowed, false, 'v0675 should forbid raw label diagnostics')
+
+  assert.deepEqual(commandRenderings(goPaneLabelSettingCutover.authorizedTmuxCommands), [...STEP6_PANE_LABEL_SETTING_COMMANDS], 'v0676 cutover authorized setPaneLabel commands')
+  assert.equal(goPaneLabelSettingCutover.operation, 'setPaneLabel', 'v0676 operation')
+  assert.equal(goPaneLabelSettingCutover.labelArgumentLimit, 4096, 'v0676 label argument cap')
+  assert.equal(goPaneLabelSettingCutover.facadeCutoverMigrated, true, 'v0676 should record migrated private helper')
+  assert.equal(goPaneLabelSettingCutover.typescriptSetPaneLabelFallbackRemoved, true, 'v0676 should record TS pane-label fallback removal')
+  assert.equal(goPaneLabelSettingCutover.rawLabelLeakageAllowed, false, 'v0676 should forbid raw label leakage')
+  assert.equal(goPaneLabelSettingCutover.clearPaneLabelMigrated, false, 'v0676 should not claim clearPaneLabel migration')
+
+  assert.deepEqual(commandRenderings(goPaneLabelClearingGate.authorizedFutureTmuxCommands), [...STEP6_PANE_LABEL_CLEARING_COMMANDS], 'v0677 gate authorized future clearPaneLabel commands')
+  assert.equal(goPaneLabelClearingGate.gateOnly, true, 'v0677 should remain gate-only historical evidence')
+  assert.equal(goPaneLabelClearingGate.setPaneLabelMigrated, true, 'v0677 should preserve prior setPaneLabel cutover state')
+  assert.equal(goPaneLabelClearingGate.clearPaneLabelMigrated, false, 'v0677 should not claim runtime migration in that slice')
+  assert.equal(goPaneLabelClearingGate.clearPaneLabelsForTeamMigrated, false, 'v0677 should keep orchestration unmigrated')
+  assert.equal(goPaneLabelClearingGate.futureInputPolicy.shellInterpolationAllowed, false, 'v0677 should forbid shell interpolation')
+
+  assert.deepEqual(commandRenderings(goPaneLabelClearingCutover.authorizedTmuxCommands), [...STEP6_PANE_LABEL_CLEARING_COMMANDS], 'v0678 cutover authorized clearPaneLabel commands')
+  assert.equal(goPaneLabelClearingCutover.operation, 'clearPaneLabel', 'v0678 operation')
+  assert.equal(goPaneLabelClearingCutover.facadeCutoverMigrated, true, 'v0678 should record migrated private helper')
+  assert.equal(goPaneLabelClearingCutover.typescriptClearPaneLabelFallbackRemoved, true, 'v0678 should record TS clear fallback removal')
+  assert.equal(goPaneLabelClearingCutover.noThrowVoidHelperPreserved, true, 'v0678 private helper should remain no-throw void')
+  assert.equal(goPaneLabelClearingCutover.rawOutputLeakageAllowed, false, 'v0678 should forbid raw helper output leakage')
+  assert.equal(goPaneLabelClearingCutover.clearPaneLabelsForTeamMigrated, false, 'v0678 should keep team orchestration unmigrated')
+}
+
 function assertStep6Batch3AuditMap(root) {
   assert.equal(path.basename(GO_TMUX_CUTOVER_BATCH3_GUARD_HELPER), 'goTmuxCutoverBatch3Guards.cjs')
   assert.equal(path.basename(GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE), 'go-kernel-tmux-cutover-batch3-guard.cjs')
   assert.deepEqual(STEP6_BATCH3_ACTIONS, ['keep-unique', 'split-later', 'delete-replaced'])
   assert.equal(STEP6_BATCH3_AUDIT_ENTRIES.length, 36, 'Step 6 audit map should cover v0.6.53-v0.6.88')
   assert.deepEqual(STEP6_BATCH3_CLUSTER_COUNTS, EXPECTED_CLUSTER_COUNTS, 'Step 6 cluster counts should be explicit')
-  assert.deepEqual(STEP6_BATCH3_DELETION_CANDIDATE_SUITES, [...EXPECTED_STEP6_DELETED_SUITES], 'Step 6 should mark exactly the batch 1/2 replaced read-only facade/orchestration suites')
-  assert.equal(STEP6_BATCH3_RETAINED_SUITES.length, STEP6_BATCH3_AUDIT_ENTRIES.length - EXPECTED_STEP6_DELETED_SUITES.length, 'retained suite list should exclude Step 6 batch 1/2 deleted suites')
+  assert.deepEqual(STEP6_BATCH3_DELETION_CANDIDATE_SUITES, [...EXPECTED_STEP6_DELETED_SUITES], 'Step 6 should mark exactly the batch 1/2/3 replaced read-only facade/orchestration and non-destructive window/label suites')
+  assert.equal(STEP6_BATCH3_RETAINED_SUITES.length, STEP6_BATCH3_AUDIT_ENTRIES.length - EXPECTED_STEP6_DELETED_SUITES.length, 'retained suite list should exclude Step 6 batch 1/2/3 deleted suites')
   assert.equal(STEP6_BATCH3_SCOPE_DOCS.length, STEP6_BATCH3_AUDIT_ENTRIES.length, 'scope docs should match audit entries')
   assert.equal(STEP6_BATCH3_SCOPE_FIXTURES.length, STEP6_BATCH3_AUDIT_ENTRIES.length, 'scope fixtures should match audit entries')
   assertUnique(STEP6_BATCH3_DELETION_CANDIDATE_SUITES, 'Step 6 deletion candidate suites')
@@ -284,16 +397,17 @@ function assertStep6Batch3AuditMap(root) {
   for (const entry of STEP6_BATCH3_AUDIT_ENTRIES) {
     const expectedDeleted = EXPECTED_STEP6_DELETED_SUITES.includes(entry.suite)
     assert.ok(validClusters.has(entry.cluster), `${entry.suite} should use a known cluster`)
-    assert.equal(entry.recommendedAction, expectedDeleted ? 'delete-replaced' : 'keep-unique', `${entry.suite} should have the expected Step 6 batch 1/2 action`)
-    assert.equal(entry.deletionReady, expectedDeleted, `${entry.suite} deletion readiness should match Step 6 batch 1/2 scope`)
+    assert.equal(entry.recommendedAction, expectedDeleted ? 'delete-replaced' : 'keep-unique', `${entry.suite} should have the expected Step 6 batch 1/2/3 action`)
+    assert.equal(entry.deletionReady, expectedDeleted, `${entry.suite} deletion readiness should match Step 6 batch 1/2/3 scope`)
     assert.ok(entry.duplicateAssertions.length >= 5, `${entry.suite} should document duplicate assertion clusters`)
     assert.ok(entry.uniqueAssertions.length >= 1, `${entry.suite} should document migrated or retained behavior-unique assertions`)
     assert.ok(entry.replacementEvidence.length >= 1, `${entry.suite} should cite current guard evidence for duplicated assertions`)
     assert.equal(entry.replacementEvidence[0].suite, GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE, `${entry.suite} should point to this guard suite`)
     assert.equal(entry.replacementEvidence[0].helper, GO_TMUX_CUTOVER_BATCH3_GUARD_HELPER, `${entry.suite} should point to this guard helper`)
     assert.ok(entry.replacementEvidence[0].categories.length >= 1, `${entry.suite} replacement evidence should list categories`)
-    assert.equal(entry.replacementEvidence[0].categories.includes('read-only-worker-lifecycle-facades') || !expectedDeleted, true, `${entry.suite} deleted read-only facade should cite read-only current guard coverage`)
-    assert.equal(existsRel(root, entry.suite), !expectedDeleted, `${entry.suite} presence should match Step 6 batch 1/2 deletion accounting`)
+    const expectedDeletedEvidenceCategory = entry.cluster === 'windowLabelMutation' ? 'mutation-facade-authority-exact' : 'read-only-worker-lifecycle-facades'
+    assert.equal(entry.replacementEvidence[0].categories.includes(expectedDeletedEvidenceCategory) || !expectedDeleted, true, `${entry.suite} deleted suite should cite current guard coverage category ${expectedDeletedEvidenceCategory}`)
+    assert.equal(existsRel(root, entry.suite), !expectedDeleted, `${entry.suite} presence should match Step 6 batch 1/2/3 deletion accounting`)
     assert.equal(existsRel(root, entry.doc), true, `${entry.doc} should remain present; Step 6 must not delete docs`)
     assert.equal(existsRel(root, entry.fixture), true, `${entry.fixture} should remain present; Step 6 must not delete fixtures`)
   }
@@ -531,35 +645,55 @@ function assertMutationFacadeSourceBoundaries(root) {
   const labels = readRel(root, 'tmux/labels.ts')
   const panes = readRel(root, 'tmux/panes.ts')
   const kernel = readRel(root, 'core/kernel.ts')
+  const goSource = readRel(root, 'kernel/go/agentteam-kernel/main.go')
+  const builder = readRel(root, 'scripts/lib/go-helper-artifact-builder.cjs')
+  const verifier = readRel(root, 'scripts/lib/go-helper-artifact-verifier.cjs')
+  const protocolCases = readRel(root, 'tests/fixtures/kernel/jsonrpc/protocolCases.cjs')
 
   const setPaneLabel = functionBody(labels, 'setPaneLabel')
   assertIncludes(setPaneLabel, 'await createAgentTeamKernelAdapter().setPaneLabelAsync(paneId, label, signal)', 'setPaneLabel adapter call')
   assertNotIncludes(setPaneLabel, 'runTmux', 'setPaneLabel direct tmux fallback')
+  assertNotIncludes(setPaneLabel, 'set-option', 'setPaneLabel direct pane label fallback')
+  assertNotIncludes(setPaneLabel, 'select-pane', 'setPaneLabel direct pane title fallback')
 
   const clearPaneLabel = functionBody(labels, 'clearPaneLabel')
   assertIncludes(clearPaneLabel, 'await createAgentTeamKernelAdapter().clearPaneLabelAsync(paneId, signal)', 'clearPaneLabel adapter call')
   assertNotIncludes(clearPaneLabel, 'runTmux', 'clearPaneLabel direct tmux fallback')
+  assertNotIncludes(clearPaneLabel, 'set-option', 'clearPaneLabel direct pane label fallback')
+  assertNotIncludes(clearPaneLabel, 'select-pane', 'clearPaneLabel direct pane title fallback')
 
   const markWindow = functionBody(labels, 'markWindowAsAgentTeam')
   assertIncludes(markWindow, 'if (!await windowExists(target, signal)) return', 'markWindowAsAgentTeam window guard')
   assertIncludes(markWindow, 'await createAgentTeamKernelAdapter().markWindowAsAgentTeamAsync(target, signal)', 'markWindowAsAgentTeam adapter call')
   assertNotIncludes(markWindow, 'runTmux', 'markWindowAsAgentTeam direct tmux fallback')
+  assertNotIncludes(markWindow, 'automatic-rename', 'markWindowAsAgentTeam direct automatic-rename fallback')
+  assertNotIncludes(markWindow, 'allow-rename', 'markWindowAsAgentTeam direct allow-rename fallback')
+  assertNotIncludes(markWindow, '@agentteam-window', 'markWindowAsAgentTeam direct marker fallback')
 
   const refreshLabels = functionBody(labels, 'refreshWindowPaneLabels')
   assertIncludes(refreshLabels, 'if (!await windowExists(target, signal)) return', 'refreshWindowPaneLabels window guard')
   assertIncludes(refreshLabels, 'await createAgentTeamKernelAdapter().refreshWindowPaneLabelsAsync(target, signal)', 'refreshWindowPaneLabels adapter call')
   assertNotIncludes(refreshLabels, 'runTmux', 'refreshWindowPaneLabels direct tmux fallback')
+  assertNotIncludes(refreshLabels, 'pane-border-status', 'refreshWindowPaneLabels direct border-status fallback')
+  assertNotIncludes(refreshLabels, 'pane-border-format', 'refreshWindowPaneLabels direct border-format fallback')
 
   const syncLabels = functionBody(labels, 'syncPaneLabelsForTeam')
   assertIncludes(syncLabels, 'await setPaneLabel(member.paneId, member.name === \'team-lead\' ? formatLeaderPaneLabel(team) : formatMemberPaneLabel(member), signal)', 'syncPaneLabelsForTeam set labels')
+  assertIncludes(syncLabels, 'formatLeaderPaneLabel(team)', 'syncPaneLabelsForTeam leader label formatting')
+  assertIncludes(syncLabels, 'formatMemberPaneLabel(member)', 'syncPaneLabelsForTeam member label formatting')
   assertIncludes(syncLabels, 'const target = member.paneId ? targetForPaneId(member.paneId) : member.windowTarget', 'syncPaneLabelsForTeam target collection')
   assertIncludes(syncLabels, 'await refreshWindowPaneLabels(target, signal)', 'syncPaneLabelsForTeam refresh labels')
   assertNotIncludes(syncLabels, 'createAgentTeamKernelAdapter()', 'syncPaneLabelsForTeam should use local facades only')
+  assertNotIncludes(syncLabels, 'setPaneLabelAsync', 'syncPaneLabelsForTeam should not bypass private setPaneLabel')
 
   const clearLabels = functionBody(labels, 'clearPaneLabelsForTeam')
   assertIncludes(clearLabels, 'await clearPaneLabel(member.paneId, signal)', 'clearPaneLabelsForTeam clear labels')
   assertIncludes(clearLabels, 'const target = targetForPaneId(member.paneId) ?? member.windowTarget', 'clearPaneLabelsForTeam target fallback')
+  assertIncludes(clearLabels, 'targets.add(member.windowTarget)', 'clearPaneLabelsForTeam window target fallback')
   assertIncludes(clearLabels, 'await refreshWindowPaneLabels(target, signal)', 'clearPaneLabelsForTeam refresh labels')
+  assertNotIncludes(clearLabels, 'clearPaneLabelAsync', 'clearPaneLabelsForTeam should not bypass private clearPaneLabel')
+  assertNotIncludes(clearLabels, 'createAgentTeamKernelAdapter()', 'clearPaneLabelsForTeam remains TypeScript orchestration')
+  assertNotIncludes(clearLabels, 'workerLifecycle', 'clearPaneLabelsForTeam must not mention helper operation names')
 
   const createPane = functionBody(panes, 'createTeammatePane')
   for (const expected of [
@@ -588,14 +722,83 @@ function assertMutationFacadeSourceBoundaries(root) {
   assertNotIncludes(clearPaneLabelSync, 'runTmux', 'clearPaneLabelSync direct tmux fallback')
 
   for (const expected of [
-    "callHelperAsync<unknown>('workerLifecycle', { operation: 'markWindowAsAgentTeam'",
-    "callHelperAsync<unknown>('workerLifecycle', { operation: 'refreshWindowPaneLabels'",
-    "callHelperAsync<unknown>('workerLifecycle', { operation: 'setPaneLabel'",
-    "callHelperAsync<unknown>('workerLifecycle', { operation: 'clearPaneLabel'",
-    "callHelper<unknown>('workerLifecycle', { operation: 'clearPaneLabel'",
+    'export type AgentTeamKernelWindowMarking',
+    'export type AgentTeamKernelWindowPaneLabelsRefresh',
+    'export type AgentTeamKernelPaneLabelSetting',
+    'export type AgentTeamKernelPaneLabelClearing',
+    'const PANE_LABEL_ARGUMENT_LIMIT = 4096',
+    'function isValidPaneLabelArgument',
+    'function validateWindowMarkingResult',
+    'function validateWindowPaneLabelsRefreshResult',
+    'function validatePaneLabelSettingResult',
+    'function validatePaneLabelClearingResult',
+    'workerLifecycleMarkWindowAsAgentTeamConnected',
+    'workerLifecycleRefreshWindowPaneLabelsConnected',
+    'workerLifecycleSetPaneLabelConnected',
+    'workerLifecycleClearPaneLabelConnected',
+    "callHelperAsync<unknown>('workerLifecycle', { operation: 'markWindowAsAgentTeam', target: requestedTarget }, signal)",
+    "callHelperAsync<unknown>('workerLifecycle', { operation: 'refreshWindowPaneLabels', target: requestedTarget }, signal)",
+    "callHelperAsync<unknown>('workerLifecycle', { operation: 'setPaneLabel', paneId: requestedPaneId, label }, signal)",
+    "callHelperAsync<unknown>('workerLifecycle', { operation: 'clearPaneLabel', paneId: requestedPaneId }, signal)",
+    "callHelper<unknown>('workerLifecycle', { operation: 'clearPaneLabel', paneId: requestedPaneId })",
     "callHelper<unknown>('workerLifecycle', { operation: 'killPane'",
     "operation: 'createTeammatePane'",
   ]) assertIncludes(kernel, expected, 'core/kernel mutating helper calls')
+  assertNotIncludes(kernel, '+ label', 'core/kernel diagnostics must not concatenate raw pane labels')
+  assertNotIncludes(kernel, 'label +', 'core/kernel diagnostics must not concatenate raw pane labels')
+
+  for (const expected of [
+    'type workerWindowMarkingResult struct',
+    'type workerWindowPaneLabelsRefreshResult struct',
+    'type workerPaneLabelSettingResult struct',
+    'type workerPaneLabelClearingResult struct',
+    'const paneLabelArgumentLimit = 4096',
+    'func paneLabelParam(params map[string]any) (string, bool)',
+    'func runWindowMarkingSetOption(target string, option string, value string) string',
+    'func markWindowAsAgentTeam(params map[string]any) workerWindowMarkingResult',
+    'func runWindowPaneLabelsSetOption(target string, option string, value string) string',
+    'func refreshWindowPaneLabels(params map[string]any) workerWindowPaneLabelsRefreshResult',
+    'func setPaneLabel(params map[string]any) workerPaneLabelSettingResult',
+    'func clearPaneLabel(params map[string]any) workerPaneLabelClearingResult',
+    'runWindowMarkingSetOption(target, "automatic-rename", "off")',
+    'runWindowMarkingSetOption(target, "allow-rename", "off")',
+    'runWindowMarkingSetOption(target, "@agentteam-window", "1")',
+    'runWindowPaneLabelsSetOption(target, "pane-border-status", "top")',
+    'runWindowPaneLabelsSetOption(target, "pane-border-format", "#{?@agentteam-name,#{@agentteam-name},#{pane_title}}")',
+    'exec.CommandContext(ctx, "tmux", "set-option", "-p", "-t", paneID, "@agentteam-name", label)',
+    'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)',
+    'exec.CommandContext(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name")',
+    'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", "")',
+  ]) assertIncludes(goSource, expected, 'Go non-destructive window/label mutation surface')
+  assert.equal([...goSource.matchAll(/runWindowMarkingSetOption\(target,/g)].length, 3, 'Go helper should keep exactly three window marking set-option calls')
+  assert.equal([...goSource.matchAll(/runWindowPaneLabelsSetOption\(target,/g)].length, 2, 'Go helper should keep exactly two refresh set-option calls')
+  assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "set-option", "-p", "-t", paneID, "@agentteam-name", label\)/g)].length, 1, 'Go helper should contain exactly one pane label set-option command')
+  assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "select-pane", "-t", paneID, "-T", label\)/g)].length, 1, 'Go helper should contain exactly one pane title set command')
+  assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name"\)/g)].length, 1, 'Go helper should contain exactly one pane label clear command')
+  assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "select-pane", "-t", paneID, "-T", ""\)/g)].length, 1, 'Go helper should contain exactly one pane title clear command')
+  assertNotIncludes(goSource, '+ label', 'Go diagnostics must not concatenate raw pane labels')
+  assertNotIncludes(goSource, 'label +', 'Go diagnostics must not concatenate raw pane labels')
+
+  for (const expected of [
+    'runWorkerLifecycleMarkWindowAsAgentTeamSmoke',
+    'runWorkerLifecycleRefreshWindowPaneLabelsSmoke',
+    'runWorkerLifecycleSetPaneLabelSmoke',
+    'runWorkerLifecycleClearPaneLabelSmoke',
+    'workerLifecycleMarkWindowAsAgentTeam',
+    'workerLifecycleRefreshWindowPaneLabels',
+    'workerLifecycleSetPaneLabel',
+    'workerLifecycleClearPaneLabel',
+  ]) assertIncludes(builder, expected, 'artifact builder window/label mutation smoke coverage')
+  for (const expected of [
+    'workerLifecycleMarkWindowAsAgentTeam',
+    'workerLifecycleRefreshWindowPaneLabels',
+    'workerLifecycleSetPaneLabel',
+    'workerLifecycleClearPaneLabel',
+  ]) assertIncludes(verifier, expected, 'artifact verifier window/label mutation smoke coverage')
+  for (const expected of [
+    "operation: 'setPaneLabel'",
+    "operation: 'clearPaneLabel'",
+  ]) assertIncludes(protocolCases, expected, 'JSON-RPC protocol pane label mutation cases')
 }
 
 function assertGoHelperOperationSurface(root) {
@@ -699,6 +902,111 @@ function assertReadOnlyFacadeDirectGoBehavior(root) {
   }
 }
 
+function writeWindowLabelMutationFakeTmux(binDir) {
+  fs.mkdirSync(binDir, { recursive: true })
+  const tmuxPath = path.join(binDir, 'tmux')
+  fs.writeFileSync(tmuxPath, [
+    '#!/usr/bin/env node',
+    "const fs = require('node:fs')",
+    "const args = process.argv.slice(2)",
+    "const log = process.env.AGENTTEAM_STEP6_TMUX_ARGV_LOG",
+    "if (log) fs.appendFileSync(log, JSON.stringify(args) + '\\n')",
+    "if (args[0] === 'set-option' || args[0] === 'select-pane') process.exit(0)",
+    "process.exit(2)",
+  ].join('\n') + '\n', 'utf8')
+  fs.chmodSync(tmuxPath, 0o755)
+  return tmuxPath
+}
+
+function readTmuxArgvLog(logPath) {
+  if (!fs.existsSync(logPath)) return []
+  return fs.readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line))
+}
+
+function assertMutationResultShape(result, operation) {
+  assert.equal(result.operation, operation, `${operation} direct Go operation`)
+  assert.equal(result.capability, 'workerLifecycle', `${operation} capability`)
+  assert.equal(result.readOnly, false, `${operation} should not be read-only`)
+  assert.equal(result.stateFilesRead, false, `${operation} should not read state files`)
+  assert.equal(result.stateFilesWritten, false, `${operation} should not write state files`)
+  assert.equal(result.tmuxMutation, true, `${operation} should be an exact tmux mutation`)
+  assert.equal(/stdout|stderr|stack|MAILBOX_BODY|REPORT_BODY|worker transcript|rawState|stateArchive|terminal raw/i.test(JSON.stringify(result)), false, `${operation} result must not leak raw output`)
+}
+
+function runDirectMutation(root, request, env) {
+  const result = runGoHelper(root, request, env)
+  assert.equal(result.status, 0, result.stderr)
+  return JSON.parse(result.stdout.trim()).result
+}
+
+function assertNonDestructiveMutationDirectGoBehavior(root) {
+  if (!hasGoToolchain()) return
+  const fakeTmuxRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-step6-mutation-tmux-'))
+  const logPath = path.join(fakeTmuxRoot, 'argv.log')
+  try {
+    writeWindowLabelMutationFakeTmux(fakeTmuxRoot)
+    const env = { PATH: `${fakeTmuxRoot}${path.delimiter}${process.env.PATH || ''}`, AGENTTEAM_STEP6_TMUX_ARGV_LOG: logPath }
+    const resetLog = () => fs.writeFileSync(logPath, '', 'utf8')
+
+    resetLog()
+    const mark = runDirectMutation(root, { jsonrpc: '2.0', id: 'mark-window', method: 'workerLifecycle', params: { operation: 'markWindowAsAgentTeam', target: 'team:@7' } }, env)
+    assertMutationResultShape(mark, 'markWindowAsAgentTeam')
+    assert.equal(mark.ok, true, 'direct Go markWindowAsAgentTeam should succeed')
+    assert.equal(mark.marked, true)
+    assert.deepEqual(readTmuxArgvLog(logPath), [
+      ['set-option', '-w', '-t', 'team:@7', 'automatic-rename', 'off'],
+      ['set-option', '-w', '-t', 'team:@7', 'allow-rename', 'off'],
+      ['set-option', '-w', '-t', 'team:@7', '@agentteam-window', '1'],
+    ], 'direct Go markWindowAsAgentTeam should use exactly the three authorized window set-option commands')
+
+    resetLog()
+    const refresh = runDirectMutation(root, { jsonrpc: '2.0', id: 'refresh-labels', method: 'workerLifecycle', params: { operation: 'refreshWindowPaneLabels', target: 'team:@7' } }, env)
+    assertMutationResultShape(refresh, 'refreshWindowPaneLabels')
+    assert.equal(refresh.ok, true, 'direct Go refreshWindowPaneLabels should succeed')
+    assert.equal(refresh.refreshed, true)
+    assert.deepEqual(readTmuxArgvLog(logPath), [
+      ['set-option', '-w', '-t', 'team:@7', 'pane-border-status', 'top'],
+      ['set-option', '-w', '-t', 'team:@7', 'pane-border-format', '#{?@agentteam-name,#{@agentteam-name},#{pane_title}}'],
+    ], 'direct Go refreshWindowPaneLabels should use exactly the two authorized pane-border window options')
+
+    resetLog()
+    const setLabel = runDirectMutation(root, { jsonrpc: '2.0', id: 'set-label', method: 'workerLifecycle', params: { operation: 'setPaneLabel', paneId: '%123', label: STEP6_RAW_LABEL_CANARY } }, env)
+    assertMutationResultShape(setLabel, 'setPaneLabel')
+    assert.equal(setLabel.ok, true, 'direct Go setPaneLabel should succeed')
+    assert.equal(setLabel.labeled, true)
+    assertNoRawCanary(setLabel, STEP6_RAW_LABEL_CANARY, 'direct Go setPaneLabel result')
+    assert.deepEqual(readTmuxArgvLog(logPath), [
+      ['set-option', '-p', '-t', '%123', '@agentteam-name', STEP6_RAW_LABEL_CANARY],
+      ['select-pane', '-t', '%123', '-T', STEP6_RAW_LABEL_CANARY],
+    ], 'direct Go setPaneLabel should pass the raw label only as argv values')
+
+    resetLog()
+    const clear = runDirectMutation(root, { jsonrpc: '2.0', id: 'clear-label', method: 'workerLifecycle', params: { operation: 'clearPaneLabel', paneId: '%123' } }, env)
+    assertMutationResultShape(clear, 'clearPaneLabel')
+    assert.equal(clear.ok, true, 'direct Go clearPaneLabel should succeed')
+    assert.equal(clear.cleared, true)
+    assert.deepEqual(readTmuxArgvLog(logPath), [
+      ['set-option', '-up', '-t', '%123', '@agentteam-name'],
+      ['select-pane', '-t', '%123', '-T', ''],
+    ], 'direct Go clearPaneLabel should use exactly the two authorized pane-level clear commands')
+
+    resetLog()
+    const invalidTarget = runDirectMutation(root, { jsonrpc: '2.0', id: 'invalid-target', method: 'workerLifecycle', params: { operation: 'markWindowAsAgentTeam', target: 'bad target' } }, env)
+    assertMutationResultShape(invalidTarget, 'markWindowAsAgentTeam')
+    assert.equal(invalidTarget.ok, false, 'direct Go invalid mark target should fail closed')
+    assert.equal(invalidTarget.failureKind, 'invalid-target')
+    assert.deepEqual(readTmuxArgvLog(logPath), [], 'invalid target should avoid tmux mutation')
+
+    const invalidPane = runDirectMutation(root, { jsonrpc: '2.0', id: 'invalid-pane', method: 'workerLifecycle', params: { operation: 'setPaneLabel', paneId: 'not a pane', label: STEP6_RAW_LABEL_CANARY } }, env)
+    assertMutationResultShape(invalidPane, 'setPaneLabel')
+    assert.equal(invalidPane.ok, false, 'direct Go invalid pane id should fail closed')
+    assert.equal(invalidPane.failureKind, 'invalid-pane-id')
+    assertNoRawCanary(invalidPane, STEP6_RAW_LABEL_CANARY, 'direct Go invalid pane setPaneLabel result')
+  } finally {
+    fs.rmSync(fakeTmuxRoot, { recursive: true, force: true })
+  }
+}
+
 function assertPackageNativeBoundaries(root) {
   const packageJson = assertPackageNoReleaseGuards(root, { expectedVersion: '0.6.8', expectedPiExtensions: ['./index.ts'] })
   assert.equal(packageJson.scripts?.check?.includes('npm run test:regression'), true, 'package check must keep full regression coverage')
@@ -715,6 +1023,18 @@ function assertPackageNativeBoundaries(root) {
   assert.ok(manifest.capabilities.includes('workerLifecycle'), 'embedded helper manifest should include workerLifecycle capability')
   assert.ok(manifest.capabilities.includes('tmuxAvailability'), 'embedded helper manifest should include tmuxAvailability capability')
   assert.deepEqual(provenance.smoke.workerLifecycleInspectPane.acceptedFailureKinds, ['pane-not-found', 'tmux-command-failed', 'tmux-unavailable', 'tmux-command-timeout'], 'embedded helper provenance should preserve compact inspect failure kinds')
+  assert.equal(manifest.smoke.workerLifecycleMarkWindowAsAgentTeam.ok, false, 'embedded helper manifest should preserve markWindowAsAgentTeam invalid-target smoke')
+  assert.deepEqual(manifest.smoke.workerLifecycleMarkWindowAsAgentTeam.acceptedFailureKinds, ['invalid-target'], 'embedded helper manifest markWindowAsAgentTeam accepted failure kinds')
+  assert.equal(manifest.smoke.workerLifecycleRefreshWindowPaneLabels.ok, false, 'embedded helper manifest should preserve refreshWindowPaneLabels invalid-target smoke')
+  assert.deepEqual(manifest.smoke.workerLifecycleRefreshWindowPaneLabels.acceptedFailureKinds, ['invalid-target'], 'embedded helper manifest refreshWindowPaneLabels accepted failure kinds')
+  assert.equal(manifest.smoke.workerLifecycleSetPaneLabel.ok, false, 'embedded helper manifest should preserve setPaneLabel invalid-pane smoke')
+  assert.deepEqual(manifest.smoke.workerLifecycleSetPaneLabel.acceptedFailureKinds, ['invalid-pane-id'], 'embedded helper manifest setPaneLabel accepted failure kinds')
+  assert.equal(manifest.smoke.workerLifecycleClearPaneLabel.ok, false, 'embedded helper manifest should preserve clearPaneLabel invalid-pane smoke')
+  assert.deepEqual(manifest.smoke.workerLifecycleClearPaneLabel.acceptedFailureKinds, ['invalid-pane-id'], 'embedded helper manifest clearPaneLabel accepted failure kinds')
+  assert.equal(provenance.smoke.workerLifecycleSetPaneLabel.ok, false, 'embedded helper provenance should preserve setPaneLabel invalid-pane smoke')
+  assert.equal(provenance.smoke.workerLifecycleClearPaneLabel.ok, false, 'embedded helper provenance should preserve clearPaneLabel invalid-pane smoke')
+  assertNoRawCanary(manifest.smoke, 'agentteam raw label canary 🚫', 'embedded helper manifest setPaneLabel smoke')
+  assertNoRawCanary(provenance.smoke, 'agentteam raw label canary 🚫', 'embedded helper provenance setPaneLabel smoke')
   assertIncludes(checksums, `${nativeRoot}/agentteam-tmuxSnapshotParse`, 'embedded helper checksum list')
   assertIncludes(checksums, `${nativeRoot}/manifest.json`, 'embedded helper checksum list')
   assertIncludes(checksums, `${nativeRoot}/provenance.json`, 'embedded helper checksum list')
@@ -725,7 +1045,7 @@ function assertPackageNativeBoundaries(root) {
 function assertHistoricalRetention(root) {
   assertEveryRelExists(root, GO_TMUX_CUTOVER_BATCH3_SOURCE_FILES, 'Step 6 batch 3 current guard source files')
   assertEveryRelExists(root, STEP6_BATCH3_RETAINED_SUITES, 'Step 6 retained suites')
-  assertEveryRelAbsent(root, STEP6_BATCH3_DELETION_CANDIDATE_SUITES, 'Step 6 batch 1/2 deleted read-only facade/orchestration suites')
+  assertEveryRelAbsent(root, STEP6_BATCH3_DELETION_CANDIDATE_SUITES, 'Step 6 batch 1/2/3 deleted read-only facade/orchestration and non-destructive window/label suites')
   assertEveryRelExists(root, STEP6_BATCH3_SCOPE_DOCS, 'Step 6 retained docs')
   assertEveryRelExists(root, STEP6_BATCH3_SCOPE_FIXTURES, 'Step 6 batch 3 retained fixtures')
   assertEveryRelAbsent(root, HISTORICAL_CHECKPOINT_T024_DELETED_SUITES, 'T024 historical deletions')
@@ -800,6 +1120,159 @@ function clearDistModules(distRoot, rels) {
   for (const rel of rels) {
     const full = path.join(distRoot, rel)
     delete require.cache[require.resolve(full)]
+  }
+}
+
+function writeJsonRpcHelperExecutable(name, source) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `agentteam-step6-${name}-`))
+  const file = path.join(dir, `${name}.cjs`)
+  fs.writeFileSync(file, source, 'utf8')
+  fs.chmodSync(file, 0o755)
+  return { dir, file }
+}
+
+async function assertWindowLabelMutationRuntimeSeam({ requireDist, distRoot } = {}) {
+  if (typeof requireDist !== 'function' || !distRoot) return
+  const corePath = path.join(distRoot, 'tmux/core.js')
+  const kernelPath = path.join(distRoot, 'core/kernel.js')
+  const labelsPath = path.join(distRoot, 'tmux/labels.js')
+  clearDistModules(distRoot, ['tmux/labels.js'])
+  const core = require(corePath)
+  const kernel = require(kernelPath)
+  const originals = {
+    windowExists: core.windowExists,
+    targetForPaneId: core.targetForPaneId,
+    createAgentTeamKernelAdapter: kernel.createAgentTeamKernelAdapter,
+  }
+  const signal = new AbortController().signal
+  const windowExistsCalls = []
+  const targetForPaneIdCalls = []
+  const adapterCalls = []
+  try {
+    core.windowExists = async (target, receivedSignal) => {
+      windowExistsCalls.push({ target, signal: receivedSignal })
+      return target !== 'missing:@1'
+    }
+    core.targetForPaneId = paneId => {
+      targetForPaneIdCalls.push(paneId)
+      if (paneId === '%lead' || paneId === '%worker' || paneId === '%clear') return 'team:@7'
+      return null
+    }
+    kernel.createAgentTeamKernelAdapter = () => ({
+      markWindowAsAgentTeamAsync: async (target, receivedSignal) => {
+        adapterCalls.push({ operation: 'markWindowAsAgentTeam', target, signal: receivedSignal })
+        return { ok: true, operation: 'markWindowAsAgentTeam', capability: 'workerLifecycle', target, marked: true, readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true }
+      },
+      refreshWindowPaneLabelsAsync: async (target, receivedSignal) => {
+        adapterCalls.push({ operation: 'refreshWindowPaneLabels', target, signal: receivedSignal })
+        return { ok: true, operation: 'refreshWindowPaneLabels', capability: 'workerLifecycle', target, refreshed: true, readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true }
+      },
+      setPaneLabelAsync: async (paneId, label, receivedSignal) => {
+        adapterCalls.push({ operation: 'setPaneLabel', paneId, label, signal: receivedSignal })
+        return { ok: true, operation: 'setPaneLabel', capability: 'workerLifecycle', paneId, labeled: true, readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true }
+      },
+      clearPaneLabelAsync: async (paneId, receivedSignal) => {
+        adapterCalls.push({ operation: 'clearPaneLabel', paneId, signal: receivedSignal })
+        return { ok: true, operation: 'clearPaneLabel', capability: 'workerLifecycle', paneId, cleared: true, readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true }
+      },
+    })
+    clearDistModules(distRoot, ['tmux/labels.js'])
+    const labels = require(labelsPath)
+
+    await labels.markWindowAsAgentTeam('team:@7', signal)
+    await labels.markWindowAsAgentTeam('missing:@1', signal)
+    assert.deepEqual(windowExistsCalls.map(call => call.target), ['team:@7', 'missing:@1'], 'markWindowAsAgentTeam should check window existence before mutating')
+    assert.deepEqual(adapterCalls.filter(call => call.operation === 'markWindowAsAgentTeam').map(call => call.target), ['team:@7'], 'markWindowAsAgentTeam should skip helper mutation when windowExists fails')
+
+    windowExistsCalls.length = 0
+    await labels.refreshWindowPaneLabels('team:@7', signal)
+    await labels.refreshWindowPaneLabels('missing:@1', signal)
+    assert.deepEqual(windowExistsCalls.map(call => call.target), ['team:@7', 'missing:@1'], 'refreshWindowPaneLabels should check window existence before mutating')
+    assert.deepEqual(adapterCalls.filter(call => call.operation === 'refreshWindowPaneLabels').map(call => call.target), ['team:@7'], 'refreshWindowPaneLabels should skip helper mutation when windowExists fails')
+
+    adapterCalls.length = 0
+    const team = {
+      members: {
+        'team-lead': { name: 'team-lead', role: 'leader', paneId: '%lead', status: 'running' },
+        worker: { name: 'worker-a', role: 'implementer', paneId: '%worker', status: 'queued' },
+        detached: { name: 'detached-worker', role: 'researcher', windowTarget: 'fallback:@9', status: 'offline' },
+      },
+      tasks: {
+        t1: { status: 'open' },
+        t2: { status: 'blocked' },
+      },
+    }
+    await labels.syncPaneLabelsForTeam(team, signal)
+    const setCalls = adapterCalls.filter(call => call.operation === 'setPaneLabel')
+    const refreshCalls = adapterCalls.filter(call => call.operation === 'refreshWindowPaneLabels')
+    assert.deepEqual(setCalls.map(call => call.paneId), ['%lead', '%worker'], 'syncPaneLabelsForTeam should use private setPaneLabel for panes only')
+    assert.equal(setCalls[0].label.includes('leader'), true, 'leader pane label should stay TypeScript-formatted')
+    assert.equal(setCalls[1].label.includes('worker-a'), true, 'member pane label should stay TypeScript-formatted')
+    assert.deepEqual(refreshCalls.map(call => call.target), ['team:@7', 'fallback:@9'], 'syncPaneLabelsForTeam should refresh each resolved pane target and member fallback window target once')
+    assert.deepEqual(targetForPaneIdCalls.slice(-2), ['%lead', '%worker'], 'syncPaneLabelsForTeam should collect targets through targetForPaneId')
+
+    adapterCalls.length = 0
+    targetForPaneIdCalls.length = 0
+    await labels.clearPaneLabelsForTeam({ members: {
+      clear: { name: 'clear-worker', role: 'implementer', paneId: '%clear', status: 'idle' },
+      fallback: { name: 'fallback-worker', role: 'researcher', windowTarget: 'fallback:@9', status: 'offline' },
+    }, tasks: {} }, signal)
+    assert.deepEqual(adapterCalls.filter(call => call.operation === 'clearPaneLabel').map(call => call.paneId), ['%clear'], 'clearPaneLabelsForTeam should use private clearPaneLabel for panes only')
+    assert.deepEqual(adapterCalls.filter(call => call.operation === 'refreshWindowPaneLabels').map(call => call.target), ['team:@7', 'fallback:@9'], 'clearPaneLabelsForTeam should refresh resolved pane and fallback window targets')
+    assert.deepEqual(targetForPaneIdCalls, ['%clear'], 'clearPaneLabelsForTeam should resolve pane target before fallback')
+  } finally {
+    core.windowExists = originals.windowExists
+    core.targetForPaneId = originals.targetForPaneId
+    kernel.createAgentTeamKernelAdapter = originals.createAgentTeamKernelAdapter
+    delete require.cache[require.resolve(labelsPath)]
+  }
+
+  const missingHelper = path.join(distRoot, 'missing-step6-window-label-helper')
+  const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: missingHelper, env: {} })
+  const invalidMark = await adapter.markWindowAsAgentTeamAsync('bad target')
+  assert.equal(invalidMark.ok, false)
+  assert.equal(invalidMark.failureKind, 'invalid-target')
+  const missingRefresh = await adapter.refreshWindowPaneLabelsAsync('team:@7')
+  assert.equal(missingRefresh.ok, false)
+  assert.equal(missingRefresh.operation, 'refreshWindowPaneLabels')
+  const invalidLabel = await adapter.setPaneLabelAsync('%123', `${STEP6_RAW_LABEL_CANARY}${'x'.repeat(4096)}`)
+  assert.equal(invalidLabel.ok, false)
+  assert.equal(invalidLabel.failureKind, 'invalid-label')
+  assertNoRawCanary(invalidLabel, STEP6_RAW_LABEL_CANARY, 'invalid setPaneLabel adapter result')
+  const missingSet = await adapter.setPaneLabelAsync('%123', STEP6_RAW_LABEL_CANARY)
+  assert.equal(missingSet.ok, false)
+  assertNoRawCanary(missingSet, STEP6_RAW_LABEL_CANARY, 'missing helper setPaneLabel adapter result')
+  const invalidClear = await adapter.clearPaneLabelAsync('not a pane')
+  assert.equal(invalidClear.ok, false)
+  assert.equal(invalidClear.failureKind, 'invalid-pane-id')
+  const abortController = new AbortController()
+  abortController.abort()
+  const abortedClear = await adapter.clearPaneLabelAsync('%123', abortController.signal)
+  assert.equal(abortedClear.ok, false)
+  assert.equal(abortedClear.operation, 'clearPaneLabel')
+
+  const malicious = writeJsonRpcHelperExecutable('malicious-label-output', `#!/usr/bin/env node
+const fs = require('node:fs')
+const request = JSON.parse(fs.readFileSync(0, 'utf8').trim())
+function respond(result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n') }
+const baseHealth = { ok: true, implementation: 'go', protocolVersion: 1, helperVersion: '0.3.0-read-model-shadow', capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'], businessPathsConnected: false }
+if (request.method === 'health') respond(baseHealth)
+else if (request.method === 'workerLifecycle' && request.params && request.params.operation === 'setPaneLabel') respond({ ok: false, operation: 'setPaneLabel', capability: 'workerLifecycle', paneId: '%123', labeled: false, status: 'unknown', resultMarker: 'stale', failureKind: 'tmux-command-failed', reason: 'bad label ${STEP6_RAW_LABEL_CANARY}', error: 'bad label ${STEP6_RAW_LABEL_CANARY}', readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true })
+else if (request.method === 'workerLifecycle' && request.params && request.params.operation === 'clearPaneLabel') respond({ ok: false, operation: 'clearPaneLabel', capability: 'workerLifecycle', paneId: '%123', cleared: false, status: 'unknown', resultMarker: 'stale', failureKind: 'tmux-command-failed', reason: '${STEP6_BAD_HELPER_OUTPUT}', error: '${STEP6_BAD_HELPER_OUTPUT}', readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true })
+else respond(baseHealth)
+`)
+  try {
+    const maliciousAdapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: malicious.file, env: {} })
+    const leakedSet = await maliciousAdapter.setPaneLabelAsync('%123', STEP6_RAW_LABEL_CANARY)
+    assert.equal(leakedSet.ok, false)
+    assert.equal(leakedSet.failureKind, 'tmux-command-failed')
+    assertNoRawCanary(leakedSet, STEP6_RAW_LABEL_CANARY, 'malicious setPaneLabel helper result')
+    const leakedClear = await maliciousAdapter.clearPaneLabelAsync('%123')
+    assert.equal(leakedClear.ok, false)
+    assert.equal(leakedClear.failureKind, 'tmux-command-failed')
+    assertNoRawCanary(leakedClear, STEP6_BAD_HELPER_OUTPUT, 'malicious clearPaneLabel helper result')
+  } finally {
+    fs.rmSync(malicious.dir, { recursive: true, force: true })
   }
 }
 
@@ -949,7 +1422,7 @@ async function assertReadOnlyWindowSessionOrchestrationRuntimeSeam({ requireDist
     assert.deepEqual(inspectCalls, [{ paneId: '%node', signal }])
     let shellCalls = 0
     kernel.createAgentTeamKernelAdapter = () => ({ inspectWorkerPaneAsync: async paneId => { shellCalls += 1; return { ok: true, operation: 'inspectPane', capability: 'workerLifecycle', paneId, exists: true, currentCommand: 'bash', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false } } })
-    assert.equal(await tmuxProcess.waitForPaneAppStart('%shell', 1), false)
+    assert.equal(await tmuxProcess.waitForPaneAppStart('%shell', 25), false)
     assert.ok(shellCalls >= 1, 'shell commands should keep polling until timeout')
     kernel.createAgentTeamKernelAdapter = () => ({ inspectWorkerPaneAsync: async paneId => ({ ok: false, operation: 'inspectPane', capability: 'workerLifecycle', paneId, exists: false, failureKind: 'pane-not-found', reason: 'compact unavailable', error: 'compact unavailable', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }) })
     assert.equal(await tmuxProcess.waitForPaneAppStart('%missing', 1), false)
@@ -1110,14 +1583,17 @@ async function assertReadOnlyWindowSessionOrchestrationRuntimeSeam({ requireDist
 async function assertGoTmuxCutoverBatch3Guard({ repoRoot, requireDist, distRoot } = {}) {
   const root = repoRoot || process.cwd()
   assertStep6Batch3AuditMap(root)
+  assertWindowLabelMutationFixtureContracts()
   assertReadOnlyFacadeSourceBoundaries(root)
   assertMutationFacadeSourceBoundaries(root)
   assertGoHelperOperationSurface(root)
   assertReadOnlyFacadeDirectGoBehavior(root)
+  assertNonDestructiveMutationDirectGoBehavior(root)
   assertPackageNativeBoundaries(root)
   assertHistoricalRetention(root)
   assertGoTmuxCutoverBatch3RuntimeSeam(requireDist)
   await assertReadOnlyWindowSessionOrchestrationRuntimeSeam({ requireDist, distRoot })
+  await assertWindowLabelMutationRuntimeSeam({ requireDist, distRoot })
 }
 
 module.exports = {
@@ -1131,7 +1607,9 @@ module.exports = {
   assertGoHelperOperationSurface,
   assertHistoricalRetention,
   assertReadOnlyFacadeDirectGoBehavior,
+  assertNonDestructiveMutationDirectGoBehavior,
   assertReadOnlyWindowSessionOrchestrationRuntimeSeam,
+  assertWindowLabelMutationRuntimeSeam,
   assertMutationFacadeSourceBoundaries,
   assertPackageNativeBoundaries,
   assertReadOnlyFacadeSourceBoundaries,

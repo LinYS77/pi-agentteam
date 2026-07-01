@@ -202,6 +202,14 @@ const EXPECTED_STEP6_DELETION_CANDIDATES = Object.freeze([
   'tests/suites/go-kernel-v0668-go-detached-leader-binding-cutover.cjs',
   'tests/suites/go-kernel-v0669-go-detached-first-pane-cutover.cjs',
   'tests/suites/go-kernel-v0670-go-window-name-lookup-cutover.cjs',
+  'tests/suites/go-kernel-v0671-go-mutating-window-marking-gate.cjs',
+  'tests/suites/go-kernel-v0672-go-window-marking-cutover.cjs',
+  'tests/suites/go-kernel-v0673-go-refresh-window-pane-labels-gate.cjs',
+  'tests/suites/go-kernel-v0674-go-refresh-window-pane-labels-cutover.cjs',
+  'tests/suites/go-kernel-v0675-go-pane-label-setting-gate.cjs',
+  'tests/suites/go-kernel-v0676-go-pane-label-setting-cutover.cjs',
+  'tests/suites/go-kernel-v0677-go-pane-label-clearing-gate.cjs',
+  'tests/suites/go-kernel-v0678-go-pane-label-clearing-cutover.cjs',
 ])
 
 const SCRIPT_FILES_THAT_MUST_REMAIN = Object.freeze([
@@ -725,7 +733,7 @@ function assertNoDeletionOrReintroduction(root) {
 }
 
 function assertNonCandidatesRemainNonCandidates(root) {
-  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_STEP6_DELETION_CANDIDATES, 'v0.6.44-v0.6.88 replacement/deletion candidates should be limited to Step 6 read-only facade/orchestration deletions')
+  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_STEP6_DELETION_CANDIDATES, 'v0.6.44-v0.6.88 replacement/deletion candidates should be limited to Step 6 read-only facade/orchestration and non-destructive window/label deletions')
   const remapped = new Set(HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite))
   const step5B = new Set(HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES)
   const step5C = new Set(HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES)
