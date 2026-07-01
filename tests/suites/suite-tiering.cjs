@@ -14,6 +14,9 @@ const {
   PARSER_DIAGNOSTICS_GUARD_SUITE,
 } = require('../helpers/parserDiagnosticsGuards.cjs')
 const {
+  KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE,
+} = require('../helpers/kernelResolverSourceBoundaryGuards.cjs')
+const {
   READINESS_COMMAND_SURFACE_GUARD_SUITE,
 } = require('../helpers/readinessCommandSurfaceGuards.cjs')
 const {
@@ -26,14 +29,14 @@ const {
   summarizeSelection,
 } = require('../suiteManifest.cjs')
 
-const EXPECTED_TIER_COUNTS_POST_T028 = Object.freeze({
-  default: 78,
+const EXPECTED_TIER_COUNTS_POST_T029 = Object.freeze({
+  default: 79,
   smoke: 10,
   core: 58,
-  'go-current': 20,
+  'go-current': 21,
   audit: 158,
   benchmark: 3,
-  regression: 239,
+  regression: 240,
 })
 
 const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
@@ -45,6 +48,7 @@ const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
 const HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE = normalizeSuiteFile(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT)
 const HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT_FILE = normalizeSuiteFile(HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT)
 const PARSER_DIAGNOSTICS_GUARD_SUITE_FILE = normalizeSuiteFile(PARSER_DIAGNOSTICS_GUARD_SUITE)
+const KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE_FILE = normalizeSuiteFile(KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE)
 const READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE = normalizeSuiteFile(READINESS_COMMAND_SURFACE_GUARD_SUITE)
 const HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES = HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES.map(normalizeSuiteFile)
 const HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITE_FILES = HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES.map(normalizeSuiteFile)
@@ -84,10 +88,10 @@ module.exports = {
       regression: regressionSuites,
     }
 
-    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T028.regression, 'manifest should encode the post-T028 discovered suite count')
-    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T028, 'suite tier summary should encode the post-T028 topology')
+    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T029.regression, 'manifest should encode the post-T029 discovered suite count')
+    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T029, 'suite tier summary should encode the post-T029 topology')
     for (const [tier, suites] of Object.entries(tierSelections)) {
-      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T028[tier], `${tier} tier count should match post-T028 topology`)
+      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T029[tier], `${tier} tier count should match post-T029 topology`)
     }
     assert.deepEqual(regressionSuites, allSuites, 'regression tier should preserve every suite')
     assert.ok(defaultSuites.length < regressionSuites.length, 'default tier should be reduced from full regression')
@@ -102,6 +106,11 @@ module.exports = {
     assert.ok(goCurrentSuites.includes(PARSER_DIAGNOSTICS_GUARD_SUITE_FILE), 'go-current tier should include current parser diagnostics guard')
     assert.ok(regressionSuites.includes(PARSER_DIAGNOSTICS_GUARD_SUITE_FILE), 'regression tier should include current parser diagnostics guard')
     assert.equal(auditSuites.includes(PARSER_DIAGNOSTICS_GUARD_SUITE_FILE), false, 'audit tier should not classify the current parser diagnostics guard as historical audit')
+    assert.deepEqual(classifySuite(KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE_FILE).tiers, ['default', 'go-current', 'regression'], 'kernel resolver source-boundary guard should remain current Go/default coverage')
+    assert.ok(defaultSuites.includes(KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE_FILE), 'default tier should include current kernel resolver source-boundary guard')
+    assert.ok(goCurrentSuites.includes(KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE_FILE), 'go-current tier should include current kernel resolver source-boundary guard')
+    assert.ok(regressionSuites.includes(KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE_FILE), 'regression tier should include current kernel resolver source-boundary guard')
+    assert.equal(auditSuites.includes(KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE_FILE), false, 'audit tier should not classify the current kernel resolver source-boundary guard as historical audit')
     assert.deepEqual(classifySuite(READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE).tiers, ['core', 'default', 'regression'], 'readiness command surface guard should remain current core/default coverage')
     assert.ok(defaultSuites.includes(READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE), 'default tier should include current readiness command surface guard')
     assert.ok(coreSuites.includes(READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE), 'core tier should include current readiness command surface guard')

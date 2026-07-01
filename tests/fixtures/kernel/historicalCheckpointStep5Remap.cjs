@@ -20,6 +20,15 @@ const {
   PARSER_DIAGNOSTICS_SUPPORTING_SUITES,
 } = require('../../helpers/parserDiagnosticsGuards.cjs')
 const {
+  KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES,
+  KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORY_DESCRIPTIONS,
+  KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_HELPER,
+  KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE,
+  KERNEL_RESOLVER_SOURCE_FILES,
+  KERNEL_RESOLVER_SUPPORTING_FIXTURES,
+  KERNEL_RESOLVER_SUPPORTING_SUITES,
+} = require('../../helpers/kernelResolverSourceBoundaryGuards.cjs')
+const {
   HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT,
   HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP,
   HISTORICAL_CHECKPOINT_DELETION_REPLACEMENT_AUDITS,
@@ -87,6 +96,19 @@ const HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE = Object.fr
   ]),
 })
 
+const HISTORICAL_CHECKPOINT_STEP5C_KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_EVIDENCE = Object.freeze({
+  suite: KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE,
+  helper: KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_HELPER,
+  sourceFiles: Object.freeze([...KERNEL_RESOLVER_SOURCE_FILES]),
+  supportingFixtures: Object.freeze([...KERNEL_RESOLVER_SUPPORTING_FIXTURES]),
+  supportingSuites: Object.freeze([...KERNEL_RESOLVER_SUPPORTING_SUITES]),
+  behaviorEvidence: Object.freeze([
+    'current kernel adapter mode-boundary checks for default/go/go-cutover/go-packaged-preview and explicit helper path precedence',
+    'packaged resolver success and fail-closed failure-kind checks with compact no-leak cutover diagnostics',
+    'default embedded helper gating, no hidden TypeScript parser fallback after cutover, and no non-parser production authority expansion',
+  ]),
+})
+
 const RESIDUAL_REMAP_DETAILS = Object.freeze({
   'tests/suites/go-kernel-v0419-tmux-readiness-docs.cjs': {
     currentStatus: 'step5c-ready',
@@ -101,18 +123,16 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
     residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0421-runtime-availability-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'dist kernel adapter metadata still exercises go-packaged-preview semantics',
-      'benchmark metadata helper checks for preview-mode behavior are not package/release governance',
-    ]),
-    residualRisks: Object.freeze(['Move preview-mode runtime metadata and benchmark helper assertions before deleting.']),
+    currentStatus: 'step5c-ready',
+    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0422-native-package-metadata-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'kernel adapter metadata still verifies explicit preview semantics',
-      'v0.4.22 prototype, fixture, dry-run, manifest, and packaged-preview evidence cross-links remain checkpoint-specific',
-    ]),
-    residualRisks: Object.freeze(['Deleting now would remove explicit preview semantic coverage and v0.4.22 evidence cross-link checks.']),
+    currentStatus: 'step5c-ready',
+    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0423-compact-diagnostics-checkpoint-docs.cjs': {
     currentStatus: 'step5c-ready',
@@ -145,11 +165,10 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
     residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0425-native-availability-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'core/kernel.ts explicit helper-path and fallback behavior checks remain source-specific',
-      'v0.4.25 native availability checkpoint source/evidence assertions remain broader than the current readiness surface guard',
-    ]),
-    residualRisks: Object.freeze(['Readiness command expansion is covered by the current guard; split remaining helper-path/fallback and native availability source assertions before deleting.']),
+    currentStatus: 'step5c-ready',
+    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0426-storage-release-policy-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -158,18 +177,16 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
     residualRisks: Object.freeze(['Consolidated workflow/package guards cover mechanics, but the storage/release policy matrix still needs an owner.']),
   },
   'tests/suites/go-kernel-v0426-artifact-pipeline-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'core/kernel.ts production behavior source checks remain unique',
-      'artifact pipeline behavior/prototype suite links remain checkpoint-specific evidence',
-    ]),
-    residualRisks: Object.freeze(['Readiness command containment is covered by the current guard; deleting now would still remove production-behavior source checks and artifact pipeline evidence links.']),
+    currentStatus: 'step5c-ready',
+    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0427-clean-install-consumption-contract-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'core/kernel.ts production resolver behavior checks remain unique',
-      'clean-install behavior suites and resolver discovery contracts remain linked evidence outside package/release/readiness governance',
-    ]),
-    residualRisks: Object.freeze(['Readiness command containment is covered by the current guard; migrate clean-install source/resolver behavior evidence before deleting.']),
+    currentStatus: 'step5c-ready',
+    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0427-install-layout-matrix-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -180,104 +197,104 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
     residualRisks: Object.freeze(['Do not delete until platform matrix, path safety, and resolver-input fail-closed coverage is migrated.']),
   },
   'tests/suites/go-kernel-v0427-consumption-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'core/kernel.ts helper-path/default behavior checks remain unique',
-      'artifact bundle hash checks remain outside package/release/readiness governance',
-      'clean-install, resolver discovery, rollback, and package-native behavior suite links remain checkpoint-specific',
-    ]),
-    residualRisks: Object.freeze(['Readiness command containment is covered by the current guard; split helper/default source checks, artifact hashes, and behavior-suite evidence before deleting.']),
+    currentStatus: 'step5c-ready',
+    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0629-real-implementation-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'builder scripts, packaged resolver source, and core/kernel.ts reads remain implementation-specific',
+      'builder scripts and Go helper artifact build boundaries remain implementation-specific',
       'child-process/go-build scope checks remain build-boundary behavior coverage',
-      'explicit preview runtime boundaries remain outside package/release governance',
+      'runtime source assertions outside the kernel/resolver parser-boundary guard remain tied to artifact builder implementation evidence',
     ]),
-    residualRisks: Object.freeze(['Move builder/resolver/source/go-build and preview-runtime assertions before deleting.']),
+    residualRisks: Object.freeze(['Kernel/resolver mode boundaries are covered by the current guard; move builder/go-build/artifact implementation assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0630-ci-review-artifact-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'builder/verifier script and runtime resolver source reads remain implementation evidence',
+      'builder/verifier script assertions remain CI review artifact implementation evidence',
       'go-build context boundary assertions remain outside consolidated workflow/package governance',
+      'runtime source assertions outside the kernel/resolver parser-boundary guard remain tied to CI artifact prototype evidence',
     ]),
-    residualRisks: Object.freeze(['Deleting now would drop builder/verifier/runtime and go-build context checks.']),
+    residualRisks: Object.freeze(['Kernel/resolver mode boundaries are covered by the current guard; deleting now would drop builder/verifier and go-build context checks.']),
   },
   'tests/suites/go-kernel-v0631-ci-review-artifact-hardening-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'verifier script and runtime resolver source reads remain hardening evidence',
+      'verifier script assertions remain hardening evidence',
       'hosted-observation non-claims remain stricter slice-specific wording beyond the workflow guard',
+      'runtime resolver checks outside parser-boundary behavior remain tied to CI hardening evidence',
     ]),
-    residualRisks: Object.freeze(['Migrate verifier/runtime hardening and hosted-observation non-claim assertions before deleting.']),
+    residualRisks: Object.freeze(['Kernel/resolver mode boundaries are covered by the current guard; migrate verifier hardening and hosted-observation non-claim assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0632-ci-review-provenance-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
       'hosted observation scripts and provenance strict-context details remain slice-specific',
-      'builder/verifier/runtime resolver source reads remain implementation evidence',
+      'builder/verifier assertions remain implementation evidence outside kernel/resolver parser-boundary coverage',
     ]),
-    residualRisks: Object.freeze(['Split hosted-observation/provenance script and runtime-source assertions before deleting.']),
+    residualRisks: Object.freeze(['Kernel/resolver mode boundaries are covered by the current guard; split hosted-observation/provenance and builder/verifier assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0633-clean-install-proof-contract-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'kernel/runtime resolver source checks for installed-layout discovery remain unique',
+      'installed-layout consumption proof script and host-environment invariants remain unique',
       'hosted observation script invariants remain outside the package/release guard',
-      'dist/source boundary helper execution remains package/runtime behavior coverage',
+      'dist/source boundary helper execution remains package/runtime behavior coverage beyond the parser-boundary guard',
     ]),
-    residualRisks: Object.freeze(['Migrate installed-layout resolver, hosted-observation script, and dist/source boundary assertions before deleting.']),
+    residualRisks: Object.freeze(['Kernel/resolver parser boundaries are covered by the current guard; migrate installed-layout proof, hosted-observation script, and dist/source execution assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0633-clean-install-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'core kernel, resolver, fingerprint, and Go helper source reads remain unique',
-      'roadmap future gating and broad tool/control-plane non-expansion assertions remain checkpoint-specific beyond readiness command containment',
+      'clean-install fixture/evidence, fingerprint, and Go helper source reads remain unique',
+      'roadmap future gating and broad tool/control-plane non-expansion assertions remain checkpoint-specific beyond readiness command containment and parser-boundary coverage',
     ]),
-    residualRisks: Object.freeze(['Readiness command containment is covered by the current guard; deleting now would still remove broad source/control-plane and roadmap-gating checks.']),
+    residualRisks: Object.freeze(['Readiness containment and kernel/resolver boundaries are covered by current guards; deleting now would still remove clean-install evidence, helper-source, and roadmap-gating checks.']),
   },
   'tests/suites/go-kernel-v0634-ownership-install-layout-contract-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'kernel/resolver install-layout and release-boundary source checks remain unique',
-      'install-layout ownership semantics remain broader than consolidated package/release mechanics',
+      'install-layout ownership semantics remain broader than consolidated package/release mechanics and parser-boundary checks',
+      'future package-manager/native ownership assertions remain policy-specific',
     ]),
-    residualRisks: Object.freeze(['Keep until install-layout source/ownership assertions are migrated.']),
+    residualRisks: Object.freeze(['Kernel/resolver parser boundaries are covered by the current guard; keep until install-layout ownership assertions are migrated.']),
   },
   'tests/suites/go-kernel-v0634-distribution-option-matrix-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
       'distribution option matrix fields and allowed/forbidden claims remain policy-matrix evidence',
-      'kernel/resolver source checks for package/release availability boundaries remain unique',
+      'package/release availability claims remain broader policy evidence beyond parser-boundary source coverage',
     ]),
-    residualRisks: Object.freeze(['Migrate distribution matrix and runtime source-boundary assertions before deleting.']),
+    residualRisks: Object.freeze(['Kernel/resolver parser boundaries are covered by the current guard; migrate distribution matrix and package availability policy assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0634-rollback-default-disable-policy-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'kernel/resolver/readiness source fail-closed and rollback/default UI behavior checks remain unique',
-      'fixture/tool-surface checks for default/release/signing control-plane remain source-fixture-specific',
+      'rollback/default-disable policy and UI behavior checks remain unique',
+      'fixture/tool-surface checks for default/release/signing control-plane remain source-fixture-specific beyond current readiness and parser-boundary guards',
     ]),
-    residualRisks: Object.freeze(['Do not delete until rollback/default-disable source and fixture/tool-surface coverage is migrated.']),
+    residualRisks: Object.freeze(['Kernel/resolver parser boundaries are covered by the current guard; do not delete until rollback/default-disable policy and fixture/tool-surface coverage is migrated.']),
   },
   'tests/suites/go-kernel-v0634-security-signing-ownership-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'kernel/resolver/readiness source and tool fixture checks for signing/security control-plane remain unique',
+      'tool fixture checks for signing/security control-plane remain unique beyond consolidated mechanics and parser-boundary source coverage',
     ]),
-    residualRisks: Object.freeze(['Consolidated guard covers signing mechanics, but not source/tool fixture ownership assertions.']),
+    residualRisks: Object.freeze(['Consolidated guard covers signing mechanics and the current guard covers parser boundaries, but not source/tool fixture ownership assertions.']),
   },
   'tests/suites/go-kernel-v0634-package-release-decision-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'kernel/resolver and Go helper source checks for package/release/default boundaries remain unique',
+      'Go helper source and package/release/default decision checks remain unique beyond parser-boundary source coverage',
       'tool control-plane invariants remain broader than package/release governance mechanics and readiness command containment',
     ]),
-    residualRisks: Object.freeze(['Readiness command containment is covered by the current guard; migrate broader source and tool-control-plane assertions before deleting.']),
+    residualRisks: Object.freeze(['Readiness containment and kernel/resolver boundaries are covered by current guards; migrate broader helper-source and tool-control-plane assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0635-pi-extension-compliance-contract-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'index.ts, kernel/resolver, and tool fixture source checks for pi extension boundaries remain unique',
+      'index.ts and tool fixture source checks for pi extension boundaries remain unique beyond parser-boundary coverage',
       'named public API surface assertions remain broader than package manifest/facade and readiness command surface checks',
     ]),
-    residualRisks: Object.freeze(['Readiness command containment is covered by the current guard; move pi extension public surface and source/tool fixture assertions before deleting.']),
+    residualRisks: Object.freeze(['Readiness containment and kernel/resolver boundaries are covered by current guards; move pi extension public surface and source/tool fixture assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0635-pi-extension-compliance-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
       'pi extension install/load scripts and evidence file existence checks remain unique',
-      'runtime source assertions remain outside consolidated package/release governance',
+      'public runtime/facade source assertions remain outside consolidated package/release governance and parser-boundary coverage',
     ]),
-    residualRisks: Object.freeze(['Migrate install/load proof script, evidence-file, and runtime-source assertions before deleting.']),
+    residualRisks: Object.freeze(['Kernel/resolver boundaries are covered by the current guard; migrate install/load proof script, evidence-file, and public runtime/facade assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0636-default-go-dry-run-contract-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -321,10 +338,11 @@ function priorEntryForSuite(suite) {
   return entry
 }
 
-function describeStep5CCurrentGuards(readinessCategories, parserDiagnosticsCategories) {
+function describeStep5CCurrentGuards(readinessCategories, parserDiagnosticsCategories, kernelResolverCategories) {
   const guards = []
   if (readinessCategories.length > 0) guards.push('the current readiness command surface guard')
   if (parserDiagnosticsCategories.length > 0) guards.push('the current parser parity/compact diagnostics guard')
+  if (kernelResolverCategories.length > 0) guards.push('the current kernel/resolver source-boundary guard')
   return guards.join(' and ')
 }
 
@@ -337,7 +355,8 @@ function remapEntryForSuite(suite) {
   const step5CDeletionCandidate = currentStatus === 'step5c-ready'
   const readinessCommandSurfaceAssertionCategories = residual.readinessCommandSurfaceAssertionCategories || []
   const parserDiagnosticsAssertionCategories = residual.parserDiagnosticsAssertionCategories || []
-  const step5CCurrentGuardDescription = describeStep5CCurrentGuards(readinessCommandSurfaceAssertionCategories, parserDiagnosticsAssertionCategories)
+  const kernelResolverSourceBoundaryAssertionCategories = residual.kernelResolverSourceBoundaryAssertionCategories || []
+  const step5CCurrentGuardDescription = describeStep5CCurrentGuards(readinessCommandSurfaceAssertionCategories, parserDiagnosticsAssertionCategories, kernelResolverSourceBoundaryAssertionCategories)
   return Object.freeze({
     suite,
     priorDeleteReadiness: prior.deleteReadiness,
@@ -355,6 +374,10 @@ function remapEntryForSuite(suite) {
     parserDiagnosticsAssertionCategories: Object.freeze([...parserDiagnosticsAssertionCategories]),
     parserDiagnosticsGuardEvidence: parserDiagnosticsAssertionCategories.length > 0
       ? HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE
+      : null,
+    kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...kernelResolverSourceBoundaryAssertionCategories]),
+    kernelResolverSourceBoundaryGuardEvidence: kernelResolverSourceBoundaryAssertionCategories.length > 0
+      ? HISTORICAL_CHECKPOINT_STEP5C_KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_EVIDENCE
       : null,
     residualUniqueAssertions: residual.residualUniqueAssertions,
     residualRisks: residual.residualRisks,
@@ -410,6 +433,7 @@ module.exports = {
   HISTORICAL_CHECKPOINT_STEP5A_CONSOLIDATED_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE,
+  HISTORICAL_CHECKPOINT_STEP5C_KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS,
@@ -419,6 +443,8 @@ module.exports = {
   HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES,
   HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES,
+  KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES,
+  KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORY_DESCRIPTIONS,
   PARSER_DIAGNOSTICS_CATEGORIES,
   PARSER_DIAGNOSTICS_CATEGORY_DESCRIPTIONS,
   READINESS_COMMAND_SURFACE_CATEGORIES,
