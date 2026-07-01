@@ -29,6 +29,15 @@ const {
   KERNEL_RESOLVER_SUPPORTING_SUITES,
 } = require('../../helpers/kernelResolverSourceBoundaryGuards.cjs')
 const {
+  ARTIFACT_CI_PROVENANCE_CATEGORIES,
+  ARTIFACT_CI_PROVENANCE_CATEGORY_DESCRIPTIONS,
+  ARTIFACT_CI_PROVENANCE_GUARD_HELPER,
+  ARTIFACT_CI_PROVENANCE_GUARD_SUITE,
+  ARTIFACT_CI_PROVENANCE_SOURCE_FILES,
+  ARTIFACT_CI_PROVENANCE_SUPPORTING_DOCS,
+  ARTIFACT_CI_PROVENANCE_SUPPORTING_SUITES,
+} = require('../../helpers/artifactCiProvenanceGuards.cjs')
+const {
   HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT,
   HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP,
   HISTORICAL_CHECKPOINT_DELETION_REPLACEMENT_AUDITS,
@@ -106,6 +115,19 @@ const HISTORICAL_CHECKPOINT_STEP5C_KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_EVIDENC
     'current kernel adapter mode-boundary checks for default/go/go-cutover/go-packaged-preview and explicit helper path precedence',
     'packaged resolver success and fail-closed failure-kind checks with compact no-leak cutover diagnostics',
     'default embedded helper gating, no hidden TypeScript parser fallback after cutover, and no non-parser production authority expansion',
+  ]),
+})
+
+const HISTORICAL_CHECKPOINT_STEP5C_ARTIFACT_CI_PROVENANCE_GUARD_EVIDENCE = Object.freeze({
+  suite: ARTIFACT_CI_PROVENANCE_GUARD_SUITE,
+  helper: ARTIFACT_CI_PROVENANCE_GUARD_HELPER,
+  sourceFiles: Object.freeze([...ARTIFACT_CI_PROVENANCE_SOURCE_FILES]),
+  supportingDocs: Object.freeze([...ARTIFACT_CI_PROVENANCE_SUPPORTING_DOCS]),
+  supportingSuites: Object.freeze([...ARTIFACT_CI_PROVENANCE_SUPPORTING_SUITES]),
+  behaviorEvidence: Object.freeze([
+    'current artifact builder temp-output, artifact-index, and verifier/provenance source-boundary checks',
+    'bounded GitHub review-artifact workflow and strict reverify context checks with no release/package/signing mechanics',
+    'hosted observation record non-availability semantics plus no checked-in generated/release artifact residue',
   ]),
 })
 
@@ -203,43 +225,35 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
     residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0629-real-implementation-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'builder scripts and Go helper artifact build boundaries remain implementation-specific',
-      'child-process/go-build scope checks remain build-boundary behavior coverage',
-      'runtime source assertions outside the kernel/resolver parser-boundary guard remain tied to artifact builder implementation evidence',
-    ]),
-    residualRisks: Object.freeze(['Kernel/resolver mode boundaries are covered by the current guard; move builder/go-build/artifact implementation assertions before deleting.']),
+    currentStatus: 'step5c-ready',
+    artifactCiProvenanceAssertionCategories: Object.freeze([...ARTIFACT_CI_PROVENANCE_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0630-ci-review-artifact-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'builder/verifier script assertions remain CI review artifact implementation evidence',
-      'go-build context boundary assertions remain outside consolidated workflow/package governance',
-      'runtime source assertions outside the kernel/resolver parser-boundary guard remain tied to CI artifact prototype evidence',
-    ]),
-    residualRisks: Object.freeze(['Kernel/resolver mode boundaries are covered by the current guard; deleting now would drop builder/verifier and go-build context checks.']),
+    currentStatus: 'step5c-ready',
+    artifactCiProvenanceAssertionCategories: Object.freeze([...ARTIFACT_CI_PROVENANCE_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0631-ci-review-artifact-hardening-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'verifier script assertions remain hardening evidence',
-      'hosted-observation non-claims remain stricter slice-specific wording beyond the workflow guard',
-      'runtime resolver checks outside parser-boundary behavior remain tied to CI hardening evidence',
-    ]),
-    residualRisks: Object.freeze(['Kernel/resolver mode boundaries are covered by the current guard; migrate verifier hardening and hosted-observation non-claim assertions before deleting.']),
+    currentStatus: 'step5c-ready',
+    artifactCiProvenanceAssertionCategories: Object.freeze([...ARTIFACT_CI_PROVENANCE_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0632-ci-review-provenance-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'hosted observation scripts and provenance strict-context details remain slice-specific',
-      'builder/verifier assertions remain implementation evidence outside kernel/resolver parser-boundary coverage',
-    ]),
-    residualRisks: Object.freeze(['Kernel/resolver mode boundaries are covered by the current guard; split hosted-observation/provenance and builder/verifier assertions before deleting.']),
+    currentStatus: 'step5c-ready',
+    artifactCiProvenanceAssertionCategories: Object.freeze([...ARTIFACT_CI_PROVENANCE_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0633-clean-install-proof-contract-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
       'installed-layout consumption proof script and host-environment invariants remain unique',
-      'hosted observation script invariants remain outside the package/release guard',
-      'dist/source boundary helper execution remains package/runtime behavior coverage beyond the parser-boundary guard',
+      'dist/source boundary helper execution remains package/runtime behavior coverage beyond the parser-boundary and artifact/CI/provenance guards',
     ]),
-    residualRisks: Object.freeze(['Kernel/resolver parser boundaries are covered by the current guard; migrate installed-layout proof, hosted-observation script, and dist/source execution assertions before deleting.']),
+    residualRisks: Object.freeze(['Kernel/resolver parser boundaries and hosted-observation non-availability semantics are covered by current guards; migrate installed-layout proof and dist/source execution assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0633-clean-install-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -338,11 +352,12 @@ function priorEntryForSuite(suite) {
   return entry
 }
 
-function describeStep5CCurrentGuards(readinessCategories, parserDiagnosticsCategories, kernelResolverCategories) {
+function describeStep5CCurrentGuards(readinessCategories, parserDiagnosticsCategories, kernelResolverCategories, artifactCiProvenanceCategories) {
   const guards = []
   if (readinessCategories.length > 0) guards.push('the current readiness command surface guard')
   if (parserDiagnosticsCategories.length > 0) guards.push('the current parser parity/compact diagnostics guard')
   if (kernelResolverCategories.length > 0) guards.push('the current kernel/resolver source-boundary guard')
+  if (artifactCiProvenanceCategories.length > 0) guards.push('the current artifact/CI/provenance guard')
   return guards.join(' and ')
 }
 
@@ -356,7 +371,8 @@ function remapEntryForSuite(suite) {
   const readinessCommandSurfaceAssertionCategories = residual.readinessCommandSurfaceAssertionCategories || []
   const parserDiagnosticsAssertionCategories = residual.parserDiagnosticsAssertionCategories || []
   const kernelResolverSourceBoundaryAssertionCategories = residual.kernelResolverSourceBoundaryAssertionCategories || []
-  const step5CCurrentGuardDescription = describeStep5CCurrentGuards(readinessCommandSurfaceAssertionCategories, parserDiagnosticsAssertionCategories, kernelResolverSourceBoundaryAssertionCategories)
+  const artifactCiProvenanceAssertionCategories = residual.artifactCiProvenanceAssertionCategories || []
+  const step5CCurrentGuardDescription = describeStep5CCurrentGuards(readinessCommandSurfaceAssertionCategories, parserDiagnosticsAssertionCategories, kernelResolverSourceBoundaryAssertionCategories, artifactCiProvenanceAssertionCategories)
   return Object.freeze({
     suite,
     priorDeleteReadiness: prior.deleteReadiness,
@@ -378,6 +394,10 @@ function remapEntryForSuite(suite) {
     kernelResolverSourceBoundaryAssertionCategories: Object.freeze([...kernelResolverSourceBoundaryAssertionCategories]),
     kernelResolverSourceBoundaryGuardEvidence: kernelResolverSourceBoundaryAssertionCategories.length > 0
       ? HISTORICAL_CHECKPOINT_STEP5C_KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_EVIDENCE
+      : null,
+    artifactCiProvenanceAssertionCategories: Object.freeze([...artifactCiProvenanceAssertionCategories]),
+    artifactCiProvenanceGuardEvidence: artifactCiProvenanceAssertionCategories.length > 0
+      ? HISTORICAL_CHECKPOINT_STEP5C_ARTIFACT_CI_PROVENANCE_GUARD_EVIDENCE
       : null,
     residualUniqueAssertions: residual.residualUniqueAssertions,
     residualRisks: residual.residualRisks,
@@ -434,6 +454,7 @@ module.exports = {
   HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_EVIDENCE,
+  HISTORICAL_CHECKPOINT_STEP5C_ARTIFACT_CI_PROVENANCE_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS,
@@ -443,6 +464,8 @@ module.exports = {
   HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES,
   HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES,
+  ARTIFACT_CI_PROVENANCE_CATEGORIES,
+  ARTIFACT_CI_PROVENANCE_CATEGORY_DESCRIPTIONS,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORY_DESCRIPTIONS,
   PARSER_DIAGNOSTICS_CATEGORIES,
