@@ -14,6 +14,9 @@ const {
   ARTIFACT_CI_PROVENANCE_GUARD_SUITE,
 } = require('../helpers/artifactCiProvenanceGuards.cjs')
 const {
+  INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE,
+} = require('../helpers/installLayoutPathSafetyGuards.cjs')
+const {
   PARSER_DIAGNOSTICS_GUARD_SUITE,
 } = require('../helpers/parserDiagnosticsGuards.cjs')
 const {
@@ -32,14 +35,14 @@ const {
   summarizeSelection,
 } = require('../suiteManifest.cjs')
 
-const EXPECTED_TIER_COUNTS_POST_T030 = Object.freeze({
-  default: 80,
+const EXPECTED_TIER_COUNTS_POST_T031 = Object.freeze({
+  default: 81,
   smoke: 10,
   core: 58,
-  'go-current': 22,
+  'go-current': 23,
   audit: 158,
   benchmark: 3,
-  regression: 241,
+  regression: 242,
 })
 
 const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
@@ -51,6 +54,7 @@ const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
 const HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE = normalizeSuiteFile(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT)
 const HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT_FILE = normalizeSuiteFile(HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT)
 const ARTIFACT_CI_PROVENANCE_GUARD_SUITE_FILE = normalizeSuiteFile(ARTIFACT_CI_PROVENANCE_GUARD_SUITE)
+const INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE_FILE = normalizeSuiteFile(INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE)
 const PARSER_DIAGNOSTICS_GUARD_SUITE_FILE = normalizeSuiteFile(PARSER_DIAGNOSTICS_GUARD_SUITE)
 const KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE_FILE = normalizeSuiteFile(KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_SUITE)
 const READINESS_COMMAND_SURFACE_GUARD_SUITE_FILE = normalizeSuiteFile(READINESS_COMMAND_SURFACE_GUARD_SUITE)
@@ -92,10 +96,10 @@ module.exports = {
       regression: regressionSuites,
     }
 
-    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T030.regression, 'manifest should encode the post-T030 discovered suite count')
-    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T030, 'suite tier summary should encode the post-T030 topology')
+    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T031.regression, 'manifest should encode the post-T031 discovered suite count')
+    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T031, 'suite tier summary should encode the post-T031 topology')
     for (const [tier, suites] of Object.entries(tierSelections)) {
-      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T030[tier], `${tier} tier count should match post-T030 topology`)
+      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T031[tier], `${tier} tier count should match post-T031 topology`)
     }
     assert.deepEqual(regressionSuites, allSuites, 'regression tier should preserve every suite')
     assert.ok(defaultSuites.length < regressionSuites.length, 'default tier should be reduced from full regression')
@@ -110,6 +114,11 @@ module.exports = {
     assert.ok(goCurrentSuites.includes(ARTIFACT_CI_PROVENANCE_GUARD_SUITE_FILE), 'go-current tier should include current artifact CI provenance guard')
     assert.ok(regressionSuites.includes(ARTIFACT_CI_PROVENANCE_GUARD_SUITE_FILE), 'regression tier should include current artifact CI provenance guard')
     assert.equal(auditSuites.includes(ARTIFACT_CI_PROVENANCE_GUARD_SUITE_FILE), false, 'audit tier should not classify the current artifact CI provenance guard as historical audit')
+    assert.deepEqual(classifySuite(INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE_FILE).tiers, ['default', 'go-current', 'regression'], 'install-layout path-safety guard should remain current Go/default coverage')
+    assert.ok(defaultSuites.includes(INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE_FILE), 'default tier should include current install-layout path-safety guard')
+    assert.ok(goCurrentSuites.includes(INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE_FILE), 'go-current tier should include current install-layout path-safety guard')
+    assert.ok(regressionSuites.includes(INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE_FILE), 'regression tier should include current install-layout path-safety guard')
+    assert.equal(auditSuites.includes(INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE_FILE), false, 'audit tier should not classify the current install-layout path-safety guard as historical audit')
     assert.deepEqual(classifySuite(PARSER_DIAGNOSTICS_GUARD_SUITE_FILE).tiers, ['default', 'go-current', 'regression'], 'parser diagnostics guard should remain current Go/default coverage')
     assert.ok(defaultSuites.includes(PARSER_DIAGNOSTICS_GUARD_SUITE_FILE), 'default tier should include current parser diagnostics guard')
     assert.ok(goCurrentSuites.includes(PARSER_DIAGNOSTICS_GUARD_SUITE_FILE), 'go-current tier should include current parser diagnostics guard')

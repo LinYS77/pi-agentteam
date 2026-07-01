@@ -38,6 +38,15 @@ const {
   ARTIFACT_CI_PROVENANCE_SUPPORTING_SUITES,
 } = require('../../helpers/artifactCiProvenanceGuards.cjs')
 const {
+  INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES,
+  INSTALL_LAYOUT_PATH_SAFETY_CATEGORY_DESCRIPTIONS,
+  INSTALL_LAYOUT_PATH_SAFETY_GUARD_HELPER,
+  INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE,
+  INSTALL_LAYOUT_PATH_SAFETY_SOURCE_FILES,
+  INSTALL_LAYOUT_PATH_SAFETY_SUPPORTING_DOCS,
+  INSTALL_LAYOUT_PATH_SAFETY_SUPPORTING_SUITES,
+} = require('../../helpers/installLayoutPathSafetyGuards.cjs')
+const {
   HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT,
   HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP,
   HISTORICAL_CHECKPOINT_DELETION_REPLACEMENT_AUDITS,
@@ -131,6 +140,19 @@ const HISTORICAL_CHECKPOINT_STEP5C_ARTIFACT_CI_PROVENANCE_GUARD_EVIDENCE = Objec
   ]),
 })
 
+const HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE = Object.freeze({
+  suite: INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE,
+  helper: INSTALL_LAYOUT_PATH_SAFETY_GUARD_HELPER,
+  sourceFiles: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_SOURCE_FILES]),
+  supportingDocs: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_SUPPORTING_DOCS]),
+  supportingSuites: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_SUPPORTING_SUITES]),
+  behaviorEvidence: Object.freeze([
+    'current packaged resolver platform tuple, package-relative path safety, and fail-closed no-leak layout-input checks',
+    'clean-install proof and package-manager baseline non-availability boundaries for installed-layout consumption',
+    'non-applied package layout proposal fixture inertness, package/native allowlist preservation, and default/control-surface containment',
+  ]),
+})
+
 const RESIDUAL_REMAP_DETAILS = Object.freeze({
   'tests/suites/go-kernel-v0419-tmux-readiness-docs.cjs': {
     currentStatus: 'step5c-ready',
@@ -211,12 +233,10 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
     residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0427-install-layout-matrix-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'PLATFORM_ROWS supported/unsupported target matrix and fail-closed unsupported rows remain unique',
-      'packageRelativeLayoutPath path-safety checks remain unique',
-      'validateResolverInputs skew, traversal, stale-helper, and stale-metadata fail-closed cases remain unique',
-    ]),
-    residualRisks: Object.freeze(['Do not delete until platform matrix, path safety, and resolver-input fail-closed coverage is migrated.']),
+    currentStatus: 'step5c-ready',
+    installLayoutPathSafetyAssertionCategories: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0427-consumption-checkpoint-docs.cjs': {
     currentStatus: 'step5c-ready',
@@ -249,32 +269,28 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
     residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0633-clean-install-proof-contract-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'installed-layout consumption proof script and host-environment invariants remain unique',
-      'dist/source boundary helper execution remains package/runtime behavior coverage beyond the parser-boundary and artifact/CI/provenance guards',
-    ]),
-    residualRisks: Object.freeze(['Kernel/resolver parser boundaries and hosted-observation non-availability semantics are covered by current guards; migrate installed-layout proof and dist/source execution assertions before deleting.']),
+    currentStatus: 'step5c-ready',
+    installLayoutPathSafetyAssertionCategories: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0633-clean-install-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'clean-install fixture/evidence, fingerprint, and Go helper source reads remain unique',
-      'roadmap future gating and broad tool/control-plane non-expansion assertions remain checkpoint-specific beyond readiness command containment and parser-boundary coverage',
-    ]),
-    residualRisks: Object.freeze(['Readiness containment and kernel/resolver boundaries are covered by current guards; deleting now would still remove clean-install evidence, helper-source, and roadmap-gating checks.']),
+    currentStatus: 'step5c-ready',
+    installLayoutPathSafetyAssertionCategories: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0634-ownership-install-layout-contract-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'install-layout ownership semantics remain broader than consolidated package/release mechanics and parser-boundary checks',
-      'future package-manager/native ownership assertions remain policy-specific',
-    ]),
-    residualRisks: Object.freeze(['Kernel/resolver parser boundaries are covered by the current guard; keep until install-layout ownership assertions are migrated.']),
+    currentStatus: 'step5c-ready',
+    installLayoutPathSafetyAssertionCategories: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0634-distribution-option-matrix-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'distribution option matrix fields and allowed/forbidden claims remain policy-matrix evidence',
-      'package/release availability claims remain broader policy evidence beyond parser-boundary source coverage',
-    ]),
-    residualRisks: Object.freeze(['Kernel/resolver parser boundaries are covered by the current guard; migrate distribution matrix and package availability policy assertions before deleting.']),
+    currentStatus: 'step5c-ready',
+    installLayoutPathSafetyAssertionCategories: Object.freeze([...INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0634-rollback-default-disable-policy-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -291,10 +307,10 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
   },
   'tests/suites/go-kernel-v0634-package-release-decision-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
-      'Go helper source and package/release/default decision checks remain unique beyond parser-boundary source coverage',
-      'tool control-plane invariants remain broader than package/release governance mechanics and readiness command containment',
+      'final package/release/default decision checkpoint, rollback/default-disable, and signing/security ownership synthesis remain broader than install-layout path-safety coverage',
+      'tool control-plane invariants remain broader than package/release governance, readiness command containment, kernel/resolver, and install-layout guards',
     ]),
-    residualRisks: Object.freeze(['Readiness containment and kernel/resolver boundaries are covered by current guards; migrate broader helper-source and tool-control-plane assertions before deleting.']),
+    residualRisks: Object.freeze(['Install-layout/path-safety decisions are covered by the current guard; migrate broader package-release/default, rollback/security, and tool-control-plane checkpoint assertions before deleting.']),
   },
   'tests/suites/go-kernel-v0635-pi-extension-compliance-contract-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -352,12 +368,13 @@ function priorEntryForSuite(suite) {
   return entry
 }
 
-function describeStep5CCurrentGuards(readinessCategories, parserDiagnosticsCategories, kernelResolverCategories, artifactCiProvenanceCategories) {
+function describeStep5CCurrentGuards(readinessCategories, parserDiagnosticsCategories, kernelResolverCategories, artifactCiProvenanceCategories, installLayoutPathSafetyCategories) {
   const guards = []
   if (readinessCategories.length > 0) guards.push('the current readiness command surface guard')
   if (parserDiagnosticsCategories.length > 0) guards.push('the current parser parity/compact diagnostics guard')
   if (kernelResolverCategories.length > 0) guards.push('the current kernel/resolver source-boundary guard')
   if (artifactCiProvenanceCategories.length > 0) guards.push('the current artifact/CI/provenance guard')
+  if (installLayoutPathSafetyCategories.length > 0) guards.push('the current install-layout/platform path-safety guard')
   return guards.join(' and ')
 }
 
@@ -372,7 +389,8 @@ function remapEntryForSuite(suite) {
   const parserDiagnosticsAssertionCategories = residual.parserDiagnosticsAssertionCategories || []
   const kernelResolverSourceBoundaryAssertionCategories = residual.kernelResolverSourceBoundaryAssertionCategories || []
   const artifactCiProvenanceAssertionCategories = residual.artifactCiProvenanceAssertionCategories || []
-  const step5CCurrentGuardDescription = describeStep5CCurrentGuards(readinessCommandSurfaceAssertionCategories, parserDiagnosticsAssertionCategories, kernelResolverSourceBoundaryAssertionCategories, artifactCiProvenanceAssertionCategories)
+  const installLayoutPathSafetyAssertionCategories = residual.installLayoutPathSafetyAssertionCategories || []
+  const step5CCurrentGuardDescription = describeStep5CCurrentGuards(readinessCommandSurfaceAssertionCategories, parserDiagnosticsAssertionCategories, kernelResolverSourceBoundaryAssertionCategories, artifactCiProvenanceAssertionCategories, installLayoutPathSafetyAssertionCategories)
   return Object.freeze({
     suite,
     priorDeleteReadiness: prior.deleteReadiness,
@@ -398,6 +416,10 @@ function remapEntryForSuite(suite) {
     artifactCiProvenanceAssertionCategories: Object.freeze([...artifactCiProvenanceAssertionCategories]),
     artifactCiProvenanceGuardEvidence: artifactCiProvenanceAssertionCategories.length > 0
       ? HISTORICAL_CHECKPOINT_STEP5C_ARTIFACT_CI_PROVENANCE_GUARD_EVIDENCE
+      : null,
+    installLayoutPathSafetyAssertionCategories: Object.freeze([...installLayoutPathSafetyAssertionCategories]),
+    installLayoutPathSafetyGuardEvidence: installLayoutPathSafetyAssertionCategories.length > 0
+      ? HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE
       : null,
     residualUniqueAssertions: residual.residualUniqueAssertions,
     residualRisks: residual.residualRisks,
@@ -455,6 +477,7 @@ module.exports = {
   HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_ARTIFACT_CI_PROVENANCE_GUARD_EVIDENCE,
+  HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS,
@@ -466,6 +489,8 @@ module.exports = {
   HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES,
   ARTIFACT_CI_PROVENANCE_CATEGORIES,
   ARTIFACT_CI_PROVENANCE_CATEGORY_DESCRIPTIONS,
+  INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES,
+  INSTALL_LAYOUT_PATH_SAFETY_CATEGORY_DESCRIPTIONS,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORY_DESCRIPTIONS,
   PARSER_DIAGNOSTICS_CATEGORIES,

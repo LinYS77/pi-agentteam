@@ -36,6 +36,12 @@ const {
   ARTIFACT_CI_PROVENANCE_GUARD_SUITE,
   assertArtifactCiProvenanceGuard,
 } = require('../helpers/artifactCiProvenanceGuards.cjs')
+const {
+  INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES: HELPER_INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES,
+  INSTALL_LAYOUT_PATH_SAFETY_GUARD_HELPER,
+  INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE,
+  assertInstallLayoutPathSafetyGuard,
+} = require('../helpers/installLayoutPathSafetyGuards.cjs')
 const { assertPackageVersion } = require('../helpers/packageGuards.cjs')
 const {
   HISTORICAL_CHECKPOINT_DOCS_V0419_V0427,
@@ -60,6 +66,7 @@ const {
   HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_KERNEL_RESOLVER_SOURCE_BOUNDARY_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5C_ARTIFACT_CI_PROVENANCE_GUARD_EVIDENCE,
+  HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS,
@@ -71,6 +78,8 @@ const {
   HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES,
   ARTIFACT_CI_PROVENANCE_CATEGORIES,
   ARTIFACT_CI_PROVENANCE_CATEGORY_DESCRIPTIONS,
+  INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES,
+  INSTALL_LAYOUT_PATH_SAFETY_CATEGORY_DESCRIPTIONS,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORIES,
   KERNEL_RESOLVER_SOURCE_BOUNDARY_CATEGORY_DESCRIPTIONS,
   PARSER_DIAGNOSTICS_CATEGORIES,
@@ -82,8 +91,8 @@ const {
 
 const EXPECTED_REMAINING_TOTAL = 32
 const EXPECTED_STEP5B_READY = 0
-const EXPECTED_STEP5C_READY = 17
-const EXPECTED_STILL_NEEDS_SPLIT = 14
+const EXPECTED_STEP5C_READY = 22
+const EXPECTED_STILL_NEEDS_SPLIT = 9
 const EXPECTED_STILL_KEEP = 1
 const EXPECTED_STEP5C_PARSER_DIAGNOSTICS_CANDIDATES = Object.freeze([
   'tests/suites/go-kernel-v0419-tmux-readiness-docs.cjs',
@@ -110,11 +119,19 @@ const EXPECTED_STEP5C_ARTIFACT_CI_PROVENANCE_CANDIDATES = Object.freeze([
   'tests/suites/go-kernel-v0631-ci-review-artifact-hardening-checkpoint-docs.cjs',
   'tests/suites/go-kernel-v0632-ci-review-provenance-checkpoint-docs.cjs',
 ])
+const EXPECTED_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_CANDIDATES = Object.freeze([
+  'tests/suites/go-kernel-v0427-install-layout-matrix-docs.cjs',
+  'tests/suites/go-kernel-v0633-clean-install-proof-contract-docs.cjs',
+  'tests/suites/go-kernel-v0633-clean-install-checkpoint-docs.cjs',
+  'tests/suites/go-kernel-v0634-ownership-install-layout-contract-docs.cjs',
+  'tests/suites/go-kernel-v0634-distribution-option-matrix-docs.cjs',
+])
 const EXPECTED_STEP5C_DELETION_CANDIDATES = Object.freeze([
   ...EXPECTED_STEP5C_PARSER_DIAGNOSTICS_CANDIDATES,
   ...EXPECTED_STEP5C_READINESS_CANDIDATES,
   ...EXPECTED_STEP5C_KERNEL_RESOLVER_CANDIDATES,
   ...EXPECTED_STEP5C_ARTIFACT_CI_PROVENANCE_CANDIDATES,
+  ...EXPECTED_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_CANDIDATES,
 ])
 
 const SCRIPT_FILES_THAT_MUST_REMAIN = Object.freeze([
@@ -184,10 +201,12 @@ const FIXTURE_AND_HELPER_FILES_THAT_MUST_REMAIN = Object.freeze([
   'tests/helpers/packageGuards.cjs',
   'tests/helpers/packageReleaseGovernanceGuards.cjs',
   'tests/helpers/parserDiagnosticsGuards.cjs',
+  'tests/helpers/installLayoutPathSafetyGuards.cjs',
   'tests/helpers/kernelResolverSourceBoundaryGuards.cjs',
   'tests/helpers/readinessCommandSurfaceGuards.cjs',
   'tests/helpers/reviewArtifactWorkflowGuard.cjs',
   'tests/suites/go-kernel-artifact-ci-provenance-guard.cjs',
+  'tests/suites/go-kernel-install-layout-path-safety-guard.cjs',
   'tests/suites/go-kernel-parser-diagnostics-guard.cjs',
   'tests/suites/go-kernel-resolver-source-boundary-guard.cjs',
   'tests/suites/readiness-command-surface-guard.cjs',
@@ -324,6 +343,28 @@ async function assertArtifactCiProvenanceGuardCoverage(root) {
   assert.ok(HISTORICAL_CHECKPOINT_STEP5C_ARTIFACT_CI_PROVENANCE_GUARD_EVIDENCE.behaviorEvidence.length >= 3, 'artifact/CI/provenance guard evidence should include behavioral checks')
 }
 
+async function assertInstallLayoutPathSafetyGuardCoverage(root, env) {
+  const result = await assertInstallLayoutPathSafetyGuard(root, env)
+  assertSameSet(result.checkedCategories, HELPER_INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES, 'helper checked install-layout/path-safety categories')
+  assertSameSet(INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES, HELPER_INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES, 'remap fixture install-layout/path-safety categories')
+  assert.equal(Object.keys(INSTALL_LAYOUT_PATH_SAFETY_CATEGORY_DESCRIPTIONS).length, HELPER_INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES.length, 'each install-layout/path-safety category should have a description')
+  for (const category of HELPER_INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES) {
+    assert.ok(INSTALL_LAYOUT_PATH_SAFETY_CATEGORY_DESCRIPTIONS[category], `${category} should have a description`)
+  }
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE.suite, INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE, 'install-layout/path-safety evidence should point at current guard suite')
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE.helper, INSTALL_LAYOUT_PATH_SAFETY_GUARD_HELPER, 'install-layout/path-safety evidence should point at current guard helper')
+  for (const rel of [
+    HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE.suite,
+    HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE.helper,
+    ...HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE.sourceFiles,
+    ...HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE.supportingDocs,
+    ...HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE.supportingSuites,
+  ]) {
+    assert.equal(existsRel(root, rel), true, `${rel} should exist as install-layout/path-safety guard evidence`)
+  }
+  assert.ok(HISTORICAL_CHECKPOINT_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_GUARD_EVIDENCE.behaviorEvidence.length >= 3, 'install-layout/path-safety guard evidence should include behavioral checks')
+}
+
 function assertRemapCompleteness() {
   const remaining = remainingCandidateSuites()
   const remappedSuites = HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite)
@@ -367,8 +408,9 @@ function assertRemapCompleteness() {
       const parserDiagnosticsCandidate = EXPECTED_STEP5C_PARSER_DIAGNOSTICS_CANDIDATES.includes(entry.suite)
       const kernelResolverCandidate = EXPECTED_STEP5C_KERNEL_RESOLVER_CANDIDATES.includes(entry.suite)
       const artifactCiProvenanceCandidate = EXPECTED_STEP5C_ARTIFACT_CI_PROVENANCE_CANDIDATES.includes(entry.suite)
+      const installLayoutPathSafetyCandidate = EXPECTED_STEP5C_INSTALL_LAYOUT_PATH_SAFETY_CANDIDATES.includes(entry.suite)
       assert.equal(entry.currentStatus, 'step5c-ready', `${entry.suite} Step 5C candidate should have step5c-ready status`)
-      assert.equal(readinessCandidate || parserDiagnosticsCandidate || kernelResolverCandidate || artifactCiProvenanceCandidate, true, `${entry.suite} Step 5C candidate should be backed by a known migrated current guard`)
+      assert.equal(readinessCandidate || parserDiagnosticsCandidate || kernelResolverCandidate || artifactCiProvenanceCandidate || installLayoutPathSafetyCandidate, true, `${entry.suite} Step 5C candidate should be backed by a known migrated current guard`)
       assert.deepEqual(entry.residualUniqueAssertions, [], `${entry.suite} Step 5C candidate should have no residual assertions`)
       assert.deepEqual(entry.residualRisks, [], `${entry.suite} Step 5C candidate should have no residual risks`)
       if (readinessCandidate) {
@@ -407,6 +449,15 @@ function assertRemapCompleteness() {
         assert.deepEqual(entry.artifactCiProvenanceAssertionCategories, [], `${entry.suite} non-artifact/CI/provenance Step 5C candidate should not claim artifact/CI/provenance categories`)
         assert.equal(entry.artifactCiProvenanceGuardEvidence, null, `${entry.suite} non-artifact/CI/provenance Step 5C candidate should not claim artifact/CI/provenance guard evidence`)
       }
+      if (installLayoutPathSafetyCandidate) {
+        assertSameSet(entry.installLayoutPathSafetyAssertionCategories, HELPER_INSTALL_LAYOUT_PATH_SAFETY_CATEGORIES, `${entry.suite} Step 5C install-layout/path-safety coverage categories`)
+        assert.equal(entry.installLayoutPathSafetyGuardEvidence.suite, INSTALL_LAYOUT_PATH_SAFETY_GUARD_SUITE, `${entry.suite} Step 5C install-layout/path-safety guard suite evidence`)
+        assert.equal(entry.installLayoutPathSafetyGuardEvidence.helper, INSTALL_LAYOUT_PATH_SAFETY_GUARD_HELPER, `${entry.suite} Step 5C install-layout/path-safety guard helper evidence`)
+        assert.ok(entry.rationale.includes('current install-layout/platform path-safety guard'), `${entry.suite} Step 5C rationale should cite the current install-layout/path-safety guard`)
+      } else {
+        assert.deepEqual(entry.installLayoutPathSafetyAssertionCategories, [], `${entry.suite} non-install-layout/path-safety Step 5C candidate should not claim install-layout/path-safety categories`)
+        assert.equal(entry.installLayoutPathSafetyGuardEvidence, null, `${entry.suite} non-install-layout/path-safety Step 5C candidate should not claim install-layout/path-safety guard evidence`)
+      }
     } else {
       assert.notEqual(entry.currentStatus, 'step5b-ready', `${entry.suite} non-ready entry must not use step5b-ready status`)
       assert.notEqual(entry.currentStatus, 'step5c-ready', `${entry.suite} non-ready entry must not use step5c-ready status`)
@@ -418,6 +469,8 @@ function assertRemapCompleteness() {
       assert.equal(entry.kernelResolverSourceBoundaryGuardEvidence, null, `${entry.suite} non-ready entry must not claim kernel/resolver evidence`)
       assert.deepEqual(entry.artifactCiProvenanceAssertionCategories, [], `${entry.suite} non-ready entry must not claim artifact/CI/provenance categories`)
       assert.equal(entry.artifactCiProvenanceGuardEvidence, null, `${entry.suite} non-ready entry must not claim artifact/CI/provenance evidence`)
+      assert.deepEqual(entry.installLayoutPathSafetyAssertionCategories, [], `${entry.suite} non-ready entry must not claim install-layout/path-safety categories`)
+      assert.equal(entry.installLayoutPathSafetyGuardEvidence, null, `${entry.suite} non-ready entry must not claim install-layout/path-safety evidence`)
       assert.ok(entry.residualUniqueAssertions.length >= 1, `${entry.suite} non-ready entry should keep residual assertions`)
       assert.ok(entry.residualRisks.length >= 1, `${entry.suite} non-ready entry should keep residual risks`)
     }
@@ -501,6 +554,7 @@ module.exports = {
     await assertParserDiagnosticsGuardCoverage(root, env)
     await assertKernelResolverGuardCoverage(root, env)
     await assertArtifactCiProvenanceGuardCoverage(root)
+    await assertInstallLayoutPathSafetyGuardCoverage(root, env)
     assertRemapCompleteness()
     assertNoDeletionOrReintroduction(root)
     assertNonCandidatesRemainNonCandidates(root)
