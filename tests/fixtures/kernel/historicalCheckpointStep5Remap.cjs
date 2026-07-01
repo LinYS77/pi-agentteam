@@ -11,6 +11,15 @@ const {
   READINESS_COMMAND_SURFACE_GUARD_SUITE,
 } = require('../../helpers/readinessCommandSurfaceGuards.cjs')
 const {
+  PARSER_DIAGNOSTICS_CATEGORIES,
+  PARSER_DIAGNOSTICS_CATEGORY_DESCRIPTIONS,
+  PARSER_DIAGNOSTICS_GUARD_HELPER,
+  PARSER_DIAGNOSTICS_GUARD_SUITE,
+  PARSER_DIAGNOSTICS_SOURCE_FILES,
+  PARSER_DIAGNOSTICS_SUPPORTING_FIXTURES,
+  PARSER_DIAGNOSTICS_SUPPORTING_SUITES,
+} = require('../../helpers/parserDiagnosticsGuards.cjs')
+const {
   HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT,
   HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP,
   HISTORICAL_CHECKPOINT_DELETION_REPLACEMENT_AUDITS,
@@ -65,20 +74,31 @@ const HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE = Object.fre
   ]),
 })
 
+const HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE = Object.freeze({
+  suite: PARSER_DIAGNOSTICS_GUARD_SUITE,
+  helper: PARSER_DIAGNOSTICS_GUARD_HELPER,
+  sourceFiles: Object.freeze([...PARSER_DIAGNOSTICS_SOURCE_FILES]),
+  supportingFixtures: Object.freeze([...PARSER_DIAGNOSTICS_SUPPORTING_FIXTURES]),
+  supportingSuites: Object.freeze([...PARSER_DIAGNOSTICS_SUPPORTING_SUITES]),
+  behaviorEvidence: Object.freeze([
+    'canonical tmux snapshot fixture parity through the current parser entrypoint and default Go adapter',
+    'complete helper failure taxonomy mapped to compact diagnostics and safe readiness formatting',
+    'parser-unavailable fail-closed ok:false unknown/stale snapshots with no false successful empty pane list',
+  ]),
+})
+
 const RESIDUAL_REMAP_DETAILS = Object.freeze({
   'tests/suites/go-kernel-v0419-tmux-readiness-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'parser parity fixture and parser parity suite existence remain historical behavior evidence, not package/release governance',
-      'detailed helper failure taxonomy and no-leak wording still exceed compact manifest themes',
-    ]),
-    residualRisks: Object.freeze(['Deleting now would drop parser-parity evidence links and detailed failure/no-leak taxonomy checks.']),
+    currentStatus: 'step5c-ready',
+    parserDiagnosticsAssertionCategories: Object.freeze([...PARSER_DIAGNOSTICS_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0419-readiness-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'checkpoint-specific prerequisite artifact links and parser parity evidence remain broader than package/release governance',
-      'runtime prerequisite STOP recommendation wording remains unevaluated by the consolidated guard',
-    ]),
-    residualRisks: Object.freeze(['Deleting now would remove detailed runtime-prerequisite signoff and parser-parity continuity checks.']),
+    currentStatus: 'step5c-ready',
+    parserDiagnosticsAssertionCategories: Object.freeze([...PARSER_DIAGNOSTICS_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0421-runtime-availability-checkpoint-docs.cjs': {
     residualUniqueAssertions: Object.freeze([
@@ -95,12 +115,10 @@ const RESIDUAL_REMAP_DETAILS = Object.freeze({
     residualRisks: Object.freeze(['Deleting now would remove explicit preview semantic coverage and v0.4.22 evidence cross-link checks.']),
   },
   'tests/suites/go-kernel-v0423-compact-diagnostics-checkpoint-docs.cjs': {
-    residualUniqueAssertions: Object.freeze([
-      'compact diagnostics helper/source references remain source-seam evidence',
-      'kernel adapter explicit local preview behavior remains runtime metadata coverage',
-      'diagnostics model and parser failure policy suite links remain behavior evidence',
-    ]),
-    residualRisks: Object.freeze(['Split compact diagnostics source/runtime and behavior-suite evidence before deleting.']),
+    currentStatus: 'step5c-ready',
+    parserDiagnosticsAssertionCategories: Object.freeze([...PARSER_DIAGNOSTICS_CATEGORIES]),
+    residualUniqueAssertions: Object.freeze([]),
+    residualRisks: Object.freeze([]),
   },
   'tests/suites/go-kernel-v0424-readiness-command-contract-docs.cjs': {
     currentStatus: 'step5c-ready',
@@ -303,6 +321,13 @@ function priorEntryForSuite(suite) {
   return entry
 }
 
+function describeStep5CCurrentGuards(readinessCategories, parserDiagnosticsCategories) {
+  const guards = []
+  if (readinessCategories.length > 0) guards.push('the current readiness command surface guard')
+  if (parserDiagnosticsCategories.length > 0) guards.push('the current parser parity/compact diagnostics guard')
+  return guards.join(' and ')
+}
+
 function remapEntryForSuite(suite) {
   const prior = priorEntryForSuite(suite)
   const residual = RESIDUAL_REMAP_DETAILS[suite]
@@ -311,6 +336,8 @@ function remapEntryForSuite(suite) {
   const step5BDeletionCandidate = currentStatus === 'step5b-ready'
   const step5CDeletionCandidate = currentStatus === 'step5c-ready'
   const readinessCommandSurfaceAssertionCategories = residual.readinessCommandSurfaceAssertionCategories || []
+  const parserDiagnosticsAssertionCategories = residual.parserDiagnosticsAssertionCategories || []
+  const step5CCurrentGuardDescription = describeStep5CCurrentGuards(readinessCommandSurfaceAssertionCategories, parserDiagnosticsAssertionCategories)
   return Object.freeze({
     suite,
     priorDeleteReadiness: prior.deleteReadiness,
@@ -325,6 +352,10 @@ function remapEntryForSuite(suite) {
     readinessCommandSurfaceGuardEvidence: readinessCommandSurfaceAssertionCategories.length > 0
       ? HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE
       : null,
+    parserDiagnosticsAssertionCategories: Object.freeze([...parserDiagnosticsAssertionCategories]),
+    parserDiagnosticsGuardEvidence: parserDiagnosticsAssertionCategories.length > 0
+      ? HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE
+      : null,
     residualUniqueAssertions: residual.residualUniqueAssertions,
     residualRisks: residual.residualRisks,
     step5BDeletionCandidate,
@@ -332,8 +363,8 @@ function remapEntryForSuite(suite) {
     rationale: step5BDeletionCandidate
       ? 'Existing historical audits/parity plus the consolidated package/release governance guard cover this suite; no residual unique assertions remain.'
       : step5CDeletionCandidate
-        ? 'Existing historical audits/parity, the consolidated package/release governance guard, and the current readiness command surface guard cover this suite; no residual unique assertions remain.'
-        : 'The consolidated package/release governance guard and any migrated readiness command surface coverage cover shared mechanics, but residual source/runtime/script/workflow/fixture/path-safety/behavior assertions still require migration or explicit acceptance before deletion.',
+        ? `Existing historical audits/parity, the consolidated package/release governance guard, and ${step5CCurrentGuardDescription} cover this suite; no residual unique assertions remain.`
+        : 'The consolidated package/release governance guard and any migrated current guard coverage cover shared mechanics, but residual source/runtime/script/workflow/fixture/path-safety/behavior assertions still require migration or explicit acceptance before deletion.',
   })
 }
 
@@ -378,6 +409,7 @@ module.exports = {
   CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_CATEGORY_DESCRIPTIONS,
   HISTORICAL_CHECKPOINT_STEP5A_CONSOLIDATED_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE,
+  HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS,
@@ -387,6 +419,8 @@ module.exports = {
   HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES,
   HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES,
+  PARSER_DIAGNOSTICS_CATEGORIES,
+  PARSER_DIAGNOSTICS_CATEGORY_DESCRIPTIONS,
   READINESS_COMMAND_SURFACE_CATEGORIES,
   READINESS_COMMAND_SURFACE_CATEGORY_DESCRIPTIONS,
   RESIDUAL_REMAP_DETAILS,

@@ -18,6 +18,12 @@ const {
   READINESS_COMMAND_SURFACE_GUARD_SUITE,
   assertReadinessCommandSurface,
 } = require('../helpers/readinessCommandSurfaceGuards.cjs')
+const {
+  PARSER_DIAGNOSTICS_CATEGORIES: HELPER_PARSER_DIAGNOSTICS_CATEGORIES,
+  PARSER_DIAGNOSTICS_GUARD_HELPER,
+  PARSER_DIAGNOSTICS_GUARD_SUITE,
+  assertParserDiagnosticsGuard,
+} = require('../helpers/parserDiagnosticsGuards.cjs')
 const { assertPackageVersion } = require('../helpers/packageGuards.cjs')
 const {
   HISTORICAL_CHECKPOINT_DOCS_V0419_V0427,
@@ -39,6 +45,7 @@ const {
   CONSOLIDATED_PACKAGE_RELEASE_GOVERNANCE_CATEGORY_DESCRIPTIONS,
   HISTORICAL_CHECKPOINT_STEP5A_CONSOLIDATED_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE,
+  HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_AUDIT,
   HISTORICAL_CHECKPOINT_STEP5A_REMAP_COUNTS,
@@ -48,6 +55,8 @@ const {
   HISTORICAL_CHECKPOINT_STEP5A_STILL_NEEDS_SPLIT_SUITES,
   HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES,
   HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES,
+  PARSER_DIAGNOSTICS_CATEGORIES,
+  PARSER_DIAGNOSTICS_CATEGORY_DESCRIPTIONS,
   READINESS_COMMAND_SURFACE_CATEGORIES,
   READINESS_COMMAND_SURFACE_CATEGORY_DESCRIPTIONS,
   RESIDUAL_REMAP_DETAILS,
@@ -55,14 +64,23 @@ const {
 
 const EXPECTED_REMAINING_TOTAL = 32
 const EXPECTED_STEP5B_READY = 0
-const EXPECTED_STEP5C_READY = 4
-const EXPECTED_STILL_NEEDS_SPLIT = 27
+const EXPECTED_STEP5C_READY = 7
+const EXPECTED_STILL_NEEDS_SPLIT = 24
 const EXPECTED_STILL_KEEP = 1
-const EXPECTED_STEP5C_DELETION_CANDIDATES = Object.freeze([
+const EXPECTED_STEP5C_PARSER_DIAGNOSTICS_CANDIDATES = Object.freeze([
+  'tests/suites/go-kernel-v0419-tmux-readiness-docs.cjs',
+  'tests/suites/go-kernel-v0419-readiness-checkpoint-docs.cjs',
+  'tests/suites/go-kernel-v0423-compact-diagnostics-checkpoint-docs.cjs',
+])
+const EXPECTED_STEP5C_READINESS_CANDIDATES = Object.freeze([
   'tests/suites/go-kernel-v0424-readiness-command-contract-docs.cjs',
   'tests/suites/go-kernel-v0424-readiness-command-seam-docs.cjs',
   'tests/suites/go-kernel-v0424-readiness-command-sunset-docs.cjs',
   'tests/suites/go-kernel-v0424-readiness-command-checkpoint-docs.cjs',
+])
+const EXPECTED_STEP5C_DELETION_CANDIDATES = Object.freeze([
+  ...EXPECTED_STEP5C_PARSER_DIAGNOSTICS_CANDIDATES,
+  ...EXPECTED_STEP5C_READINESS_CANDIDATES,
 ])
 
 const SCRIPT_FILES_THAT_MUST_REMAIN = Object.freeze([
@@ -98,6 +116,8 @@ const SOURCE_AND_RUNTIME_FILES_THAT_MUST_REMAIN = Object.freeze([
   'index.ts',
   'deliveryPolicy.ts',
   'core/kernel.ts',
+  'tmux/snapshot.ts',
+  'adapters/tmux/teamPanes.ts',
   'commands/readiness.ts',
   'commands/team.ts',
   'api/tools.ts',
@@ -119,14 +139,17 @@ const FIXTURE_AND_HELPER_FILES_THAT_MUST_REMAIN = Object.freeze([
   'tests/fixtures/kernel/historicalCheckpoints.cjs',
   'tests/fixtures/kernel/historicalCheckpointDeletionMap.cjs',
   'tests/fixtures/kernel/historicalCheckpointStep5Remap.cjs',
+  'tests/fixtures/kernel/tmux/snapshotCases.cjs',
   'tests/fixtures/kernel/v0636/defaultGoReadinessLedger.cjs',
   'tests/helpers/fsAssertions.cjs',
   'tests/helpers/goKernelGuards.cjs',
   'tests/helpers/nativeGuards.cjs',
   'tests/helpers/packageGuards.cjs',
   'tests/helpers/packageReleaseGovernanceGuards.cjs',
+  'tests/helpers/parserDiagnosticsGuards.cjs',
   'tests/helpers/readinessCommandSurfaceGuards.cjs',
   'tests/helpers/reviewArtifactWorkflowGuard.cjs',
+  'tests/suites/go-kernel-parser-diagnostics-guard.cjs',
   'tests/suites/readiness-command-surface-guard.cjs',
 ])
 
@@ -195,6 +218,28 @@ async function assertReadinessGuard(root, env) {
   assert.ok(HISTORICAL_CHECKPOINT_STEP5B_READINESS_SURFACE_GUARD_EVIDENCE.behaviorEvidence.length >= 3, 'readiness guard evidence should include behavioral checks')
 }
 
+async function assertParserDiagnosticsGuardCoverage(root, env) {
+  const result = await assertParserDiagnosticsGuard(root, env)
+  assertSameSet(result.checkedCategories, HELPER_PARSER_DIAGNOSTICS_CATEGORIES, 'helper checked parser diagnostics categories')
+  assertSameSet(PARSER_DIAGNOSTICS_CATEGORIES, HELPER_PARSER_DIAGNOSTICS_CATEGORIES, 'remap fixture parser diagnostics categories')
+  assert.equal(Object.keys(PARSER_DIAGNOSTICS_CATEGORY_DESCRIPTIONS).length, HELPER_PARSER_DIAGNOSTICS_CATEGORIES.length, 'each parser diagnostics category should have a description')
+  for (const category of HELPER_PARSER_DIAGNOSTICS_CATEGORIES) {
+    assert.ok(PARSER_DIAGNOSTICS_CATEGORY_DESCRIPTIONS[category], `${category} should have a description`)
+  }
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE.suite, PARSER_DIAGNOSTICS_GUARD_SUITE, 'parser diagnostics evidence should point at current guard suite')
+  assert.equal(HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE.helper, PARSER_DIAGNOSTICS_GUARD_HELPER, 'parser diagnostics evidence should point at current guard helper')
+  for (const rel of [
+    HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE.suite,
+    HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE.helper,
+    ...HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE.sourceFiles,
+    ...HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE.supportingFixtures,
+    ...HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE.supportingSuites,
+  ]) {
+    assert.equal(existsRel(root, rel), true, `${rel} should exist as parser diagnostics guard evidence`)
+  }
+  assert.ok(HISTORICAL_CHECKPOINT_STEP5C_PARSER_DIAGNOSTICS_GUARD_EVIDENCE.behaviorEvidence.length >= 3, 'parser diagnostics guard evidence should include behavioral checks')
+}
+
 function assertRemapCompleteness() {
   const remaining = remainingCandidateSuites()
   const remappedSuites = HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite)
@@ -234,16 +279,37 @@ function assertRemapCompleteness() {
       assert.deepEqual(entry.residualUniqueAssertions, [], `${entry.suite} Step 5B candidate should have no residual assertions`)
       assert.deepEqual(entry.residualRisks, [], `${entry.suite} Step 5B candidate should have no residual risks`)
     } else if (entry.step5CDeletionCandidate) {
+      const readinessCandidate = EXPECTED_STEP5C_READINESS_CANDIDATES.includes(entry.suite)
+      const parserDiagnosticsCandidate = EXPECTED_STEP5C_PARSER_DIAGNOSTICS_CANDIDATES.includes(entry.suite)
       assert.equal(entry.currentStatus, 'step5c-ready', `${entry.suite} Step 5C candidate should have step5c-ready status`)
+      assert.equal(readinessCandidate || parserDiagnosticsCandidate, true, `${entry.suite} Step 5C candidate should be backed by a known migrated current guard`)
       assert.deepEqual(entry.residualUniqueAssertions, [], `${entry.suite} Step 5C candidate should have no residual assertions`)
       assert.deepEqual(entry.residualRisks, [], `${entry.suite} Step 5C candidate should have no residual risks`)
-      assertSameSet(entry.readinessCommandSurfaceAssertionCategories, HELPER_READINESS_CATEGORIES, `${entry.suite} Step 5C readiness coverage categories`)
-      assert.equal(entry.readinessCommandSurfaceGuardEvidence.suite, READINESS_COMMAND_SURFACE_GUARD_SUITE, `${entry.suite} Step 5C readiness guard suite evidence`)
-      assert.equal(entry.readinessCommandSurfaceGuardEvidence.helper, READINESS_COMMAND_SURFACE_GUARD_HELPER, `${entry.suite} Step 5C readiness guard helper evidence`)
-      assert.ok(entry.rationale.includes('current readiness command surface guard'), `${entry.suite} Step 5C rationale should cite the current readiness guard`)
+      if (readinessCandidate) {
+        assertSameSet(entry.readinessCommandSurfaceAssertionCategories, HELPER_READINESS_CATEGORIES, `${entry.suite} Step 5C readiness coverage categories`)
+        assert.equal(entry.readinessCommandSurfaceGuardEvidence.suite, READINESS_COMMAND_SURFACE_GUARD_SUITE, `${entry.suite} Step 5C readiness guard suite evidence`)
+        assert.equal(entry.readinessCommandSurfaceGuardEvidence.helper, READINESS_COMMAND_SURFACE_GUARD_HELPER, `${entry.suite} Step 5C readiness guard helper evidence`)
+        assert.ok(entry.rationale.includes('current readiness command surface guard'), `${entry.suite} Step 5C rationale should cite the current readiness guard`)
+      } else {
+        assert.deepEqual(entry.readinessCommandSurfaceAssertionCategories, [], `${entry.suite} non-readiness Step 5C candidate should not claim readiness categories`)
+        assert.equal(entry.readinessCommandSurfaceGuardEvidence, null, `${entry.suite} non-readiness Step 5C candidate should not claim readiness guard evidence`)
+      }
+      if (parserDiagnosticsCandidate) {
+        assertSameSet(entry.parserDiagnosticsAssertionCategories, HELPER_PARSER_DIAGNOSTICS_CATEGORIES, `${entry.suite} Step 5C parser diagnostics coverage categories`)
+        assert.equal(entry.parserDiagnosticsGuardEvidence.suite, PARSER_DIAGNOSTICS_GUARD_SUITE, `${entry.suite} Step 5C parser diagnostics guard suite evidence`)
+        assert.equal(entry.parserDiagnosticsGuardEvidence.helper, PARSER_DIAGNOSTICS_GUARD_HELPER, `${entry.suite} Step 5C parser diagnostics guard helper evidence`)
+        assert.ok(entry.rationale.includes('current parser parity/compact diagnostics guard'), `${entry.suite} Step 5C rationale should cite the current parser diagnostics guard`)
+      } else {
+        assert.deepEqual(entry.parserDiagnosticsAssertionCategories, [], `${entry.suite} non-parser Step 5C candidate should not claim parser diagnostics categories`)
+        assert.equal(entry.parserDiagnosticsGuardEvidence, null, `${entry.suite} non-parser Step 5C candidate should not claim parser diagnostics guard evidence`)
+      }
     } else {
       assert.notEqual(entry.currentStatus, 'step5b-ready', `${entry.suite} non-ready entry must not use step5b-ready status`)
       assert.notEqual(entry.currentStatus, 'step5c-ready', `${entry.suite} non-ready entry must not use step5c-ready status`)
+      assert.deepEqual(entry.readinessCommandSurfaceAssertionCategories, [], `${entry.suite} non-ready entry must not claim readiness categories`)
+      assert.equal(entry.readinessCommandSurfaceGuardEvidence, null, `${entry.suite} non-ready entry must not claim readiness evidence`)
+      assert.deepEqual(entry.parserDiagnosticsAssertionCategories, [], `${entry.suite} non-ready entry must not claim parser diagnostics categories`)
+      assert.equal(entry.parserDiagnosticsGuardEvidence, null, `${entry.suite} non-ready entry must not claim parser diagnostics evidence`)
       assert.ok(entry.residualUniqueAssertions.length >= 1, `${entry.suite} non-ready entry should keep residual assertions`)
       assert.ok(entry.residualRisks.length >= 1, `${entry.suite} non-ready entry should keep residual risks`)
     }
@@ -251,9 +317,9 @@ function assertRemapCompleteness() {
     if (HISTORICAL_CHECKPOINT_KEEP_SUITES.includes(entry.suite)) {
       assert.equal(entry.currentStatus, 'step5a-keep', `${entry.suite} keep suite should remain keep after Step 5A/5B`)
     } else if (HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES.includes(entry.suite)) {
-      assert.equal(entry.currentStatus, 'step5c-ready', `${entry.suite} should be Step 5C ready after readiness surface migration`)
+      assert.equal(entry.currentStatus, 'step5c-ready', `${entry.suite} should be Step 5C ready after current guard migration`)
     } else {
-      assert.equal(entry.currentStatus, 'step5a-needs-split', `${entry.suite} should remain needs-split after Step 5B readiness migration`)
+      assert.equal(entry.currentStatus, 'step5a-needs-split', `${entry.suite} should remain needs-split after Step 5B current guard migration`)
     }
   }
 }
@@ -324,6 +390,7 @@ module.exports = {
 
     assertConsolidatedGuard(root)
     await assertReadinessGuard(root, env)
+    await assertParserDiagnosticsGuardCoverage(root, env)
     assertRemapCompleteness()
     assertNoDeletionOrReintroduction(root)
     assertNonCandidatesRemainNonCandidates(root)
