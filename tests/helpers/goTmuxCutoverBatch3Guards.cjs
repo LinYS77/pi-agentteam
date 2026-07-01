@@ -48,7 +48,7 @@ const GO_TMUX_CUTOVER_BATCH3_CATEGORY_DESCRIPTIONS = Object.freeze({
   'mutation-facade-authority-exact': 'Current mutating window/label/pane/session facades keep TypeScript authority, exact helper operations, compact fail-closed public behavior, and no wake/send-keys expansion.',
   'go-helper-operation-surface-exact': 'The Go helper exposes only the approved workerLifecycle/tmuxAvailability operation surface and exact tmux argv snippets for Step 6 batch-3 cutovers.',
   'package-native-release-boundaries-preserved': 'Package/native/release boundaries remain unchanged: package version 0.6.8, approved embedded helper path, no package/release/signing mechanics.',
-  'historical-suite-retention-honest': 'Step 6 deletion accounting is honest: low-risk replaced read-only facade suites are expected absent, retained v0.6.53-v0.6.88 suites stay present, and prior historical deletions remain absent.',
+  'historical-suite-retention-honest': 'Step 6 deletion accounting is honest: replaced read-only facade/orchestration suites are expected absent, retained v0.6.53-v0.6.88 suites stay present, and prior historical deletions remain absent.',
 })
 
 const GO_TMUX_CUTOVER_BATCH3_SOURCE_FILES = Object.freeze([
@@ -59,7 +59,11 @@ const GO_TMUX_CUTOVER_BATCH3_SOURCE_FILES = Object.freeze([
   'tmux/labels.ts',
   'tmux/panes.ts',
   'core/kernel.ts',
+  'core/kernelContract.ts',
   'kernel/go/agentteam-kernel/main.go',
+  'scripts/lib/go-helper-artifact-builder.cjs',
+  'scripts/lib/go-helper-artifact-verifier.cjs',
+  'tests/fixtures/kernel/jsonrpc/protocolCases.cjs',
   'package.json',
   'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/manifest.json',
   'native/tmuxSnapshotParse/0.3.0-read-model-shadow/linux-x64-glibc/SHA256SUMS',
@@ -79,6 +83,23 @@ const EXPECTED_STEP6_BATCH1_DELETED_SUITES = Object.freeze([
   'tests/suites/go-kernel-v0657-go-pane-exists-facade-cutover.cjs',
   'tests/suites/go-kernel-v0658-go-resolve-pane-binding-facade-cutover.cjs',
   'tests/suites/go-kernel-v0659-go-target-for-pane-facade-cutover.cjs',
+])
+
+const EXPECTED_STEP6_BATCH2_DELETED_SUITES = Object.freeze([
+  'tests/suites/go-kernel-v0662-go-window-pane-lookup-facade-cutover.cjs',
+  'tests/suites/go-kernel-v0663-go-tmux-availability-facade-cutover.cjs',
+  'tests/suites/go-kernel-v0664-go-pane-app-start-wait-cutover.cjs',
+  'tests/suites/go-kernel-v0665-go-agentteam-window-discovery-cutover.cjs',
+  'tests/suites/go-kernel-v0666-go-session-existence-cutover.cjs',
+  'tests/suites/go-kernel-v0667-go-current-binding-window-fallback-cutover.cjs',
+  'tests/suites/go-kernel-v0668-go-detached-leader-binding-cutover.cjs',
+  'tests/suites/go-kernel-v0669-go-detached-first-pane-cutover.cjs',
+  'tests/suites/go-kernel-v0670-go-window-name-lookup-cutover.cjs',
+])
+
+const EXPECTED_STEP6_DELETED_SUITES = Object.freeze([
+  ...EXPECTED_STEP6_BATCH1_DELETED_SUITES,
+  ...EXPECTED_STEP6_BATCH2_DELETED_SUITES,
 ])
 
 const EXPECTED_WORKER_LIFECYCLE_OPERATIONS = Object.freeze([
@@ -188,13 +209,39 @@ function writeReadOnlyFacadeFakeTmux(binDir) {
   fs.writeFileSync(tmuxPath, [
     '#!/usr/bin/env node',
     "const args = process.argv.slice(2)",
-    "if (args[0] !== 'list-panes') process.exit(2)",
     "const format = args[args.length - 1] || ''",
-    "if (format.includes('#{@agentteam-name}')) {",
-    "  process.stdout.write('%agentteam\\tsession:@1\\tleader\\tpi\\n%unlabeled\\tsession:@9\\t\\tbash\\n%worker\\tsession:@2\\tworker-a\\tnode\\n')",
-    "} else {",
-    "  process.stdout.write('%agentteam\\tsession:@1\\tpi\\t0\\tdefault\\n%unlabeled\\tsession:@9\\tbash\\t0\\tdefault\\n%worker\\tsession:@2\\tnode\\t1\\tcopy-mode\\n')",
-    "}",
+    "if (args.length === 1 && args[0] === '-V') {",
+    "  process.stdout.write('tmux 3.4\\n')",
+    "} else if (args[0] === 'list-panes' && args[1] === '-t') {",
+    "  const target = args[2] || ''",
+    "  if (format !== '#{pane_id}') process.exit(4)",
+    "  if (target === 'team:@1') process.stdout.write('%first\\n%second\\n')",
+    "  else if (target === 'empty:@1') process.stdout.write('')",
+    "  else process.exit(5)",
+    "} else if (args[0] === 'list-panes' && args[1] === '-a') {",
+    "  if (format.includes('#{@agentteam-name}')) {",
+    "    process.stdout.write('%agentteam\\tsession:@1\\tleader\\tpi\\n%unlabeled\\tsession:@9\\t\\tbash\\n%worker\\tsession:@2\\tworker-a\\tnode\\n')",
+    "  } else {",
+    "    process.stdout.write('%agentteam\\tsession:@1\\tpi\\t0\\tdefault\\n%unlabeled\\tsession:@9\\tbash\\t0\\tdefault\\n%worker\\tsession:@2\\tnode\\t1\\tcopy-mode\\n')",
+    "  }",
+    "} else if (args[0] === 'list-windows' && args[1] === '-t') {",
+    "  const session = args[2] || ''",
+    "  if (format === '#{window_id}\\t#{@agentteam-window}') {",
+    "    if (session === 'team') process.stdout.write('@1\\t0\\n@7\\t1\\n')",
+    "    else if (session === 'unmarked') process.stdout.write('@1\\t0\\n')",
+    "    else process.exit(5)",
+    "  } else if (format === '#{window_id}\\t#{window_name}') {",
+    "    if (session === 'team') process.stdout.write('@5\\tother\\n@7\\tagentteam\\n')",
+    "    else if (session === 'empty') process.stdout.write('@5\\tother\\n')",
+    "    else process.exit(5)",
+    "  } else process.exit(4)",
+    "} else if (args[0] === 'has-session' && args[1] === '-t') {",
+    "  if (args[2] === 'team') process.exit(0)",
+    "  if (args[2] === 'missing') process.exit(1)",
+    "  process.exit(3)",
+    "} else if (args[0] === 'display-message' && args[1] === '-p') {",
+    "  process.stdout.write('%current\\tsession:@current\\n')",
+    "} else process.exit(2)",
   ].join('\n') + '\n', 'utf8')
   fs.chmodSync(tmuxPath, 0o755)
   return tmuxPath
@@ -218,8 +265,8 @@ function assertStep6Batch3AuditMap(root) {
   assert.deepEqual(STEP6_BATCH3_ACTIONS, ['keep-unique', 'split-later', 'delete-replaced'])
   assert.equal(STEP6_BATCH3_AUDIT_ENTRIES.length, 36, 'Step 6 audit map should cover v0.6.53-v0.6.88')
   assert.deepEqual(STEP6_BATCH3_CLUSTER_COUNTS, EXPECTED_CLUSTER_COUNTS, 'Step 6 cluster counts should be explicit')
-  assert.deepEqual(STEP6_BATCH3_DELETION_CANDIDATE_SUITES, [...EXPECTED_STEP6_BATCH1_DELETED_SUITES], 'Step 6 batch 1 should mark exactly the low-risk read-only facade replacements')
-  assert.equal(STEP6_BATCH3_RETAINED_SUITES.length, STEP6_BATCH3_AUDIT_ENTRIES.length - EXPECTED_STEP6_BATCH1_DELETED_SUITES.length, 'retained suite list should exclude Step 6 batch 1 deleted suites')
+  assert.deepEqual(STEP6_BATCH3_DELETION_CANDIDATE_SUITES, [...EXPECTED_STEP6_DELETED_SUITES], 'Step 6 should mark exactly the batch 1/2 replaced read-only facade/orchestration suites')
+  assert.equal(STEP6_BATCH3_RETAINED_SUITES.length, STEP6_BATCH3_AUDIT_ENTRIES.length - EXPECTED_STEP6_DELETED_SUITES.length, 'retained suite list should exclude Step 6 batch 1/2 deleted suites')
   assert.equal(STEP6_BATCH3_SCOPE_DOCS.length, STEP6_BATCH3_AUDIT_ENTRIES.length, 'scope docs should match audit entries')
   assert.equal(STEP6_BATCH3_SCOPE_FIXTURES.length, STEP6_BATCH3_AUDIT_ENTRIES.length, 'scope fixtures should match audit entries')
   assertUnique(STEP6_BATCH3_DELETION_CANDIDATE_SUITES, 'Step 6 deletion candidate suites')
@@ -235,10 +282,10 @@ function assertStep6Batch3AuditMap(root) {
 
   const validClusters = new Set(Object.keys(STEP6_BATCH3_CLUSTERS))
   for (const entry of STEP6_BATCH3_AUDIT_ENTRIES) {
-    const expectedDeleted = EXPECTED_STEP6_BATCH1_DELETED_SUITES.includes(entry.suite)
+    const expectedDeleted = EXPECTED_STEP6_DELETED_SUITES.includes(entry.suite)
     assert.ok(validClusters.has(entry.cluster), `${entry.suite} should use a known cluster`)
-    assert.equal(entry.recommendedAction, expectedDeleted ? 'delete-replaced' : 'keep-unique', `${entry.suite} should have the expected Step 6 batch 1 action`)
-    assert.equal(entry.deletionReady, expectedDeleted, `${entry.suite} deletion readiness should match Step 6 batch 1 scope`)
+    assert.equal(entry.recommendedAction, expectedDeleted ? 'delete-replaced' : 'keep-unique', `${entry.suite} should have the expected Step 6 batch 1/2 action`)
+    assert.equal(entry.deletionReady, expectedDeleted, `${entry.suite} deletion readiness should match Step 6 batch 1/2 scope`)
     assert.ok(entry.duplicateAssertions.length >= 5, `${entry.suite} should document duplicate assertion clusters`)
     assert.ok(entry.uniqueAssertions.length >= 1, `${entry.suite} should document migrated or retained behavior-unique assertions`)
     assert.ok(entry.replacementEvidence.length >= 1, `${entry.suite} should cite current guard evidence for duplicated assertions`)
@@ -246,7 +293,7 @@ function assertStep6Batch3AuditMap(root) {
     assert.equal(entry.replacementEvidence[0].helper, GO_TMUX_CUTOVER_BATCH3_GUARD_HELPER, `${entry.suite} should point to this guard helper`)
     assert.ok(entry.replacementEvidence[0].categories.length >= 1, `${entry.suite} replacement evidence should list categories`)
     assert.equal(entry.replacementEvidence[0].categories.includes('read-only-worker-lifecycle-facades') || !expectedDeleted, true, `${entry.suite} deleted read-only facade should cite read-only current guard coverage`)
-    assert.equal(existsRel(root, entry.suite), !expectedDeleted, `${entry.suite} presence should match Step 6 batch 1 deletion accounting`)
+    assert.equal(existsRel(root, entry.suite), !expectedDeleted, `${entry.suite} presence should match Step 6 batch 1/2 deletion accounting`)
     assert.equal(existsRel(root, entry.doc), true, `${entry.doc} should remain present; Step 6 must not delete docs`)
     assert.equal(existsRel(root, entry.fixture), true, `${entry.fixture} should remain present; Step 6 must not delete fixtures`)
   }
@@ -258,7 +305,11 @@ function assertReadOnlyFacadeSourceBoundaries(root) {
   const processSource = readRel(root, 'tmux/process.ts')
   const windows = readRel(root, 'tmux/windows.ts')
   const kernel = readRel(root, 'core/kernel.ts')
+  const kernelContract = readRel(root, 'core/kernelContract.ts')
   const goSource = readRel(root, 'kernel/go/agentteam-kernel/main.go')
+  const builder = readRel(root, 'scripts/lib/go-helper-artifact-builder.cjs')
+  const verifier = readRel(root, 'scripts/lib/go-helper-artifact-verifier.cjs')
+  const protocolCases = readRel(root, 'tests/fixtures/kernel/jsonrpc/protocolCases.cjs')
 
   assertIncludes(core, "import { createAgentTeamKernelAdapter } from '../core/kernel.js'", 'tmux/core import')
 
@@ -266,6 +317,8 @@ function assertReadOnlyFacadeSourceBoundaries(root) {
   assertIncludes(ensureAvailable, 'createAgentTeamKernelAdapter().checkTmuxAvailableAsync(signal)', 'ensureTmuxAvailable adapter call')
   assertIncludes(ensureAvailable, "throw new Error(`tmux is required for agentteam panes${suffix}`)", 'ensureTmuxAvailable compact throw')
   assertNotIncludes(ensureAvailable, 'runTmux', 'ensureTmuxAvailable direct tmux fallback')
+  assertNotIncludes(ensureAvailable, 'result.stderr', 'ensureTmuxAvailable must not leak raw stderr')
+  assertNotIncludes(core, "import { runTmuxNoThrowAsync }", 'tmux/core should not import direct tmux client for read-only facades')
 
   const inspect = functionBody(core, 'inspectPane')
   assertIncludes(inspect, 'createAgentTeamKernelAdapter().inspectWorkerPane(paneId)', 'inspectPane adapter call')
@@ -295,13 +348,19 @@ function assertReadOnlyFacadeSourceBoundaries(root) {
   assertIncludes(resolveBindingAsync, 'if (!result.ok || !result.target) return null', 'resolvePaneBindingAsync fail closed')
 
   const windowExists = functionBody(core, 'windowExists')
+  assertIncludes(windowExists, 'if (!target) return false', 'windowExists empty target fail-closed')
   assertIncludes(windowExists, 'await createAgentTeamKernelAdapter().listPanesInWindowAsync(target, signal)', 'windowExists adapter call')
   assertIncludes(windowExists, 'return result.ok', 'windowExists boolean result')
   assertNotIncludes(windowExists, 'runTmux', 'windowExists direct tmux fallback')
+  assertNotIncludes(windowExists, 'list-panes', 'windowExists direct list-panes fallback')
 
   const firstPaneInWindow = functionBody(core, 'firstPaneInWindow')
+  assertIncludes(firstPaneInWindow, 'if (!target) return null', 'firstPaneInWindow empty target fail-closed')
   assertIncludes(firstPaneInWindow, 'await createAgentTeamKernelAdapter().listPanesInWindowAsync(target, signal)', 'firstPaneInWindow adapter call')
   assertIncludes(firstPaneInWindow, 'if (!result.ok || result.paneIds.length === 0) return null', 'firstPaneInWindow fail closed')
+  assertIncludes(firstPaneInWindow, 'return result.paneIds[0] ?? null', 'firstPaneInWindow first compact pane mapping')
+  assertNotIncludes(firstPaneInWindow, 'runTmux', 'firstPaneInWindow direct tmux fallback')
+  assertNotIncludes(firstPaneInWindow, 'list-panes', 'firstPaneInWindow direct list-panes fallback')
 
   const currentBinding = functionBody(core, 'captureCurrentPaneBinding')
   assertIncludes(currentBinding, 'if (!isInsideTmux()) return null', 'captureCurrentPaneBinding tmux env gate')
@@ -323,47 +382,98 @@ function assertReadOnlyFacadeSourceBoundaries(root) {
   assertNotIncludes(snapshotListPanes, 'createAgentTeamKernelAdapter()', 'listAgentTeamPanesFromSnapshot must stay snapshot-local')
 
   const wait = functionBody(processSource, 'waitForPaneAppStart')
+  assertIncludes(processSource, "import { createAgentTeamKernelAdapter } from '../core/kernel.js'", 'waitForPaneAppStart adapter import')
+  assertNotIncludes(processSource, "import { runTmuxNoThrowAsync } from './client.js'", 'waitForPaneAppStart direct tmux client import')
   assertIncludes(wait, 'const kernel = createAgentTeamKernelAdapter()', 'waitForPaneAppStart adapter capture')
   assertIncludes(wait, 'kernel.inspectWorkerPaneAsync(paneId, signal).catch(() => undefined)', 'waitForPaneAppStart inspect polling')
   assertIncludes(wait, 'SHELL_COMMANDS.has(command)', 'waitForPaneAppStart shell exclusion')
+  assertIncludes(wait, 'Math.min(200, remaining)', 'waitForPaneAppStart 200ms-capped polling cadence')
+  assertIncludes(wait, 'if (!paneId || signal?.aborted) return false', 'waitForPaneAppStart empty/pre-abort fail-closed')
+  assertIncludes(wait, 'if (signal?.aborted) return false', 'waitForPaneAppStart in-flight abort fail-closed')
   assertNotIncludes(wait, 'display-message', 'waitForPaneAppStart direct tmux fallback')
+  assertNotIncludes(wait, '#{pane_current_command}', 'waitForPaneAppStart raw tmux stdout parsing')
+  assertNotIncludes(wait, 'throw new Error', 'waitForPaneAppStart public no-throw behavior')
 
   const findAgentWindow = functionBody(windows, 'findAgentTeamWindowTarget')
   assertIncludes(findAgentWindow, 'createAgentTeamKernelAdapter().findAgentTeamWindowTargetAsync(sessionName, signal)', 'findAgentTeamWindowTarget adapter call')
   assertIncludes(findAgentWindow, 'if (!sessionName || signal?.aborted) return null', 'findAgentTeamWindowTarget fail closed')
+  assertIncludes(findAgentWindow, 'if (!result.ok || !result.target) return null', 'findAgentTeamWindowTarget helper failure fail closed')
   assertNotIncludes(findAgentWindow, 'runTmux', 'findAgentTeamWindowTarget direct tmux fallback')
+  assertNotIncludes(findAgentWindow, 'stdout', 'findAgentTeamWindowTarget must not parse tmux stdout')
+  assertNotIncludes(findAgentWindow, '@agentteam-window', 'findAgentTeamWindowTarget marker parsing stays in Go')
+  assertNotIncludes(findAgentWindow, 'throw new Error', 'findAgentTeamWindowTarget public no-throw behavior')
 
   const findByName = functionBody(windows, 'findWindowTargetByName')
   assertIncludes(findByName, 'createAgentTeamKernelAdapter().findWindowTargetByNameAsync(sessionName, windowName, signal)', 'findWindowTargetByName adapter call')
   assertIncludes(findByName, 'if (!sessionName || !windowName || signal?.aborted) return null', 'findWindowTargetByName fail closed')
+  assertIncludes(findByName, 'if (!result.ok || !result.target) return null', 'findWindowTargetByName helper failure fail closed')
   assertNotIncludes(findByName, 'runTmux', 'findWindowTargetByName direct tmux fallback')
+  assertNotIncludes(findByName, 'stdout', 'findWindowTargetByName must not parse tmux stdout')
 
   const ensureWindow = functionBody(windows, 'ensureSwarmWindow')
   for (const expected of [
     'await ensureTmuxAvailable(signal)',
-    'await resolvePaneBindingAsync(preferred.leaderPaneId, signal)',
-    'await windowExists(preferred.target, signal)',
+    'const preferredBinding = preferred?.leaderPaneId ? await resolvePaneBindingAsync(preferred.leaderPaneId, signal) : null',
+    'preferred?.target && await windowExists(preferred.target, signal) ? preferred.target : null',
     'currentBinding ??= captureCurrentPaneBinding()',
-    'await firstPaneInWindow(target, signal)',
+    'const target = preferredTarget ?? getCurrentBinding()?.target',
+    'await firstPaneInWindow(target, signal) ?? getCurrentBinding()?.paneId',
+    "throw new Error('Failed to resolve current tmux pane binding')",
+    'const sessionResult = await createAgentTeamKernelAdapter().sessionExistsAsync(SWARM_SESSION, signal)',
+    'const hasSession = sessionResult.ok && sessionResult.exists',
+    'createAgentTeamKernelAdapter().createDetachedSwarmSessionAsync(SWARM_SESSION, SWARM_WINDOW, signal)',
+    'let initialTarget = await findAgentTeamWindowTarget(SWARM_SESSION, signal)',
+    'createAgentTeamKernelAdapter().createDetachedSwarmWindowAsync(SWARM_SESSION, SWARM_WINDOW, signal)',
+    'initialTarget = await findWindowTargetByName(SWARM_SESSION, SWARM_WINDOW, signal)',
+    "throw new Error('Failed to locate agentteam tmux window after creation')",
+    'const leaderPaneId = await firstPaneInWindow(initialTarget, signal)',
+    "throw new Error('Failed to resolve agentteam leader pane')",
+    'const binding = await resolvePaneBindingAsync(leaderPaneId, signal)',
+    'const target = binding?.target',
+    "throw new Error('Failed to resolve agentteam leader pane binding')",
     'await markWindowAsAgentTeam(target, signal)',
     'await refreshWindowPaneLabels(target, signal)',
-    'createAgentTeamKernelAdapter().sessionExistsAsync(SWARM_SESSION, signal)',
-    'createAgentTeamKernelAdapter().createDetachedSwarmSessionAsync(SWARM_SESSION, SWARM_WINDOW, signal)',
-    'createAgentTeamKernelAdapter().createDetachedSwarmWindowAsync(SWARM_SESSION, SWARM_WINDOW, signal)',
-    'await findWindowTargetByName(SWARM_SESSION, SWARM_WINDOW, signal)',
   ]) assertIncludes(ensureWindow, expected, 'ensureSwarmWindow Step 6 source boundary')
-  assertNotIncludes(ensureWindow, 'runTmux', 'ensureSwarmWindow direct tmux fallback')
+  assert.ok(ensureWindow.indexOf('createAgentTeamKernelAdapter().createDetachedSwarmWindowAsync(SWARM_SESSION, SWARM_WINDOW, signal)') < ensureWindow.indexOf('await findWindowTargetByName(SWARM_SESSION, SWARM_WINDOW, signal)'), 'ensureSwarmWindow should run new-window before post-creation window-name lookup')
+  for (const forbidden of [
+    "runTmuxAsync(['display-message', '-p', '#{session_name}:#{window_id}']",
+    "runTmuxAsync(['display-message', '-p', '#{pane_id}']",
+    "runTmuxAsync(['display-message', '-p', '-t', leaderPaneId, '#{window_id}']",
+    "runTmuxAsync(['list-panes', '-t', initialTarget, '-F', '#{pane_id}']",
+    "runTmuxAsync(['list-windows', '-t', SWARM_SESSION, '-F', '#{window_id}\\t#{window_name}']",
+    "runTmuxNoThrowAsync(['has-session'",
+  ]) assertNotIncludes(ensureWindow, forbidden, 'ensureSwarmWindow removed direct read-only tmux fallback')
+  assertNotIncludes(ensureWindow, 'stdout', 'ensureSwarmWindow must not parse direct tmux stdout')
   assertNotIncludes(ensureWindow, 'send-keys', 'ensureSwarmWindow must not send keys')
 
   for (const expected of [
+    'export type AgentTeamKernelWindowPaneList',
+    'export type AgentTeamKernelAgentTeamWindowTarget',
+    'export type AgentTeamKernelWindowNameTarget',
+    'export type AgentTeamKernelSessionExistence',
+    'export type AgentTeamKernelTmuxAvailability',
+    'listPanesInWindowAsync(target: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowPaneList>',
+    'findAgentTeamWindowTargetAsync(sessionName: string, signal?: AbortSignal): Promise<AgentTeamKernelAgentTeamWindowTarget>',
+    'findWindowTargetByNameAsync(sessionName: string, windowName: string, signal?: AbortSignal): Promise<AgentTeamKernelWindowNameTarget>',
+    'sessionExistsAsync(sessionName: string, signal?: AbortSignal): Promise<AgentTeamKernelSessionExistence>',
+    'checkTmuxAvailableAsync(signal?: AbortSignal): Promise<AgentTeamKernelTmuxAvailability>',
+    'function compactTmuxWindowTarget',
+    'function compactTmuxSessionName',
+    'function compactTmuxWindowName',
+    'function validateWindowPaneListResult',
+    'function validateAgentTeamWindowTargetResult',
+    'function validateWindowNameTargetResult',
+    'function validateSessionExistenceResult',
+    'function validateTmuxAvailabilityResult',
     "callHelper<unknown>('workerLifecycle', { operation: 'inspectPane'",
     "callHelper<unknown>('workerLifecycle', { operation: 'listAgentTeamPanes' })",
     "callHelper<unknown>('workerLifecycle', { operation: 'captureCurrentPaneBinding' })",
-    "callHelperAsync<unknown>('workerLifecycle', { operation: 'listPanesInWindow'",
-    "callHelperAsync<unknown>('workerLifecycle', { operation: 'findAgentTeamWindowTarget'",
-    "callHelperAsync<unknown>('workerLifecycle', { operation: 'findWindowTargetByName'",
-    "callHelperAsync<unknown>('workerLifecycle', { operation: 'sessionExists'",
+    "callHelperAsync<unknown>('workerLifecycle', { operation: 'listPanesInWindow', target: requestedTarget }, signal)",
+    "callHelperAsync<unknown>('workerLifecycle', { operation: 'findAgentTeamWindowTarget', sessionName: requestedSessionName }, signal)",
+    "callHelperAsync<unknown>('workerLifecycle', { operation: 'findWindowTargetByName', sessionName: requestedSessionName, windowName: requestedWindowName }, signal)",
+    "callHelperAsync<unknown>('workerLifecycle', { operation: 'sessionExists', sessionName: requestedSessionName }, signal)",
     "callHelperAsync<unknown>('tmuxAvailability', undefined, signal)",
+    "detail: 'aborted'",
   ]) assertIncludes(kernel, expected, 'core/kernel read-only helper calls')
   for (const expected of [
     'target?: string',
@@ -376,6 +486,45 @@ function assertReadOnlyFacadeSourceBoundaries(root) {
   assertIncludes(inspectFormat, '#{pane_current_command}', 'Go inspect format current command')
   assertIncludes(goSource, 'Target            string `json:"target,omitempty"`', 'Go inspect target field')
   assertIncludes(goSource, 'Target:            strings.TrimSpace(fields[1])', 'Go inspect target parse')
+  for (const expected of [
+    'const workerLifecycleWindowPaneFormat = "#{pane_id}"',
+    'const workerLifecycleAgentTeamWindowFormat = "#{window_id}\\t#{@agentteam-window}"',
+    'const workerLifecycleWindowNameFormat = "#{window_id}\\t#{window_name}"',
+    'type tmuxAvailabilityResult struct',
+    'type workerAgentTeamWindowTargetResult struct',
+    'type workerWindowNameTargetResult struct',
+    'type workerSessionExistenceResult struct',
+    'func checkTmuxAvailability() tmuxAvailabilityResult',
+    'func listPanesInWindow(params map[string]any) workerWindowPaneListResult',
+    'func findAgentTeamWindowTarget(params map[string]any) workerAgentTeamWindowTargetResult',
+    'func findWindowTargetByName(params map[string]any) workerWindowNameTargetResult',
+    'func sessionExists(params map[string]any) workerSessionExistenceResult',
+    'exec.CommandContext(ctx, "tmux", "list-panes", "-t", target, "-F", workerLifecycleWindowPaneFormat)',
+    'exec.CommandContext(ctx, "tmux", "list-windows", "-t", sessionName, "-F", workerLifecycleAgentTeamWindowFormat)',
+    'exec.CommandContext(ctx, "tmux", "list-windows", "-t", sessionName, "-F", workerLifecycleWindowNameFormat)',
+    'exec.CommandContext(ctx, "tmux", "has-session", "-t", sessionName)',
+    'exec.CommandContext(ctx, "tmux", "-V")',
+  ]) assertIncludes(goSource, expected, 'Go read-only orchestration operation surface')
+  assertIncludes(kernelContract, "AGENTTEAM_KERNEL_CAPABILITIES = ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability']", 'kernel contract tmuxAvailability capability')
+  for (const expected of [
+    'runWorkerLifecycleFindAgentTeamWindowTargetSmoke',
+    'runWorkerLifecycleFindWindowTargetByNameSmoke',
+    'runWorkerLifecycleSessionExistsSmoke',
+    'workerLifecycleFindAgentTeamWindowTarget',
+    'workerLifecycleFindWindowTargetByName',
+    'workerLifecycleSessionExists',
+  ]) assertIncludes(builder, expected, 'artifact builder read-only orchestration smoke coverage')
+  for (const expected of [
+    'workerLifecycleFindAgentTeamWindowTarget',
+    'workerLifecycleFindWindowTargetByName',
+    'workerLifecycleSessionExists',
+  ]) assertIncludes(verifier, expected, 'artifact verifier read-only orchestration smoke coverage')
+  for (const expected of [
+    "operation: 'findAgentTeamWindowTarget'",
+    "operation: 'findWindowTargetByName'",
+    "operation: 'sessionExists'",
+    "request('tmuxAvailability'",
+  ]) assertIncludes(protocolCases, expected, 'JSON-RPC protocol read-only orchestration cases')
 }
 
 function assertMutationFacadeSourceBoundaries(root) {
@@ -494,6 +643,57 @@ function assertReadOnlyFacadeDirectGoBehavior(root) {
     assert.equal(listResponse.result.ok, true, 'direct Go listAgentTeamPanes should succeed')
     assert.deepEqual(listResponse.result.panes.map(pane => pane.paneId), ['%agentteam', '%worker'], 'direct Go listAgentTeamPanes should keep only labeled agentteam panes')
     assert.equal(Object.prototype.hasOwnProperty.call(listResponse.result.byPaneId, '%unlabeled'), false, 'direct Go listAgentTeamPanes should not use unlabeled panes for arbitrary binding lookup')
+
+    const windowPanes = runGoHelper(root, { jsonrpc: '2.0', id: 'window-panes', method: 'workerLifecycle', params: { operation: 'listPanesInWindow', target: 'team:@1' } }, env)
+    assert.equal(windowPanes.status, 0, windowPanes.stderr)
+    const windowPanesResponse = JSON.parse(windowPanes.stdout.trim())
+    assert.equal(windowPanesResponse.result.ok, true, 'direct Go listPanesInWindow should succeed')
+    assert.equal(windowPanesResponse.result.target, 'team:@1')
+    assert.deepEqual(windowPanesResponse.result.paneIds, ['%first', '%second'])
+    assert.equal(windowPanesResponse.result.readOnly, true)
+    assert.equal(windowPanesResponse.result.tmuxMutation, false)
+
+    const availability = runGoHelper(root, { jsonrpc: '2.0', id: 'tmux-available', method: 'tmuxAvailability' }, env)
+    assert.equal(availability.status, 0, availability.stderr)
+    const availabilityResponse = JSON.parse(availability.stdout.trim())
+    assert.equal(availabilityResponse.result.ok, true, 'direct Go tmuxAvailability should succeed')
+    assert.equal(availabilityResponse.result.available, true)
+    assert.equal(availabilityResponse.result.version, 'tmux 3.4')
+    assert.equal(availabilityResponse.result.readOnly, true)
+    assert.equal(availabilityResponse.result.tmuxMutation, false)
+
+    const windowTarget = runGoHelper(root, { jsonrpc: '2.0', id: 'window-target', method: 'workerLifecycle', params: { operation: 'findAgentTeamWindowTarget', sessionName: 'team' } }, env)
+    assert.equal(windowTarget.status, 0, windowTarget.stderr)
+    const windowTargetResponse = JSON.parse(windowTarget.stdout.trim())
+    assert.equal(windowTargetResponse.result.ok, true, 'direct Go findAgentTeamWindowTarget should find marked window')
+    assert.equal(windowTargetResponse.result.target, 'team:@7')
+    assert.equal(windowTargetResponse.result.windowId, '@7')
+    assert.equal(windowTargetResponse.result.readOnly, true)
+
+    const sessionExists = runGoHelper(root, { jsonrpc: '2.0', id: 'session-exists', method: 'workerLifecycle', params: { operation: 'sessionExists', sessionName: 'team' } }, env)
+    assert.equal(sessionExists.status, 0, sessionExists.stderr)
+    const sessionExistsResponse = JSON.parse(sessionExists.stdout.trim())
+    assert.equal(sessionExistsResponse.result.ok, true, 'direct Go sessionExists should succeed')
+    assert.equal(sessionExistsResponse.result.exists, true)
+    assert.equal(sessionExistsResponse.result.sessionName, 'team')
+
+    const windowName = runGoHelper(root, { jsonrpc: '2.0', id: 'window-name', method: 'workerLifecycle', params: { operation: 'findWindowTargetByName', sessionName: 'team', windowName: 'agentteam' } }, env)
+    assert.equal(windowName.status, 0, windowName.stderr)
+    const windowNameResponse = JSON.parse(windowName.stdout.trim())
+    assert.equal(windowNameResponse.result.ok, true, 'direct Go findWindowTargetByName should find named window')
+    assert.equal(windowNameResponse.result.target, 'team:@7')
+    assert.equal(windowNameResponse.result.windowName, 'agentteam')
+
+    const invalidWindowPanes = runGoHelper(root, { jsonrpc: '2.0', id: 'window-panes-invalid', method: 'workerLifecycle', params: { operation: 'listPanesInWindow', target: 'bad target' } }, env)
+    const invalidWindowPanesResponse = JSON.parse(invalidWindowPanes.stdout.trim())
+    assert.equal(invalidWindowPanesResponse.result.ok, false, 'direct Go listPanesInWindow invalid target should fail closed')
+    assert.equal(invalidWindowPanesResponse.result.failureKind, 'invalid-target')
+
+    const missingSession = runGoHelper(root, { jsonrpc: '2.0', id: 'session-missing', method: 'workerLifecycle', params: { operation: 'sessionExists', sessionName: 'missing' } }, env)
+    const missingSessionResponse = JSON.parse(missingSession.stdout.trim())
+    assert.equal(missingSessionResponse.result.ok, false, 'direct Go sessionExists missing session should fail closed')
+    assert.equal(missingSessionResponse.result.exists, false)
+    assert.equal(/stdout|stderr|stack|MAILBOX_BODY|REPORT_BODY|worker transcript/i.test(JSON.stringify(missingSessionResponse.result)), false, 'direct Go sessionExists failure should stay compact')
   } finally {
     fs.rmSync(fakeTmuxRoot, { recursive: true, force: true })
   }
@@ -525,7 +725,7 @@ function assertPackageNativeBoundaries(root) {
 function assertHistoricalRetention(root) {
   assertEveryRelExists(root, GO_TMUX_CUTOVER_BATCH3_SOURCE_FILES, 'Step 6 batch 3 current guard source files')
   assertEveryRelExists(root, STEP6_BATCH3_RETAINED_SUITES, 'Step 6 retained suites')
-  assertEveryRelAbsent(root, STEP6_BATCH3_DELETION_CANDIDATE_SUITES, 'Step 6 batch 1 deleted read-only facade suites')
+  assertEveryRelAbsent(root, STEP6_BATCH3_DELETION_CANDIDATE_SUITES, 'Step 6 batch 1/2 deleted read-only facade/orchestration suites')
   assertEveryRelExists(root, STEP6_BATCH3_SCOPE_DOCS, 'Step 6 retained docs')
   assertEveryRelExists(root, STEP6_BATCH3_SCOPE_FIXTURES, 'Step 6 batch 3 retained fixtures')
   assertEveryRelAbsent(root, HISTORICAL_CHECKPOINT_T024_DELETED_SUITES, 'T024 historical deletions')
@@ -596,7 +796,318 @@ function assertGoTmuxCutoverBatch3RuntimeSeam(requireDist) {
   }
 }
 
-function assertGoTmuxCutoverBatch3Guard({ repoRoot, requireDist } = {}) {
+function clearDistModules(distRoot, rels) {
+  for (const rel of rels) {
+    const full = path.join(distRoot, rel)
+    delete require.cache[require.resolve(full)]
+  }
+}
+
+async function withPatchedWindowDeps({ distRoot, insideTmux, corePatch = {}, kernelAdapterPatch = {} }, callback) {
+  const corePath = path.join(distRoot, 'tmux/core.js')
+  const kernelPath = path.join(distRoot, 'core/kernel.js')
+  const windowsPath = path.join(distRoot, 'tmux/windows.js')
+  const labelsPath = path.join(distRoot, 'tmux/labels.js')
+  const clientPath = path.join(distRoot, 'tmux/client.js')
+  clearDistModules(distRoot, ['tmux/windows.js'])
+  const core = require(corePath)
+  const kernel = require(kernelPath)
+  const labels = require(labelsPath)
+  const client = require(clientPath)
+  const originals = {
+    TMUX: process.env.TMUX,
+    ensureTmuxAvailable: core.ensureTmuxAvailable,
+    isInsideTmux: core.isInsideTmux,
+    resolvePaneBindingAsync: core.resolvePaneBindingAsync,
+    windowExists: core.windowExists,
+    firstPaneInWindow: core.firstPaneInWindow,
+    captureCurrentPaneBinding: core.captureCurrentPaneBinding,
+    createAgentTeamKernelAdapter: kernel.createAgentTeamKernelAdapter,
+    markWindowAsAgentTeam: labels.markWindowAsAgentTeam,
+    refreshWindowPaneLabels: labels.refreshWindowPaneLabels,
+  }
+  const tmuxCalls = []
+  const markCalls = []
+  const refreshCalls = []
+  const adapterCalls = []
+  Object.assign(core, corePatch)
+  kernel.createAgentTeamKernelAdapter = () => ({
+    sessionExistsAsync: async (sessionName, signal) => {
+      adapterCalls.push({ operation: 'sessionExists', sessionName, signal })
+      return { ok: true, operation: 'sessionExists', capability: 'workerLifecycle', sessionName, exists: true, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }
+    },
+    findAgentTeamWindowTargetAsync: async (sessionName, signal) => {
+      adapterCalls.push({ operation: 'findAgentTeamWindowTarget', sessionName, signal })
+      return { ok: true, operation: 'findAgentTeamWindowTarget', capability: 'workerLifecycle', sessionName, exists: true, target: `${sessionName}:@7`, windowId: '@7', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }
+    },
+    createDetachedSwarmSessionAsync: async (sessionName, windowName, signal) => {
+      adapterCalls.push({ operation: 'createDetachedSwarmSession', sessionName, windowName, signal })
+      return { ok: true, operation: 'createDetachedSwarmSession', capability: 'workerLifecycle', sessionName, windowName, created: true, readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true }
+    },
+    createDetachedSwarmWindowAsync: async (sessionName, windowName, signal) => {
+      adapterCalls.push({ operation: 'createDetachedSwarmWindow', sessionName, windowName, signal })
+      return { ok: true, operation: 'createDetachedSwarmWindow', capability: 'workerLifecycle', sessionName, windowName, created: true, readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true }
+    },
+    findWindowTargetByNameAsync: async (sessionName, windowName, signal) => {
+      adapterCalls.push({ operation: 'findWindowTargetByName', sessionName, windowName, signal })
+      return { ok: true, operation: 'findWindowTargetByName', capability: 'workerLifecycle', sessionName, windowName, exists: true, target: `${sessionName}:@7`, windowId: '@7', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }
+    },
+    ...kernelAdapterPatch,
+  })
+  labels.markWindowAsAgentTeam = async (target, signal) => { markCalls.push({ target, signal }) }
+  labels.refreshWindowPaneLabels = async (target, signal) => { refreshCalls.push({ target, signal }) }
+  const fakeClient = {
+    exec() { throw new Error('sync tmux should not be used') },
+    execNoThrow() { return { ok: false, stdout: '', stderr: 'sync tmux should not be used' } },
+    async execAsync(args) {
+      tmuxCalls.push(args)
+      throw new Error(`unexpected direct tmux call: ${args.join(' ')}`)
+    },
+    async execNoThrowAsync(args) {
+      tmuxCalls.push(args)
+      return { ok: false, stdout: '', stderr: `unexpected direct tmux call: ${args.join(' ')}` }
+    },
+  }
+  try {
+    if (insideTmux) process.env.TMUX = '/tmp/agentteam-step6-runtime-tmux'
+    else delete process.env.TMUX
+    return await client.withTmuxClientForTests(fakeClient, async () => {
+      clearDistModules(distRoot, ['tmux/windows.js'])
+      const windows = require(windowsPath)
+      return callback({ windows, tmuxCalls, markCalls, refreshCalls, adapterCalls })
+    })
+  } finally {
+    core.ensureTmuxAvailable = originals.ensureTmuxAvailable
+    core.isInsideTmux = originals.isInsideTmux
+    core.resolvePaneBindingAsync = originals.resolvePaneBindingAsync
+    core.windowExists = originals.windowExists
+    core.firstPaneInWindow = originals.firstPaneInWindow
+    core.captureCurrentPaneBinding = originals.captureCurrentPaneBinding
+    kernel.createAgentTeamKernelAdapter = originals.createAgentTeamKernelAdapter
+    labels.markWindowAsAgentTeam = originals.markWindowAsAgentTeam
+    labels.refreshWindowPaneLabels = originals.refreshWindowPaneLabels
+    if (originals.TMUX === undefined) delete process.env.TMUX
+    else process.env.TMUX = originals.TMUX
+    delete require.cache[require.resolve(windowsPath)]
+  }
+}
+
+async function assertReadOnlyWindowSessionOrchestrationRuntimeSeam({ requireDist, distRoot } = {}) {
+  if (typeof requireDist !== 'function' || !distRoot) return
+  const kernel = requireDist('core/kernel.js')
+  const tmuxCore = requireDist('tmux/core.js')
+  const tmuxProcess = requireDist('tmux/process.js')
+  const original = kernel.createAgentTeamKernelAdapter
+  try {
+    const signal = new AbortController().signal
+    let paneListCalls = 0
+    kernel.createAgentTeamKernelAdapter = () => ({
+      listPanesInWindowAsync: async (target, receivedSignal) => {
+        paneListCalls += 1
+        assert.equal(target, 'team:@1')
+        assert.equal(receivedSignal, signal)
+        return { ok: true, operation: 'listPanesInWindow', capability: 'workerLifecycle', target, exists: true, paneIds: ['%first', '%second'], readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }
+      },
+    })
+    assert.equal(await tmuxCore.windowExists('team:@1', signal), true)
+    assert.equal(await tmuxCore.firstPaneInWindow('team:@1', signal), '%first')
+    assert.equal(paneListCalls, 2, 'windowExists and firstPaneInWindow should share listPanesInWindowAsync')
+
+    let emptyTargetCalls = 0
+    kernel.createAgentTeamKernelAdapter = () => ({ listPanesInWindowAsync: async () => { emptyTargetCalls += 1; throw new Error('empty target must avoid helper') } })
+    assert.equal(await tmuxCore.windowExists(''), false)
+    assert.equal(await tmuxCore.firstPaneInWindow(''), null)
+    assert.equal(emptyTargetCalls, 0, 'empty window target should avoid helper')
+
+    kernel.createAgentTeamKernelAdapter = () => ({ listPanesInWindowAsync: async target => ({ ok: true, operation: 'listPanesInWindow', capability: 'workerLifecycle', target, exists: true, paneIds: [], readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }) })
+    assert.equal(await tmuxCore.windowExists('team:@1'), true)
+    assert.equal(await tmuxCore.firstPaneInWindow('team:@1'), null)
+    kernel.createAgentTeamKernelAdapter = () => ({ listPanesInWindowAsync: async target => ({ ok: false, operation: 'listPanesInWindow', capability: 'workerLifecycle', target, exists: false, paneIds: [], failureKind: 'tmux-command-failed', reason: 'compact unavailable', error: 'compact unavailable', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }) })
+    assert.equal(await tmuxCore.windowExists('team:@1'), false)
+    assert.equal(await tmuxCore.firstPaneInWindow('team:@1'), null)
+
+    let availabilitySignals = []
+    kernel.createAgentTeamKernelAdapter = () => ({
+      checkTmuxAvailableAsync: async receivedSignal => {
+        availabilitySignals.push(receivedSignal)
+        return { ok: true, capability: 'tmuxAvailability', available: true, version: 'tmux 3.4', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }
+      },
+    })
+    assert.equal(await tmuxCore.ensureTmuxAvailable(signal), undefined)
+    assert.deepEqual(availabilitySignals, [signal])
+    kernel.createAgentTeamKernelAdapter = () => ({ checkTmuxAvailableAsync: async () => ({ ok: false, capability: 'tmuxAvailability', available: false, failureKind: 'tmux-unavailable', reason: 'compact unavailable', error: 'RAW_STDERR_SHOULD_NOT_LEAK', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }) })
+    await assert.rejects(() => tmuxCore.ensureTmuxAvailable(), error => {
+      assert.equal(error instanceof Error, true)
+      assert.match(error.message, /^tmux is required for agentteam panes \(tmux-unavailable\)$/)
+      assert.equal(/RAW_STDERR|stdout|stderr|stack|MAILBOX_BODY|REPORT_BODY|worker transcript/i.test(error.message), false)
+      return true
+    })
+
+    let inspectCalls = []
+    kernel.createAgentTeamKernelAdapter = () => ({ inspectWorkerPaneAsync: async (paneId, receivedSignal) => { inspectCalls.push({ paneId, signal: receivedSignal }); return { ok: true, operation: 'inspectPane', capability: 'workerLifecycle', paneId, exists: true, currentCommand: 'node', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false } } })
+    assert.equal(await tmuxProcess.waitForPaneAppStart('%node', 1000, signal), true)
+    assert.deepEqual(inspectCalls, [{ paneId: '%node', signal }])
+    let shellCalls = 0
+    kernel.createAgentTeamKernelAdapter = () => ({ inspectWorkerPaneAsync: async paneId => { shellCalls += 1; return { ok: true, operation: 'inspectPane', capability: 'workerLifecycle', paneId, exists: true, currentCommand: 'bash', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false } } })
+    assert.equal(await tmuxProcess.waitForPaneAppStart('%shell', 1), false)
+    assert.ok(shellCalls >= 1, 'shell commands should keep polling until timeout')
+    kernel.createAgentTeamKernelAdapter = () => ({ inspectWorkerPaneAsync: async paneId => ({ ok: false, operation: 'inspectPane', capability: 'workerLifecycle', paneId, exists: false, failureKind: 'pane-not-found', reason: 'compact unavailable', error: 'compact unavailable', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }) })
+    assert.equal(await tmuxProcess.waitForPaneAppStart('%missing', 1), false)
+    let emptyPaneCalls = 0
+    kernel.createAgentTeamKernelAdapter = () => ({ inspectWorkerPaneAsync: async () => { emptyPaneCalls += 1; throw new Error('empty pane id must avoid helper') } })
+    assert.equal(await tmuxProcess.waitForPaneAppStart('', 100), false)
+    assert.equal(emptyPaneCalls, 0)
+    const preAbort = new AbortController()
+    preAbort.abort()
+    assert.equal(await tmuxProcess.waitForPaneAppStart('%preabort', 100, preAbort.signal), false)
+    const inFlightAbort = new AbortController()
+    let inFlightCalls = 0
+    kernel.createAgentTeamKernelAdapter = () => ({ inspectWorkerPaneAsync: async paneId => { inFlightCalls += 1; inFlightAbort.abort(); return { ok: true, operation: 'inspectPane', capability: 'workerLifecycle', paneId, exists: true, currentCommand: 'bash', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false } } })
+    assert.equal(await tmuxProcess.waitForPaneAppStart('%inflight', 100, inFlightAbort.signal), false)
+    assert.equal(inFlightCalls, 1)
+  } finally {
+    kernel.createAgentTeamKernelAdapter = original
+  }
+
+  let captureCalls = 0
+  await withPatchedWindowDeps({
+    distRoot,
+    insideTmux: true,
+    corePatch: {
+      ensureTmuxAvailable: async () => {},
+      isInsideTmux: () => true,
+      resolvePaneBindingAsync: async () => null,
+      windowExists: async () => false,
+      firstPaneInWindow: async () => null,
+      captureCurrentPaneBinding: () => { captureCalls += 1; return { paneId: '%current', target: 'current-session:@7' } },
+    },
+  }, async ({ windows, tmuxCalls, markCalls, refreshCalls }) => {
+    const result = await windows.ensureSwarmWindow()
+    assert.deepEqual(result, { session: 'current-session', window: '@7', target: 'current-session:@7', leaderPaneId: '%current' })
+    assert.equal(captureCalls, 1, 'current binding fallback should be captured once and reused')
+    assert.deepEqual(tmuxCalls, [], 'inside-tmux current binding fallback should not use direct TypeScript display-message calls')
+    assert.deepEqual(markCalls.map(call => call.target), ['current-session:@7'])
+    assert.deepEqual(refreshCalls.map(call => call.target), ['current-session:@7'])
+  })
+
+  captureCalls = 0
+  await withPatchedWindowDeps({
+    distRoot,
+    insideTmux: true,
+    corePatch: {
+      ensureTmuxAvailable: async () => {},
+      isInsideTmux: () => true,
+      resolvePaneBindingAsync: async paneId => ({ paneId, target: 'preferred-session:@3' }),
+      windowExists: async () => false,
+      firstPaneInWindow: async () => { throw new Error('preferred binding should avoid first-pane lookup') },
+      captureCurrentPaneBinding: () => { captureCalls += 1; return { paneId: '%current', target: 'current-session:@7' } },
+    },
+  }, async ({ windows, tmuxCalls }) => {
+    const result = await windows.ensureSwarmWindow({ leaderPaneId: '%preferred' })
+    assert.deepEqual(result, { session: 'preferred-session', window: '@3', target: 'preferred-session:@3', leaderPaneId: '%preferred' })
+    assert.equal(captureCalls, 0, 'preferred binding should win before current binding fallback')
+    assert.deepEqual(tmuxCalls, [], 'preferred binding path should not use direct tmux calls')
+  })
+
+  await withPatchedWindowDeps({
+    distRoot,
+    insideTmux: false,
+    corePatch: {
+      ensureTmuxAvailable: async () => {},
+      isInsideTmux: () => false,
+      firstPaneInWindow: async target => (target === 'pi-agentteam:@7' ? '%leader' : null),
+      resolvePaneBindingAsync: async paneId => ({ paneId, target: 'detached-session:@7' }),
+    },
+  }, async ({ windows, tmuxCalls, markCalls, refreshCalls, adapterCalls }) => {
+    const result = await windows.ensureSwarmWindow()
+    assert.deepEqual(result, { session: 'detached-session', window: '@7', target: 'detached-session:@7', leaderPaneId: '%leader' })
+    assert.deepEqual(tmuxCalls, [], 'detached discovery/first-pane/binding path should not use direct TypeScript tmux calls')
+    assert.deepEqual(adapterCalls.map(call => call.operation), ['sessionExists', 'findAgentTeamWindowTarget'])
+    assert.deepEqual(markCalls.map(call => call.target), ['detached-session:@7'])
+    assert.deepEqual(refreshCalls.map(call => call.target), ['detached-session:@7'])
+  })
+
+  await withPatchedWindowDeps({
+    distRoot,
+    insideTmux: false,
+    corePatch: {
+      ensureTmuxAvailable: async () => {},
+      isInsideTmux: () => false,
+      firstPaneInWindow: async target => (target === 'pi-agentteam:@7' ? '%leader' : null),
+      resolvePaneBindingAsync: async () => null,
+    },
+  }, async ({ windows, tmuxCalls }) => {
+    await assert.rejects(() => windows.ensureSwarmWindow(), error => {
+      assert.equal(error instanceof Error, true)
+      assert.equal(error.message, 'Failed to resolve agentteam leader pane binding')
+      return true
+    })
+    assert.deepEqual(tmuxCalls, [], 'missing detached binding should not use target-based display-message fallback')
+  })
+
+  await withPatchedWindowDeps({
+    distRoot,
+    insideTmux: false,
+    corePatch: {
+      ensureTmuxAvailable: async () => {},
+      isInsideTmux: () => false,
+      firstPaneInWindow: async () => null,
+      resolvePaneBindingAsync: async () => { throw new Error('resolvePaneBindingAsync should not run without first pane') },
+    },
+  }, async ({ windows, tmuxCalls }) => {
+    await assert.rejects(() => windows.ensureSwarmWindow(), error => {
+      assert.equal(error instanceof Error, true)
+      assert.equal(error.message, 'Failed to resolve agentteam leader pane')
+      return true
+    })
+    assert.deepEqual(tmuxCalls, [], 'missing detached first pane should not use direct list-panes fallback')
+  })
+
+  await withPatchedWindowDeps({
+    distRoot,
+    insideTmux: false,
+    corePatch: {
+      ensureTmuxAvailable: async () => {},
+      isInsideTmux: () => false,
+      firstPaneInWindow: async target => (target === 'pi-agentteam:@7' ? '%leader' : null),
+      resolvePaneBindingAsync: async paneId => ({ paneId, target: 'detached-session:@7' }),
+    },
+    kernelAdapterPatch: {
+      findAgentTeamWindowTargetAsync: async () => ({ ok: false, operation: 'findAgentTeamWindowTarget', capability: 'workerLifecycle', exists: false, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }),
+    },
+  }, async ({ windows, tmuxCalls, markCalls, refreshCalls, adapterCalls }) => {
+    const result = await windows.ensureSwarmWindow()
+    assert.deepEqual(result, { session: 'detached-session', window: '@7', target: 'detached-session:@7', leaderPaneId: '%leader' })
+    assert.deepEqual(tmuxCalls, [], 'post-creation window-name lookup should not use direct list-windows parsing')
+    assert.deepEqual(adapterCalls.map(call => call.operation), ['sessionExists', 'createDetachedSwarmWindow', 'findWindowTargetByName'])
+    assert.deepEqual(markCalls.map(call => call.target), ['pi-agentteam:@7', 'detached-session:@7'])
+    assert.deepEqual(refreshCalls.map(call => call.target), ['detached-session:@7'])
+  })
+
+  await withPatchedWindowDeps({
+    distRoot,
+    insideTmux: false,
+    corePatch: {
+      ensureTmuxAvailable: async () => {},
+      isInsideTmux: () => false,
+      firstPaneInWindow: async () => { throw new Error('firstPaneInWindow should not run without post-creation target') },
+      resolvePaneBindingAsync: async () => { throw new Error('resolvePaneBindingAsync should not run without post-creation target') },
+    },
+    kernelAdapterPatch: {
+      findAgentTeamWindowTargetAsync: async () => ({ ok: false, operation: 'findAgentTeamWindowTarget', capability: 'workerLifecycle', exists: false, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }),
+      findWindowTargetByNameAsync: async () => ({ ok: false, operation: 'findWindowTargetByName', capability: 'workerLifecycle', exists: false, failureKind: 'pane-not-found', readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }),
+    },
+  }, async ({ windows, tmuxCalls }) => {
+    await assert.rejects(() => windows.ensureSwarmWindow(), error => {
+      assert.equal(error instanceof Error, true)
+      assert.equal(error.message, 'Failed to locate agentteam tmux window after creation')
+      return true
+    })
+    assert.deepEqual(tmuxCalls, [], 'missing post-creation window should not use hidden direct tmux fallback')
+  })
+}
+
+async function assertGoTmuxCutoverBatch3Guard({ repoRoot, requireDist, distRoot } = {}) {
   const root = repoRoot || process.cwd()
   assertStep6Batch3AuditMap(root)
   assertReadOnlyFacadeSourceBoundaries(root)
@@ -606,6 +1117,7 @@ function assertGoTmuxCutoverBatch3Guard({ repoRoot, requireDist } = {}) {
   assertPackageNativeBoundaries(root)
   assertHistoricalRetention(root)
   assertGoTmuxCutoverBatch3RuntimeSeam(requireDist)
+  await assertReadOnlyWindowSessionOrchestrationRuntimeSeam({ requireDist, distRoot })
 }
 
 module.exports = {
@@ -619,6 +1131,7 @@ module.exports = {
   assertGoHelperOperationSurface,
   assertHistoricalRetention,
   assertReadOnlyFacadeDirectGoBehavior,
+  assertReadOnlyWindowSessionOrchestrationRuntimeSeam,
   assertMutationFacadeSourceBoundaries,
   assertPackageNativeBoundaries,
   assertReadOnlyFacadeSourceBoundaries,

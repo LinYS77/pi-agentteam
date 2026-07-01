@@ -187,12 +187,21 @@ const EXPECTED_STEP5D_DELETION_CANDIDATES = Object.freeze([
   'tests/suites/go-kernel-v0634-security-signing-ownership-docs.cjs',
   'tests/suites/go-kernel-v0634-package-release-decision-checkpoint-docs.cjs',
 ])
-const EXPECTED_STEP6_BATCH1_DELETION_CANDIDATES = Object.freeze([
+const EXPECTED_STEP6_DELETION_CANDIDATES = Object.freeze([
   'tests/suites/go-kernel-v0655-go-list-agentteam-panes-facade-cutover.cjs',
   'tests/suites/go-kernel-v0656-go-inspect-pane-facade-cutover.cjs',
   'tests/suites/go-kernel-v0657-go-pane-exists-facade-cutover.cjs',
   'tests/suites/go-kernel-v0658-go-resolve-pane-binding-facade-cutover.cjs',
   'tests/suites/go-kernel-v0659-go-target-for-pane-facade-cutover.cjs',
+  'tests/suites/go-kernel-v0662-go-window-pane-lookup-facade-cutover.cjs',
+  'tests/suites/go-kernel-v0663-go-tmux-availability-facade-cutover.cjs',
+  'tests/suites/go-kernel-v0664-go-pane-app-start-wait-cutover.cjs',
+  'tests/suites/go-kernel-v0665-go-agentteam-window-discovery-cutover.cjs',
+  'tests/suites/go-kernel-v0666-go-session-existence-cutover.cjs',
+  'tests/suites/go-kernel-v0667-go-current-binding-window-fallback-cutover.cjs',
+  'tests/suites/go-kernel-v0668-go-detached-leader-binding-cutover.cjs',
+  'tests/suites/go-kernel-v0669-go-detached-first-pane-cutover.cjs',
+  'tests/suites/go-kernel-v0670-go-window-name-lookup-cutover.cjs',
 ])
 
 const SCRIPT_FILES_THAT_MUST_REMAIN = Object.freeze([
@@ -716,13 +725,13 @@ function assertNoDeletionOrReintroduction(root) {
 }
 
 function assertNonCandidatesRemainNonCandidates(root) {
-  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_STEP6_BATCH1_DELETION_CANDIDATES, 'v0.6.44-v0.6.88 replacement/deletion candidates should be limited to Step 6 batch 1 read-only facade deletions')
+  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_STEP6_DELETION_CANDIDATES, 'v0.6.44-v0.6.88 replacement/deletion candidates should be limited to Step 6 read-only facade/orchestration deletions')
   const remapped = new Set(HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite))
   const step5B = new Set(HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES)
   const step5C = new Set(HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES)
   const ready = new Set(HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES)
-  for (const suite of EXPECTED_STEP6_BATCH1_DELETION_CANDIDATES) {
-    assert.equal(existsRel(root, suite), false, `${suite} should be absent after Step 6 batch 1 and must not affect Step 5 remap`)
+  for (const suite of EXPECTED_STEP6_DELETION_CANDIDATES) {
+    assert.equal(existsRel(root, suite), false, `${suite} should be absent after Step 6 and must not affect Step 5 remap`)
     assert.equal(remapped.has(suite), false, `${suite} Step 6 candidate must not appear in Step 5A remaining-candidate remap`)
     assert.equal(step5B.has(suite), false, `${suite} Step 6 candidate must not appear in Step 5B deletion candidates`)
     assert.equal(step5C.has(suite), false, `${suite} Step 6 candidate must not appear in Step 5C pending deletion candidates`)

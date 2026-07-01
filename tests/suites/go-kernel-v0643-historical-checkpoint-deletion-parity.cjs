@@ -43,12 +43,21 @@ const EXPECTED_STEP5C_DELETED_COUNT = 27
 const EXPECTED_STEP5D_DELETED_COUNT = 4
 const EXPECTED_NEEDS_SPLIT_COUNT = 0
 const EXPECTED_KEEP_COUNT = 1
-const EXPECTED_V0644_V0688_STEP6_BATCH1_DELETION_CANDIDATES = [
+const EXPECTED_V0644_V0688_STEP6_DELETION_CANDIDATES = [
   'tests/suites/go-kernel-v0655-go-list-agentteam-panes-facade-cutover.cjs',
   'tests/suites/go-kernel-v0656-go-inspect-pane-facade-cutover.cjs',
   'tests/suites/go-kernel-v0657-go-pane-exists-facade-cutover.cjs',
   'tests/suites/go-kernel-v0658-go-resolve-pane-binding-facade-cutover.cjs',
   'tests/suites/go-kernel-v0659-go-target-for-pane-facade-cutover.cjs',
+  'tests/suites/go-kernel-v0662-go-window-pane-lookup-facade-cutover.cjs',
+  'tests/suites/go-kernel-v0663-go-tmux-availability-facade-cutover.cjs',
+  'tests/suites/go-kernel-v0664-go-pane-app-start-wait-cutover.cjs',
+  'tests/suites/go-kernel-v0665-go-agentteam-window-discovery-cutover.cjs',
+  'tests/suites/go-kernel-v0666-go-session-existence-cutover.cjs',
+  'tests/suites/go-kernel-v0667-go-current-binding-window-fallback-cutover.cjs',
+  'tests/suites/go-kernel-v0668-go-detached-leader-binding-cutover.cjs',
+  'tests/suites/go-kernel-v0669-go-detached-first-pane-cutover.cjs',
+  'tests/suites/go-kernel-v0670-go-window-name-lookup-cutover.cjs',
 ]
 
 function assertUnique(values, label) {
@@ -80,7 +89,7 @@ function assertMapShape() {
   const candidates = manifestCandidates()
   assert.equal(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0419_V0427.length, 29, 'v0.4.19-v0.4.27 manifest candidate count should remain stable')
   assert.equal(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643.length, 18, 'v0.6.28-v0.6.43 manifest candidate count should remain stable')
-  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_V0644_V0688_STEP6_BATCH1_DELETION_CANDIDATES, 'v0.6.44-v0.6.88 deletion candidates should be limited to Step 6 batch 1 read-only facade deletions')
+  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_V0644_V0688_STEP6_DELETION_CANDIDATES, 'v0.6.44-v0.6.88 deletion candidates should be limited to Step 6 read-only facade/orchestration deletions')
   assert.equal(candidates.length, EXPECTED_CANDIDATE_TOTAL, 'combined deletion parity candidate count should remain stable')
   assert.equal(HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP.length, EXPECTED_CANDIDATE_TOTAL, 'deletion parity map should enumerate every manifest candidate exactly once')
   assert.equal(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT, 'tests/suites/go-kernel-v0643-historical-checkpoint-deletion-parity.cjs', 'parity audit suite path should stay versioned historical/audit-only')
@@ -91,7 +100,7 @@ function assertMapShape() {
 
   assert.deepEqual(HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.candidatesV0419V0427, HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0419_V0427, 'fixture should preserve v0.4.19-v0.4.27 manifest input snapshot')
   assert.deepEqual(HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.candidatesV0628V0643, HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643, 'fixture should preserve v0.6.28-v0.6.43 manifest input snapshot')
-  assertSameSet(HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.candidatesV0644V0688, EXPECTED_V0644_V0688_STEP6_BATCH1_DELETION_CANDIDATES, 'fixture should explicitly record Step 6 batch 1 v0.6.44-v0.6.88 candidate input')
+  assertSameSet(HISTORICAL_CHECKPOINT_DELETION_MANIFEST_INPUTS.candidatesV0644V0688, EXPECTED_V0644_V0688_STEP6_DELETION_CANDIDATES, 'fixture should explicitly record Step 6 v0.6.44-v0.6.88 candidate input')
 
   assert.equal(HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS.ready, EXPECTED_READY_COUNT, 'ready-to-delete count should remain evidence-reviewed')
   assert.equal(HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS['needs-split'], EXPECTED_NEEDS_SPLIT_COUNT, 'needs-split count should remain evidence-reviewed')

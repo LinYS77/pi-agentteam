@@ -1187,6 +1187,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "This slice closes the remaining read-only async window helper gap in `tmux/core.ts` without migrating any window creation, labels, or mutating lifecycle code:",
     ],
     continuityTargets: ["v0.6.61"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.62", "go-window-pane-lookup-facade-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.63",
@@ -1197,6 +1198,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "This slice closes the simple tmux availability/version probe gap in `tmux/core.ts` without migrating window creation, labels, mutating lifecycle, state/task/UI, or package/release behavior:",
     ],
     continuityTargets: ["v0.6.62"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.63", "go-tmux-availability-facade-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.64",
@@ -1206,6 +1208,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.64 cuts over `tmux/process.ts` `waitForPaneAppStart(paneId, timeoutMs, signal)` from direct TypeScript target-based `display-message` polling to the existing Go-backed `workerLifecycle.inspectPane` async adapter path.",
       "This slice removes the last direct pane-current-command polling call from `tmux/process.ts` without changing worker spawn semantics or adding Go/native surface:",
     ],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.64", "go-pane-app-start-wait-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.65",
@@ -1216,6 +1219,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "This slice removes only the read-only marked-window discovery call. It does not move session/window creation, marking, labels, pane setup, or any mutating lifecycle behavior into Go:",
     ],
     continuityTargets: ["v0.6.64"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.65", "go-agentteam-window-discovery-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.66",
@@ -1226,6 +1230,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "This slice removes only the read-only session-existence check. It does not move session/window creation, post-creation lookup, pane setup, marking, labels, or mutating lifecycle behavior into Go:",
     ],
     continuityTargets: ["v0.6.65"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.66", "go-session-existence-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.67",
@@ -1236,6 +1241,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "This slice removes only the same-purpose current-pane/current-window fallback calls from the inside-tmux branch. It does not move detached setup, window/session creation, pane setup, labels, mutating lifecycle, state, task/report/PlanRun, UI, or release/package behavior into Go:",
     ],
     continuityTargets: ["v0.6.66"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.67", "go-current-binding-window-fallback-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.68",
@@ -1246,6 +1252,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "This slice removes only the final target-based leader-pane window id fallback after pane setup. The direct pane setup `list-panes` step is superseded by v0.6.69; post-creation window lookup, session/window creation, labels, mutating lifecycle, state, task/report/PlanRun, UI, and release/package behavior remain out of scope:",
     ],
     continuityTargets: ["v0.6.67"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.68", "go-detached-leader-binding-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.69",
@@ -1256,6 +1263,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "This slice removes only the detached first-pane selection fallback after `initialTarget` is known. It does not move post-creation window lookup, session/window creation, labels, mutating lifecycle, state, task/report/PlanRun, UI, or release/package behavior into Go:",
     ],
     continuityTargets: ["v0.6.68"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.69", "go-detached-first-pane-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.70",
@@ -1266,6 +1274,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "- `new-session`, `new-window`, marking, labels, kill, state/task/UI/release/package remain TypeScript-owned.",
     ],
     continuityTargets: ["v0.6.69"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.70", "go-window-name-lookup-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.71",
