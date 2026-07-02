@@ -66,6 +66,12 @@ const EXPECTED_V0644_V0688_STEP6_DELETION_CANDIDATES = [
   'tests/suites/go-kernel-v0676-go-pane-label-setting-cutover.cjs',
   'tests/suites/go-kernel-v0677-go-pane-label-clearing-gate.cjs',
   'tests/suites/go-kernel-v0678-go-pane-label-clearing-cutover.cjs',
+  'tests/suites/go-kernel-v0679-go-create-teammate-pane-gate.cjs',
+  'tests/suites/go-kernel-v0680-go-create-teammate-pane-cutover.cjs',
+  'tests/suites/go-kernel-v0681-go-detached-new-session-gate.cjs',
+  'tests/suites/go-kernel-v0682-go-detached-new-session-cutover.cjs',
+  'tests/suites/go-kernel-v0683-go-detached-new-window-gate.cjs',
+  'tests/suites/go-kernel-v0684-go-detached-new-window-cutover.cjs',
 ]
 
 function assertUnique(values, label) {
@@ -97,7 +103,7 @@ function assertMapShape() {
   const candidates = manifestCandidates()
   assert.equal(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0419_V0427.length, 29, 'v0.4.19-v0.4.27 manifest candidate count should remain stable')
   assert.equal(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0628_V0643.length, 18, 'v0.6.28-v0.6.43 manifest candidate count should remain stable')
-  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_V0644_V0688_STEP6_DELETION_CANDIDATES, 'v0.6.44-v0.6.88 deletion candidates should be limited to Step 6 read-only facade/orchestration and non-destructive window/label deletions')
+  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_V0644_V0688_STEP6_DELETION_CANDIDATES, 'v0.6.44-v0.6.88 deletion candidates should be limited to Step 6 read-only facade/orchestration, non-destructive window/label, and high-risk creation lifecycle deletions')
   assert.equal(candidates.length, EXPECTED_CANDIDATE_TOTAL, 'combined deletion parity candidate count should remain stable')
   assert.equal(HISTORICAL_CHECKPOINT_DELETION_PARITY_MAP.length, EXPECTED_CANDIDATE_TOTAL, 'deletion parity map should enumerate every manifest candidate exactly once')
   assert.equal(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT, 'tests/suites/go-kernel-v0643-historical-checkpoint-deletion-parity.cjs', 'parity audit suite path should stay versioned historical/audit-only')

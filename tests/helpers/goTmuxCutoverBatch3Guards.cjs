@@ -37,6 +37,12 @@ const { goPaneLabelSettingGate } = require('../fixtures/kernel/v0675/goPaneLabel
 const { goPaneLabelSettingCutover } = require('../fixtures/kernel/v0676/goPaneLabelSettingCutover.cjs')
 const { goPaneLabelClearingGate } = require('../fixtures/kernel/v0677/goPaneLabelClearingGate.cjs')
 const { goPaneLabelClearingCutover } = require('../fixtures/kernel/v0678/goPaneLabelClearingCutover.cjs')
+const { goCreateTeammatePaneGate } = require('../fixtures/kernel/v0679/goCreateTeammatePaneGate.cjs')
+const { goCreateTeammatePaneCutover } = require('../fixtures/kernel/v0680/goCreateTeammatePaneCutover.cjs')
+const { goDetachedNewSessionGate } = require('../fixtures/kernel/v0681/goDetachedNewSessionGate.cjs')
+const { goDetachedNewSessionCutover } = require('../fixtures/kernel/v0682/goDetachedNewSessionCutover.cjs')
+const { goDetachedNewWindowGate } = require('../fixtures/kernel/v0683/goDetachedNewWindowGate.cjs')
+const { goDetachedNewWindowCutover } = require('../fixtures/kernel/v0684/goDetachedNewWindowCutover.cjs')
 
 const GO_TMUX_CUTOVER_BATCH3_GUARD_HELPER = STEP6_BATCH3_GUARD_HELPER
 const GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE = STEP6_BATCH3_GUARD_SUITE
@@ -45,6 +51,7 @@ const GO_TMUX_CUTOVER_BATCH3_GUARD_CATEGORIES = Object.freeze([
   'step6-batch3-audit-map-complete',
   'read-only-worker-lifecycle-facades',
   'mutation-facade-authority-exact',
+  'creation-lifecycle-mutation-facades',
   'go-helper-operation-surface-exact',
   'package-native-release-boundaries-preserved',
   'historical-suite-retention-honest',
@@ -54,9 +61,10 @@ const GO_TMUX_CUTOVER_BATCH3_CATEGORY_DESCRIPTIONS = Object.freeze({
   'step6-batch3-audit-map-complete': 'v0.6.53-v0.6.88 suites are mapped to clusters with duplicated assertions, unique assertions, current owner evidence, and keep/delete recommendations.',
   'read-only-worker-lifecycle-facades': 'Current TypeScript tmux read-only pane/window/session facades delegate through the Go kernel adapter without direct tmux fallback or hidden fallback after cutover.',
   'mutation-facade-authority-exact': 'Current non-destructive window/label mutation facades keep TypeScript authority, exact helper operations, compact fail-closed public behavior, and no wake/send-keys/destructive lifecycle expansion.',
-  'go-helper-operation-surface-exact': 'The Go helper exposes only the approved workerLifecycle/tmuxAvailability operation surface and exact tmux argv snippets for Step 6 batch-3 cutovers.',
+  'creation-lifecycle-mutation-facades': 'Current high-risk creation lifecycle facades keep TypeScript orchestration authority while Go owns only the exact createTeammatePane/new-session/new-window argv slices, compact throwing failures, and no wake/send-keys/destructive lifecycle expansion.',
+  'go-helper-operation-surface-exact': 'The Go helper exposes only the approved workerLifecycle/tmuxAvailability operation surface and exact tmux argv snippets for Step 6 cutovers.',
   'package-native-release-boundaries-preserved': 'Package/native/release boundaries remain unchanged: package version 0.6.8, approved embedded helper path, no package/release/signing mechanics.',
-  'historical-suite-retention-honest': 'Step 6 deletion accounting is honest: replaced read-only facade/orchestration and non-destructive window/label suites are expected absent, retained v0.6.53-v0.6.88 suites stay present, and prior historical deletions remain absent.',
+  'historical-suite-retention-honest': 'Step 6 deletion accounting is honest: replaced read-only facade/orchestration, non-destructive window/label, and high-risk creation lifecycle suites are expected absent, retained v0.6.53-v0.6.88 suites stay present, and prior historical deletions remain absent.',
 })
 
 const GO_TMUX_CUTOVER_BATCH3_SOURCE_FILES = Object.freeze([
@@ -116,10 +124,20 @@ const EXPECTED_STEP6_BATCH3_DELETED_SUITES = Object.freeze([
   'tests/suites/go-kernel-v0678-go-pane-label-clearing-cutover.cjs',
 ])
 
+const EXPECTED_STEP6_BATCH4_DELETED_SUITES = Object.freeze([
+  'tests/suites/go-kernel-v0679-go-create-teammate-pane-gate.cjs',
+  'tests/suites/go-kernel-v0680-go-create-teammate-pane-cutover.cjs',
+  'tests/suites/go-kernel-v0681-go-detached-new-session-gate.cjs',
+  'tests/suites/go-kernel-v0682-go-detached-new-session-cutover.cjs',
+  'tests/suites/go-kernel-v0683-go-detached-new-window-gate.cjs',
+  'tests/suites/go-kernel-v0684-go-detached-new-window-cutover.cjs',
+])
+
 const EXPECTED_STEP6_DELETED_SUITES = Object.freeze([
   ...EXPECTED_STEP6_BATCH1_DELETED_SUITES,
   ...EXPECTED_STEP6_BATCH2_DELETED_SUITES,
   ...EXPECTED_STEP6_BATCH3_DELETED_SUITES,
+  ...EXPECTED_STEP6_BATCH4_DELETED_SUITES,
 ])
 
 const STEP6_WINDOW_MARKING_COMMANDS = Object.freeze([
@@ -139,7 +157,30 @@ const STEP6_PANE_LABEL_CLEARING_COMMANDS = Object.freeze([
   'tmux set-option -up -t <paneId> @agentteam-name',
   "tmux select-pane -t <paneId> -T ''",
 ])
+const STEP6_CREATE_TEAMMATE_PANE_GATE_COMMANDS = Object.freeze([
+  "tmux list-panes -t <swarm.target> -F '#{pane_id}'",
+  "tmux split-window -t <leaderPaneId> -h -p 34 [-c <cwd>] -P -F '#{pane_id}' [startCommand]",
+  "tmux split-window -t <lastPaneId> -v [-c <cwd>] -P -F '#{pane_id}' [startCommand]",
+  'tmux select-layout -t <swarm.target> main-vertical',
+  'tmux select-layout -t <swarm.target> tiled',
+  'tmux resize-pane -t <leaderPaneId> -x 66%',
+])
+const STEP6_CREATE_TEAMMATE_PANE_COMMANDS = Object.freeze([
+  "tmux list-panes -t <target> -F '#{pane_id}'",
+  "tmux split-window -t <leaderPaneId> -h -p 34 [-c <cwd>] -P -F '#{pane_id}' [startCommand]",
+  "tmux split-window -t <lastPaneId> -v [-c <cwd>] -P -F '#{pane_id}' [startCommand]",
+  'tmux select-layout -t <target> main-vertical',
+  'tmux select-layout -t <target> tiled',
+  'tmux resize-pane -t <leaderPaneId> -x 66%',
+])
+const STEP6_DETACHED_NEW_SESSION_COMMANDS = Object.freeze([
+  'tmux new-session -d -s <SWARM_SESSION> -n <SWARM_WINDOW>',
+])
+const STEP6_DETACHED_NEW_WINDOW_COMMANDS = Object.freeze([
+  'tmux new-window -t <SWARM_SESSION> -n <SWARM_WINDOW>',
+])
 const STEP6_RAW_LABEL_CANARY = 'raw-unicode-pane-label-canary 🧪'
+const STEP6_RAW_CREATE_CANARY = 'raw-creation-lifecycle-canary 🚫'
 const STEP6_BAD_HELPER_OUTPUT = 'STEP6_BAD_HELPER_OUTPUT_SHOULD_NOT_LEAK'
 
 const EXPECTED_WORKER_LIFECYCLE_OPERATIONS = Object.freeze([
@@ -372,14 +413,86 @@ function assertWindowLabelMutationFixtureContracts() {
   assert.equal(goPaneLabelClearingCutover.clearPaneLabelsForTeamMigrated, false, 'v0678 should keep team orchestration unmigrated')
 }
 
+function assertTeammatePaneLifecycleMutationFixtureContracts() {
+  assert.deepEqual(commandRenderings(goCreateTeammatePaneGate.authorizedFutureCommandSurface), [...STEP6_CREATE_TEAMMATE_PANE_GATE_COMMANDS], 'v0679 gate authorized future createTeammatePane commands')
+  assert.equal(goCreateTeammatePaneGate.gateOnly, true, 'v0679 should remain gate-only historical evidence')
+  assert.equal(goCreateTeammatePaneGate.noRuntimeMigrationInThisSlice, true, 'v0679 should not claim runtime migration in that slice')
+  assert.equal(goCreateTeammatePaneGate.futureCandidateMutatesTmux, true, 'v0679 future createTeammatePane mutates tmux')
+  assert.equal(goCreateTeammatePaneGate.futureCandidateDestructive, false, 'v0679 createTeammatePane should remain non-destructive')
+  assert.equal(goCreateTeammatePaneGate.futureInputPolicy.argvOnly, true, 'v0679 should require argv-only future execution')
+  assert.equal(goCreateTeammatePaneGate.futureInputPolicy.shellInterpolationAllowed, false, 'v0679 should forbid shell interpolation')
+  assert.equal(goCreateTeammatePaneGate.futureInputPolicy.rawHelperOutputLeakageAllowed, false, 'v0679 should forbid raw helper output leakage')
+  assert.equal(goCreateTeammatePaneGate.futurePublicBehavior.preservesThrownCreateFailures, true, 'v0679 should preserve throwing create failures')
+  assert.equal(goCreateTeammatePaneGate.killPaneMigrated, false, 'v0679 must not authorize killPane')
+  assert.equal(goCreateTeammatePaneGate.wakePaneMigrated, false, 'v0679 must not authorize wake/send-keys')
+
+  assert.deepEqual(commandRenderings(goCreateTeammatePaneCutover.authorizedTmuxCommands), [...STEP6_CREATE_TEAMMATE_PANE_COMMANDS], 'v0680 cutover authorized createTeammatePane commands')
+  assert.equal(goCreateTeammatePaneCutover.operation, 'createTeammatePane', 'v0680 operation')
+  assert.equal(goCreateTeammatePaneCutover.facadeCutoverMigrated, true, 'v0680 should record migrated facade cutover')
+  assert.equal(goCreateTeammatePaneCutover.typescriptCreateFallbackRemoved, true, 'v0680 should record direct TS create fallback removal')
+  assert.equal(goCreateTeammatePaneCutover.thrownCreateFailuresPreserved, true, 'v0680 should preserve throwing create failures')
+  assert.equal(goCreateTeammatePaneCutover.rawOutputLeakageAllowed, false, 'v0680 should forbid raw tmux/helper output leakage')
+  assert.equal(goCreateTeammatePaneCutover.rawCwdLeakageAllowed, false, 'v0680 should forbid raw cwd diagnostics')
+  assert.equal(goCreateTeammatePaneCutover.rawStartCommandLeakageAllowed, false, 'v0680 should forbid raw start command diagnostics')
+  assert.equal(goCreateTeammatePaneCutover.shellInterpolationAllowed, false, 'v0680 should forbid shell interpolation')
+  assert.deepEqual(goCreateTeammatePaneCutover.publicResultShape, ['paneId', 'target'], 'v0680 public result shape')
+  assert.equal(goCreateTeammatePaneCutover.newSessionMigrated, false, 'v0680 must not claim detached new-session migration')
+  assert.equal(goCreateTeammatePaneCutover.newWindowMigrated, false, 'v0680 must not claim detached new-window migration')
+  assert.equal(goCreateTeammatePaneCutover.killPaneMigrated, false, 'v0680 must not authorize killPane')
+
+  assert.deepEqual(commandRenderings(goDetachedNewSessionGate.authorizedFutureCommandSurface), [...STEP6_DETACHED_NEW_SESSION_COMMANDS], 'v0681 gate authorized future detached new-session command')
+  assert.equal(goDetachedNewSessionGate.gateOnly, true, 'v0681 should remain gate-only historical evidence')
+  assert.equal(goDetachedNewSessionGate.futureCandidateCreatesSession, true, 'v0681 future operation creates a session')
+  assert.equal(goDetachedNewSessionGate.futureCandidateCreatesWindow, true, 'v0681 future operation creates initial window')
+  assert.equal(goDetachedNewSessionGate.detachedNewSessionMigrated, false, 'v0681 should not claim runtime migration in that slice')
+  assert.equal(goDetachedNewSessionGate.newWindowMigrated, false, 'v0681 must not authorize detached new-window')
+  assert.equal(goDetachedNewSessionGate.insideTmuxBranchMigrated, false, 'v0681 must not migrate inside-tmux branch')
+  assert.equal(goDetachedNewSessionGate.futureInputPolicy.argvOnly, true, 'v0681 should require argv-only execution')
+  assert.equal(goDetachedNewSessionGate.futureInputPolicy.shellInterpolationAllowed, false, 'v0681 should forbid shell interpolation')
+  assert.equal(goDetachedNewSessionGate.futurePublicBehavior.preservesThrownCreateFailures, true, 'v0681 should preserve throwing create failures')
+
+  assert.deepEqual(commandRenderings(goDetachedNewSessionCutover.authorizedTmuxCommands), [...STEP6_DETACHED_NEW_SESSION_COMMANDS], 'v0682 cutover authorized detached new-session command')
+  assert.equal(goDetachedNewSessionCutover.operation, 'createDetachedSwarmSession', 'v0682 operation')
+  assert.equal(goDetachedNewSessionCutover.facadeCutoverMigrated, true, 'v0682 should record migrated facade cutover')
+  assert.equal(goDetachedNewSessionCutover.typescriptNewSessionFallbackRemoved, true, 'v0682 should record direct TS new-session fallback removal')
+  assert.equal(goDetachedNewSessionCutover.thrownCreateFailuresPreserved, true, 'v0682 should preserve throwing create failures')
+  assert.equal(goDetachedNewSessionCutover.rawOutputLeakageAllowed, false, 'v0682 should forbid raw output leakage')
+  assert.equal(goDetachedNewSessionCutover.shellInterpolationAllowed, false, 'v0682 should forbid shell interpolation')
+  assert.equal(goDetachedNewSessionCutover.newWindowMigrated, false, 'v0682 must not claim detached new-window migration')
+  assert.equal(goDetachedNewSessionCutover.postCreationWindowLookupMigrated, false, 'v0682 must keep post-creation lookup TypeScript-governed')
+
+  assert.deepEqual(commandRenderings(goDetachedNewWindowGate.authorizedFutureCommandSurface), [...STEP6_DETACHED_NEW_WINDOW_COMMANDS], 'v0683 gate authorized future detached new-window command')
+  assert.equal(goDetachedNewWindowGate.gateOnly, true, 'v0683 should remain gate-only historical evidence')
+  assert.equal(goDetachedNewWindowGate.futureCandidateCreatesSession, false, 'v0683 future operation should not create a session')
+  assert.equal(goDetachedNewWindowGate.futureCandidateCreatesWindow, true, 'v0683 future operation creates a window')
+  assert.equal(goDetachedNewWindowGate.detachedNewSessionMigrated, true, 'v0683 should preserve prior detached new-session cutover state')
+  assert.equal(goDetachedNewWindowGate.detachedNewWindowMigrated, false, 'v0683 should not claim runtime migration in that slice')
+  assert.equal(goDetachedNewWindowGate.newSessionChanged, false, 'v0683 must not change detached new-session')
+  assert.equal(goDetachedNewWindowGate.postCreationWindowLookupMigrated, false, 'v0683 must not migrate post-creation lookup')
+  assert.equal(goDetachedNewWindowGate.futureInputPolicy.argvOnly, true, 'v0683 should require argv-only execution')
+  assert.equal(goDetachedNewWindowGate.futureInputPolicy.shellInterpolationAllowed, false, 'v0683 should forbid shell interpolation')
+  assert.equal(goDetachedNewWindowGate.futurePublicBehavior.preservesThrownCreateFailures, true, 'v0683 should preserve throwing create failures')
+
+  assert.deepEqual(commandRenderings(goDetachedNewWindowCutover.authorizedTmuxCommands), [...STEP6_DETACHED_NEW_WINDOW_COMMANDS], 'v0684 cutover authorized detached new-window command')
+  assert.equal(goDetachedNewWindowCutover.operation, 'createDetachedSwarmWindow', 'v0684 operation')
+  assert.equal(goDetachedNewWindowCutover.facadeCutoverMigrated, true, 'v0684 should record migrated facade cutover')
+  assert.equal(goDetachedNewWindowCutover.typescriptNewWindowFallbackRemoved, true, 'v0684 should record direct TS new-window fallback removal')
+  assert.equal(goDetachedNewWindowCutover.thrownCreateFailuresPreserved, true, 'v0684 should preserve throwing create failures')
+  assert.equal(goDetachedNewWindowCutover.rawOutputLeakageAllowed, false, 'v0684 should forbid raw output leakage')
+  assert.equal(goDetachedNewWindowCutover.shellInterpolationAllowed, false, 'v0684 should forbid shell interpolation')
+  assert.equal(goDetachedNewWindowCutover.detachedNewSessionChanged, false, 'v0684 must not change detached new-session')
+  assert.equal(goDetachedNewWindowCutover.postCreationWindowLookupMigrated, false, 'v0684 must keep post-creation lookup TypeScript-governed')
+  assert.equal(goDetachedNewWindowCutover.killPaneMigrated, false, 'v0684 must not authorize killPane')
+}
+
 function assertStep6Batch3AuditMap(root) {
   assert.equal(path.basename(GO_TMUX_CUTOVER_BATCH3_GUARD_HELPER), 'goTmuxCutoverBatch3Guards.cjs')
   assert.equal(path.basename(GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE), 'go-kernel-tmux-cutover-batch3-guard.cjs')
   assert.deepEqual(STEP6_BATCH3_ACTIONS, ['keep-unique', 'split-later', 'delete-replaced'])
   assert.equal(STEP6_BATCH3_AUDIT_ENTRIES.length, 36, 'Step 6 audit map should cover v0.6.53-v0.6.88')
   assert.deepEqual(STEP6_BATCH3_CLUSTER_COUNTS, EXPECTED_CLUSTER_COUNTS, 'Step 6 cluster counts should be explicit')
-  assert.deepEqual(STEP6_BATCH3_DELETION_CANDIDATE_SUITES, [...EXPECTED_STEP6_DELETED_SUITES], 'Step 6 should mark exactly the batch 1/2/3 replaced read-only facade/orchestration and non-destructive window/label suites')
-  assert.equal(STEP6_BATCH3_RETAINED_SUITES.length, STEP6_BATCH3_AUDIT_ENTRIES.length - EXPECTED_STEP6_DELETED_SUITES.length, 'retained suite list should exclude Step 6 batch 1/2/3 deleted suites')
+  assert.deepEqual(STEP6_BATCH3_DELETION_CANDIDATE_SUITES, [...EXPECTED_STEP6_DELETED_SUITES], 'Step 6 should mark exactly the batch 1/2/3/4 replaced read-only facade/orchestration, non-destructive window/label, and high-risk creation lifecycle suites')
+  assert.equal(STEP6_BATCH3_RETAINED_SUITES.length, STEP6_BATCH3_AUDIT_ENTRIES.length - EXPECTED_STEP6_DELETED_SUITES.length, 'retained suite list should exclude Step 6 batch 1/2/3/4 deleted suites')
   assert.equal(STEP6_BATCH3_SCOPE_DOCS.length, STEP6_BATCH3_AUDIT_ENTRIES.length, 'scope docs should match audit entries')
   assert.equal(STEP6_BATCH3_SCOPE_FIXTURES.length, STEP6_BATCH3_AUDIT_ENTRIES.length, 'scope fixtures should match audit entries')
   assertUnique(STEP6_BATCH3_DELETION_CANDIDATE_SUITES, 'Step 6 deletion candidate suites')
@@ -397,17 +510,21 @@ function assertStep6Batch3AuditMap(root) {
   for (const entry of STEP6_BATCH3_AUDIT_ENTRIES) {
     const expectedDeleted = EXPECTED_STEP6_DELETED_SUITES.includes(entry.suite)
     assert.ok(validClusters.has(entry.cluster), `${entry.suite} should use a known cluster`)
-    assert.equal(entry.recommendedAction, expectedDeleted ? 'delete-replaced' : 'keep-unique', `${entry.suite} should have the expected Step 6 batch 1/2/3 action`)
-    assert.equal(entry.deletionReady, expectedDeleted, `${entry.suite} deletion readiness should match Step 6 batch 1/2/3 scope`)
+    assert.equal(entry.recommendedAction, expectedDeleted ? 'delete-replaced' : 'keep-unique', `${entry.suite} should have the expected Step 6 batch 1/2/3/4 action`)
+    assert.equal(entry.deletionReady, expectedDeleted, `${entry.suite} deletion readiness should match Step 6 batch 1/2/3/4 scope`)
     assert.ok(entry.duplicateAssertions.length >= 5, `${entry.suite} should document duplicate assertion clusters`)
     assert.ok(entry.uniqueAssertions.length >= 1, `${entry.suite} should document migrated or retained behavior-unique assertions`)
     assert.ok(entry.replacementEvidence.length >= 1, `${entry.suite} should cite current guard evidence for duplicated assertions`)
     assert.equal(entry.replacementEvidence[0].suite, GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE, `${entry.suite} should point to this guard suite`)
     assert.equal(entry.replacementEvidence[0].helper, GO_TMUX_CUTOVER_BATCH3_GUARD_HELPER, `${entry.suite} should point to this guard helper`)
     assert.ok(entry.replacementEvidence[0].categories.length >= 1, `${entry.suite} replacement evidence should list categories`)
-    const expectedDeletedEvidenceCategory = entry.cluster === 'windowLabelMutation' ? 'mutation-facade-authority-exact' : 'read-only-worker-lifecycle-facades'
+    const expectedDeletedEvidenceCategory = entry.cluster === 'windowLabelMutation'
+      ? 'mutation-facade-authority-exact'
+      : entry.cluster === 'teammatePaneLifecycleMutation'
+        ? 'creation-lifecycle-mutation-facades'
+        : 'read-only-worker-lifecycle-facades'
     assert.equal(entry.replacementEvidence[0].categories.includes(expectedDeletedEvidenceCategory) || !expectedDeleted, true, `${entry.suite} deleted suite should cite current guard coverage category ${expectedDeletedEvidenceCategory}`)
-    assert.equal(existsRel(root, entry.suite), !expectedDeleted, `${entry.suite} presence should match Step 6 batch 1/2/3 deletion accounting`)
+    assert.equal(existsRel(root, entry.suite), !expectedDeleted, `${entry.suite} presence should match Step 6 batch 1/2/3/4 deletion accounting`)
     assert.equal(existsRel(root, entry.doc), true, `${entry.doc} should remain present; Step 6 must not delete docs`)
     assert.equal(existsRel(root, entry.fixture), true, `${entry.fixture} should remain present; Step 6 must not delete fixtures`)
   }
@@ -726,23 +843,39 @@ function assertMutationFacadeSourceBoundaries(root) {
     'export type AgentTeamKernelWindowPaneLabelsRefresh',
     'export type AgentTeamKernelPaneLabelSetting',
     'export type AgentTeamKernelPaneLabelClearing',
+    'export type AgentTeamKernelDetachedSwarmSessionCreation',
+    'export type AgentTeamKernelDetachedSwarmWindowCreation',
+    'export type AgentTeamKernelTeammatePaneCreation',
+    'export type AgentTeamKernelCreateTeammatePaneInput',
     'const PANE_LABEL_ARGUMENT_LIMIT = 4096',
+    'const TMUX_OPAQUE_ARGUMENT_LIMIT = 4096',
     'function isValidPaneLabelArgument',
+    'function isValidOptionalTmuxOpaqueArgument',
     'function validateWindowMarkingResult',
     'function validateWindowPaneLabelsRefreshResult',
     'function validatePaneLabelSettingResult',
     'function validatePaneLabelClearingResult',
+    'function validateDetachedSwarmSessionCreationResult',
+    'function validateDetachedSwarmWindowCreationResult',
+    'function validateTeammatePaneCreationResult',
     'workerLifecycleMarkWindowAsAgentTeamConnected',
     'workerLifecycleRefreshWindowPaneLabelsConnected',
     'workerLifecycleSetPaneLabelConnected',
     'workerLifecycleClearPaneLabelConnected',
+    'workerLifecycleCreateDetachedSwarmSessionConnected',
+    'workerLifecycleCreateDetachedSwarmWindowConnected',
+    'workerLifecycleCreateTeammatePaneConnected',
     "callHelperAsync<unknown>('workerLifecycle', { operation: 'markWindowAsAgentTeam', target: requestedTarget }, signal)",
     "callHelperAsync<unknown>('workerLifecycle', { operation: 'refreshWindowPaneLabels', target: requestedTarget }, signal)",
     "callHelperAsync<unknown>('workerLifecycle', { operation: 'setPaneLabel', paneId: requestedPaneId, label }, signal)",
     "callHelperAsync<unknown>('workerLifecycle', { operation: 'clearPaneLabel', paneId: requestedPaneId }, signal)",
     "callHelper<unknown>('workerLifecycle', { operation: 'clearPaneLabel', paneId: requestedPaneId })",
     "callHelper<unknown>('workerLifecycle', { operation: 'killPane'",
+    "callHelperAsync<unknown>('workerLifecycle', { operation: 'createDetachedSwarmSession', sessionName: requestedSessionName, windowName: requestedWindowName }, signal)",
+    "callHelperAsync<unknown>('workerLifecycle', { operation: 'createDetachedSwarmWindow', sessionName: requestedSessionName, windowName: requestedWindowName }, signal)",
     "operation: 'createTeammatePane'",
+    'params.cwd = input.cwd',
+    'params.startCommand = input.startCommand',
   ]) assertIncludes(kernel, expected, 'core/kernel mutating helper calls')
   assertNotIncludes(kernel, '+ label', 'core/kernel diagnostics must not concatenate raw pane labels')
   assertNotIncludes(kernel, 'label +', 'core/kernel diagnostics must not concatenate raw pane labels')
@@ -752,14 +885,23 @@ function assertMutationFacadeSourceBoundaries(root) {
     'type workerWindowPaneLabelsRefreshResult struct',
     'type workerPaneLabelSettingResult struct',
     'type workerPaneLabelClearingResult struct',
+    'type workerDetachedSwarmSessionCreationResult struct',
+    'type workerDetachedSwarmWindowCreationResult struct',
+    'type workerTeammatePaneCreationResult struct',
     'const paneLabelArgumentLimit = 4096',
+    'const tmuxOpaqueArgumentLimit = 4096',
     'func paneLabelParam(params map[string]any) (string, bool)',
+    'func optionalOpaqueStringParam(params map[string]any, key string) (string, bool)',
     'func runWindowMarkingSetOption(target string, option string, value string) string',
     'func markWindowAsAgentTeam(params map[string]any) workerWindowMarkingResult',
     'func runWindowPaneLabelsSetOption(target string, option string, value string) string',
     'func refreshWindowPaneLabels(params map[string]any) workerWindowPaneLabelsRefreshResult',
     'func setPaneLabel(params map[string]any) workerPaneLabelSettingResult',
     'func clearPaneLabel(params map[string]any) workerPaneLabelClearingResult',
+    'func createDetachedSwarmSession(params map[string]any) workerDetachedSwarmSessionCreationResult',
+    'func createDetachedSwarmWindow(params map[string]any) workerDetachedSwarmWindowCreationResult',
+    'func createTeammatePane(params map[string]any) workerTeammatePaneCreationResult',
+    'func runCreateTeammatePaneTmuxOutput(args ...string) (string, string)',
     'runWindowMarkingSetOption(target, "automatic-rename", "off")',
     'runWindowMarkingSetOption(target, "allow-rename", "off")',
     'runWindowMarkingSetOption(target, "@agentteam-window", "1")',
@@ -769,7 +911,17 @@ function assertMutationFacadeSourceBoundaries(root) {
     'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", label)',
     'exec.CommandContext(ctx, "tmux", "set-option", "-up", "-t", paneID, "@agentteam-name")',
     'exec.CommandContext(ctx, "tmux", "select-pane", "-t", paneID, "-T", "")',
-  ]) assertIncludes(goSource, expected, 'Go non-destructive window/label mutation surface')
+    'exec.CommandContext(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName)',
+    'exec.CommandContext(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName)',
+    'runCreateTeammatePaneTmuxOutput("list-panes", "-t", target, "-F", workerLifecycleWindowPaneFormat)',
+    'splitArgs := []string{"split-window"}',
+    'splitArgs = append(splitArgs, "-t", leaderPaneID, "-h", "-p", "34")',
+    'splitArgs = append(splitArgs, "-t", panes[len(panes)-1], "-v")',
+    'splitArgs = append(splitArgs, "-c", cwd)',
+    'splitArgs = append(splitArgs, startCommand)',
+    'runCreateTeammatePaneTmux("select-layout", "-t", target, layout)',
+    'runCreateTeammatePaneTmux("resize-pane", "-t", leaderPaneID, "-x", "66%")',
+  ]) assertIncludes(goSource, expected, 'Go window/label and creation lifecycle mutation surface')
   assert.equal([...goSource.matchAll(/runWindowMarkingSetOption\(target,/g)].length, 3, 'Go helper should keep exactly three window marking set-option calls')
   assert.equal([...goSource.matchAll(/runWindowPaneLabelsSetOption\(target,/g)].length, 2, 'Go helper should keep exactly two refresh set-option calls')
   assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "set-option", "-p", "-t", paneID, "@agentteam-name", label\)/g)].length, 1, 'Go helper should contain exactly one pane label set-option command')
@@ -788,17 +940,29 @@ function assertMutationFacadeSourceBoundaries(root) {
     'workerLifecycleRefreshWindowPaneLabels',
     'workerLifecycleSetPaneLabel',
     'workerLifecycleClearPaneLabel',
-  ]) assertIncludes(builder, expected, 'artifact builder window/label mutation smoke coverage')
+    'runWorkerLifecycleCreateTeammatePaneSmoke',
+    'runWorkerLifecycleCreateDetachedSwarmSessionSmoke',
+    'runWorkerLifecycleCreateDetachedSwarmWindowSmoke',
+    'workerLifecycleCreateTeammatePane',
+    'workerLifecycleCreateDetachedSwarmSession',
+    'workerLifecycleCreateDetachedSwarmWindow',
+  ]) assertIncludes(builder, expected, 'artifact builder window/label and creation lifecycle mutation smoke coverage')
   for (const expected of [
     'workerLifecycleMarkWindowAsAgentTeam',
     'workerLifecycleRefreshWindowPaneLabels',
     'workerLifecycleSetPaneLabel',
     'workerLifecycleClearPaneLabel',
-  ]) assertIncludes(verifier, expected, 'artifact verifier window/label mutation smoke coverage')
+    'workerLifecycleCreateTeammatePane',
+    'workerLifecycleCreateDetachedSwarmSession',
+    'workerLifecycleCreateDetachedSwarmWindow',
+  ]) assertIncludes(verifier, expected, 'artifact verifier window/label and creation lifecycle mutation smoke coverage')
   for (const expected of [
     "operation: 'setPaneLabel'",
     "operation: 'clearPaneLabel'",
-  ]) assertIncludes(protocolCases, expected, 'JSON-RPC protocol pane label mutation cases')
+    "operation: 'createTeammatePane'",
+    "operation: 'createDetachedSwarmSession'",
+    "operation: 'createDetachedSwarmWindow'",
+  ]) assertIncludes(protocolCases, expected, 'JSON-RPC protocol pane label and creation lifecycle mutation cases')
 }
 
 function assertGoHelperOperationSurface(root) {
@@ -814,6 +978,8 @@ function assertGoHelperOperationSurface(root) {
     assertNotIncludes(goSource, forbidden, 'Go helper forbidden tmux command surface')
   }
   assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "kill-pane", "-t", paneID\)/g)].length, 1, 'Go helper should contain exactly one authorized kill-pane command')
+  assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "new-session", "-d", "-s", sessionName, "-n", windowName\)/g)].length, 1, 'Go helper should contain exactly one authorized detached new-session command')
+  assert.equal([...goSource.matchAll(/exec\.CommandContext\(ctx, "tmux", "new-window", "-t", sessionName, "-n", windowName\)/g)].length, 1, 'Go helper should contain exactly one authorized detached new-window command')
   assertIncludes(goSource, 'func runCreateTeammatePaneTmuxOutput(args ...string) (string, string)', 'Go createTeammatePane bounded argv helper')
   assertIncludes(goSource, 'splitArgs := []string{"split-window"}', 'Go createTeammatePane split-window argv construction')
   assertIncludes(goSource, 'runCreateTeammatePaneTmux("select-layout", "-t", target, layout)', 'Go createTeammatePane layout argv')
@@ -1007,6 +1173,101 @@ function assertNonDestructiveMutationDirectGoBehavior(root) {
   }
 }
 
+function writeCreationLifecycleFakeTmux(binDir) {
+  fs.mkdirSync(binDir, { recursive: true })
+  const tmuxPath = path.join(binDir, 'tmux')
+  fs.writeFileSync(tmuxPath, [
+    '#!/usr/bin/env node',
+    "const fs = require('node:fs')",
+    "const args = process.argv.slice(2)",
+    "const log = process.env.AGENTTEAM_STEP6_TMUX_ARGV_LOG",
+    "if (log) fs.appendFileSync(log, JSON.stringify(args) + '\\n')",
+    "if (args[0] === 'list-panes' && args[1] === '-t' && args[3] === '-F' && args[4] === '#{pane_id}') {",
+    "  if (args[2] === 'team:@7') process.stdout.write('%101\\n')",
+    "  else if (args[2] === 'multi:@7') process.stdout.write('%101\\n%102\\n')",
+    "  else process.exit(5)",
+    "} else if (args[0] === 'split-window') {",
+    "  if (!args.includes('-P') || !args.includes('-F') || !args.includes('#{pane_id}')) process.exit(4)",
+    "  process.stdout.write('%200\\n')",
+    "} else if (args[0] === 'select-layout' || args[0] === 'resize-pane' || args[0] === 'new-session' || args[0] === 'new-window') {",
+    "  process.exit(0)",
+    "} else process.exit(2)",
+  ].join('\n') + '\n', 'utf8')
+  fs.chmodSync(tmuxPath, 0o755)
+  return tmuxPath
+}
+
+function assertCreationLifecycleDirectGoBehavior(root) {
+  if (!hasGoToolchain()) return
+  const fakeTmuxRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agentteam-step6-creation-lifecycle-tmux-'))
+  const logPath = path.join(fakeTmuxRoot, 'argv.log')
+  try {
+    writeCreationLifecycleFakeTmux(fakeTmuxRoot)
+    const env = { PATH: `${fakeTmuxRoot}${path.delimiter}${process.env.PATH || ''}`, AGENTTEAM_STEP6_TMUX_ARGV_LOG: logPath }
+    const resetLog = () => fs.writeFileSync(logPath, '', 'utf8')
+
+    resetLog()
+    const createLeader = runDirectMutation(root, { jsonrpc: '2.0', id: 'create-leader-layout-pane', method: 'workerLifecycle', params: { operation: 'createTeammatePane', target: 'team:@7', leaderPaneId: '%101', hasLeaderLayout: true, cwd: '/tmp/agent team', startCommand: `node app.js --flag ${STEP6_RAW_CREATE_CANARY}` } }, env)
+    assertMutationResultShape(createLeader, 'createTeammatePane')
+    assert.equal(createLeader.ok, true, 'direct Go createTeammatePane should succeed for leader-layout split')
+    assert.equal(createLeader.created, true)
+    assert.equal(createLeader.paneId, '%200')
+    assert.equal(createLeader.target, 'team:@7')
+    assertNoRawCanary(createLeader, STEP6_RAW_CREATE_CANARY, 'direct Go createTeammatePane success result')
+    assert.deepEqual(readTmuxArgvLog(logPath), [
+      ['list-panes', '-t', 'team:@7', '-F', '#{pane_id}'],
+      ['split-window', '-t', '%101', '-h', '-p', '34', '-c', '/tmp/agent team', '-P', '-F', '#{pane_id}', `node app.js --flag ${STEP6_RAW_CREATE_CANARY}`],
+      ['select-layout', '-t', 'team:@7', 'main-vertical'],
+      ['resize-pane', '-t', '%101', '-x', '66%'],
+    ], 'direct Go createTeammatePane leader-layout path should use exact list/split/layout/resize argv')
+
+    resetLog()
+    const createWorker = runDirectMutation(root, { jsonrpc: '2.0', id: 'create-worker-pane', method: 'workerLifecycle', params: { operation: 'createTeammatePane', target: 'multi:@7', leaderPaneId: '%101', hasLeaderLayout: false } }, env)
+    assertMutationResultShape(createWorker, 'createTeammatePane')
+    assert.equal(createWorker.ok, true, 'direct Go createTeammatePane should succeed for later/non-leader split')
+    assert.equal(createWorker.paneId, '%200')
+    assert.deepEqual(readTmuxArgvLog(logPath), [
+      ['list-panes', '-t', 'multi:@7', '-F', '#{pane_id}'],
+      ['split-window', '-t', '%102', '-v', '-P', '-F', '#{pane_id}'],
+      ['select-layout', '-t', 'multi:@7', 'tiled'],
+    ], 'direct Go createTeammatePane non-leader path should split below last pane, tile layout, and avoid resize')
+
+    resetLog()
+    const detachedSession = runDirectMutation(root, { jsonrpc: '2.0', id: 'create-detached-session', method: 'workerLifecycle', params: { operation: 'createDetachedSwarmSession', sessionName: 'pi-agentteam', windowName: 'agentteam' } }, env)
+    assertMutationResultShape(detachedSession, 'createDetachedSwarmSession')
+    assert.equal(detachedSession.ok, true, 'direct Go createDetachedSwarmSession should succeed')
+    assert.equal(detachedSession.created, true)
+    assert.deepEqual(readTmuxArgvLog(logPath), [
+      ['new-session', '-d', '-s', 'pi-agentteam', '-n', 'agentteam'],
+    ], 'direct Go createDetachedSwarmSession should use exactly the authorized new-session argv')
+
+    resetLog()
+    const detachedWindow = runDirectMutation(root, { jsonrpc: '2.0', id: 'create-detached-window', method: 'workerLifecycle', params: { operation: 'createDetachedSwarmWindow', sessionName: 'pi-agentteam', windowName: 'agentteam' } }, env)
+    assertMutationResultShape(detachedWindow, 'createDetachedSwarmWindow')
+    assert.equal(detachedWindow.ok, true, 'direct Go createDetachedSwarmWindow should succeed')
+    assert.equal(detachedWindow.created, true)
+    assert.deepEqual(readTmuxArgvLog(logPath), [
+      ['new-window', '-t', 'pi-agentteam', '-n', 'agentteam'],
+    ], 'direct Go createDetachedSwarmWindow should use exactly the authorized new-window argv')
+
+    resetLog()
+    const invalidCreateTarget = runDirectMutation(root, { jsonrpc: '2.0', id: 'invalid-create-target', method: 'workerLifecycle', params: { operation: 'createTeammatePane', target: 'bad target', leaderPaneId: '%101', hasLeaderLayout: true, cwd: STEP6_RAW_CREATE_CANARY, startCommand: STEP6_RAW_CREATE_CANARY } }, env)
+    assertMutationResultShape(invalidCreateTarget, 'createTeammatePane')
+    assert.equal(invalidCreateTarget.ok, false, 'direct Go invalid createTeammatePane target should fail closed')
+    assert.equal(invalidCreateTarget.failureKind, 'invalid-target')
+    assertNoRawCanary(invalidCreateTarget, STEP6_RAW_CREATE_CANARY, 'direct Go invalid createTeammatePane result')
+    assert.deepEqual(readTmuxArgvLog(logPath), [], 'invalid createTeammatePane target should avoid tmux mutation')
+
+    const invalidSession = runDirectMutation(root, { jsonrpc: '2.0', id: 'invalid-detached-session', method: 'workerLifecycle', params: { operation: 'createDetachedSwarmSession', sessionName: STEP6_RAW_CREATE_CANARY, windowName: STEP6_RAW_CREATE_CANARY } }, env)
+    assertMutationResultShape(invalidSession, 'createDetachedSwarmSession')
+    assert.equal(invalidSession.ok, false, 'direct Go invalid detached session should fail closed')
+    assert.equal(invalidSession.failureKind, 'invalid-session')
+    assertNoRawCanary(invalidSession, STEP6_RAW_CREATE_CANARY, 'direct Go invalid detached session result')
+  } finally {
+    fs.rmSync(fakeTmuxRoot, { recursive: true, force: true })
+  }
+}
+
 function assertPackageNativeBoundaries(root) {
   const packageJson = assertPackageNoReleaseGuards(root, { expectedVersion: '0.6.8', expectedPiExtensions: ['./index.ts'] })
   assert.equal(packageJson.scripts?.check?.includes('npm run test:regression'), true, 'package check must keep full regression coverage')
@@ -1033,8 +1294,23 @@ function assertPackageNativeBoundaries(root) {
   assert.deepEqual(manifest.smoke.workerLifecycleClearPaneLabel.acceptedFailureKinds, ['invalid-pane-id'], 'embedded helper manifest clearPaneLabel accepted failure kinds')
   assert.equal(provenance.smoke.workerLifecycleSetPaneLabel.ok, false, 'embedded helper provenance should preserve setPaneLabel invalid-pane smoke')
   assert.equal(provenance.smoke.workerLifecycleClearPaneLabel.ok, false, 'embedded helper provenance should preserve clearPaneLabel invalid-pane smoke')
+  assert.equal(manifest.smoke.workerLifecycleCreateTeammatePane.ok, false, 'embedded helper manifest should preserve createTeammatePane invalid-target smoke')
+  assert.deepEqual(manifest.smoke.workerLifecycleCreateTeammatePane.acceptedFailureKinds, ['invalid-target'], 'embedded helper manifest createTeammatePane accepted failure kinds')
+  assert.equal(manifest.smoke.workerLifecycleCreateDetachedSwarmSession.ok, false, 'embedded helper manifest should preserve detached new-session invalid-session smoke')
+  assert.deepEqual(manifest.smoke.workerLifecycleCreateDetachedSwarmSession.acceptedFailureKinds, ['invalid-session'], 'embedded helper manifest detached new-session accepted failure kinds')
+  assert.equal(manifest.smoke.workerLifecycleCreateDetachedSwarmWindow.ok, false, 'embedded helper manifest should preserve detached new-window invalid-session smoke')
+  assert.deepEqual(manifest.smoke.workerLifecycleCreateDetachedSwarmWindow.acceptedFailureKinds, ['invalid-session'], 'embedded helper manifest detached new-window accepted failure kinds')
+  assert.equal(provenance.smoke.workerLifecycleCreateTeammatePane.ok, false, 'embedded helper provenance should preserve createTeammatePane invalid-target smoke')
+  assert.equal(provenance.smoke.workerLifecycleCreateDetachedSwarmSession.ok, false, 'embedded helper provenance should preserve detached new-session invalid-session smoke')
+  assert.equal(provenance.smoke.workerLifecycleCreateDetachedSwarmWindow.ok, false, 'embedded helper provenance should preserve detached new-window invalid-session smoke')
   assertNoRawCanary(manifest.smoke, 'agentteam raw label canary 🚫', 'embedded helper manifest setPaneLabel smoke')
   assertNoRawCanary(provenance.smoke, 'agentteam raw label canary 🚫', 'embedded helper provenance setPaneLabel smoke')
+  assertNoRawCanary(manifest.smoke, 'agentteam raw create pane canary 🚫', 'embedded helper manifest createTeammatePane smoke')
+  assertNoRawCanary(provenance.smoke, 'agentteam raw create pane canary 🚫', 'embedded helper provenance createTeammatePane smoke')
+  assertNoRawCanary(manifest.smoke, 'agentteam raw detached session canary 🚫', 'embedded helper manifest detached session smoke')
+  assertNoRawCanary(provenance.smoke, 'agentteam raw detached session canary 🚫', 'embedded helper provenance detached session smoke')
+  assertNoRawCanary(manifest.smoke, 'agentteam raw detached window canary 🚫', 'embedded helper manifest detached window smoke')
+  assertNoRawCanary(provenance.smoke, 'agentteam raw detached window canary 🚫', 'embedded helper provenance detached window smoke')
   assertIncludes(checksums, `${nativeRoot}/agentteam-tmuxSnapshotParse`, 'embedded helper checksum list')
   assertIncludes(checksums, `${nativeRoot}/manifest.json`, 'embedded helper checksum list')
   assertIncludes(checksums, `${nativeRoot}/provenance.json`, 'embedded helper checksum list')
@@ -1045,7 +1321,7 @@ function assertPackageNativeBoundaries(root) {
 function assertHistoricalRetention(root) {
   assertEveryRelExists(root, GO_TMUX_CUTOVER_BATCH3_SOURCE_FILES, 'Step 6 batch 3 current guard source files')
   assertEveryRelExists(root, STEP6_BATCH3_RETAINED_SUITES, 'Step 6 retained suites')
-  assertEveryRelAbsent(root, STEP6_BATCH3_DELETION_CANDIDATE_SUITES, 'Step 6 batch 1/2/3 deleted read-only facade/orchestration and non-destructive window/label suites')
+  assertEveryRelAbsent(root, STEP6_BATCH3_DELETION_CANDIDATE_SUITES, 'Step 6 batch 1/2/3/4 deleted read-only facade/orchestration, non-destructive window/label, and high-risk creation lifecycle suites')
   assertEveryRelExists(root, STEP6_BATCH3_SCOPE_DOCS, 'Step 6 retained docs')
   assertEveryRelExists(root, STEP6_BATCH3_SCOPE_FIXTURES, 'Step 6 batch 3 retained fixtures')
   assertEveryRelAbsent(root, HISTORICAL_CHECKPOINT_T024_DELETED_SUITES, 'T024 historical deletions')
@@ -1271,6 +1547,138 @@ else respond(baseHealth)
     assert.equal(leakedClear.ok, false)
     assert.equal(leakedClear.failureKind, 'tmux-command-failed')
     assertNoRawCanary(leakedClear, STEP6_BAD_HELPER_OUTPUT, 'malicious clearPaneLabel helper result')
+  } finally {
+    fs.rmSync(malicious.dir, { recursive: true, force: true })
+  }
+}
+
+async function withPatchedPaneDeps({ distRoot, tmuxEnv, kernelAdapterPatch = {} }, callback) {
+  const kernelPath = path.join(distRoot, 'core/kernel.js')
+  const labelsPath = path.join(distRoot, 'tmux/labels.js')
+  const windowsPath = path.join(distRoot, 'tmux/windows.js')
+  const panesPath = path.join(distRoot, 'tmux/panes.js')
+  const kernel = require(kernelPath)
+  const labels = require(labelsPath)
+  const windows = require(windowsPath)
+  const originals = {
+    TMUX: process.env.TMUX,
+    createAgentTeamKernelAdapter: kernel.createAgentTeamKernelAdapter,
+    setPaneLabel: labels.setPaneLabel,
+    refreshWindowPaneLabels: labels.refreshWindowPaneLabels,
+    ensureSwarmWindow: windows.ensureSwarmWindow,
+  }
+  const calls = []
+  const signal = new AbortController().signal
+  try {
+    if (tmuxEnv === undefined) delete process.env.TMUX
+    else process.env.TMUX = tmuxEnv
+    windows.ensureSwarmWindow = async (preferred, receivedSignal) => {
+      calls.push({ operation: 'ensureSwarmWindow', preferred, signal: receivedSignal })
+      return { session: 'team', window: '@7', target: 'team:@7', leaderPaneId: '%101' }
+    }
+    labels.setPaneLabel = async (paneId, label, receivedSignal) => {
+      calls.push({ operation: 'setPaneLabel', paneId, label, signal: receivedSignal })
+    }
+    labels.refreshWindowPaneLabels = async (target, receivedSignal) => {
+      calls.push({ operation: 'refreshWindowPaneLabels', target, signal: receivedSignal })
+    }
+    kernel.createAgentTeamKernelAdapter = () => ({
+      createTeammatePaneAsync: async (input, receivedSignal) => {
+        calls.push({ operation: 'createTeammatePane', input, signal: receivedSignal })
+        return { ok: true, operation: 'createTeammatePane', capability: 'workerLifecycle', target: input.target, paneId: '%200', created: true, readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true }
+      },
+      ...kernelAdapterPatch,
+    })
+    clearDistModules(distRoot, ['tmux/panes.js'])
+    const panes = require(panesPath)
+    return await callback({ panes, calls, signal })
+  } finally {
+    kernel.createAgentTeamKernelAdapter = originals.createAgentTeamKernelAdapter
+    labels.setPaneLabel = originals.setPaneLabel
+    labels.refreshWindowPaneLabels = originals.refreshWindowPaneLabels
+    windows.ensureSwarmWindow = originals.ensureSwarmWindow
+    if (originals.TMUX === undefined) delete process.env.TMUX
+    else process.env.TMUX = originals.TMUX
+    delete require.cache[require.resolve(panesPath)]
+  }
+}
+
+function assertNoRawCreationLeak(value) {
+  assertNoRawCanary(value, STEP6_RAW_CREATE_CANARY, 'creation lifecycle result')
+  assertNoRawCanary(value, 'MALICIOUS_CREATION_HELPER_OUTPUT_SHOULD_NOT_LEAK', 'creation lifecycle helper output')
+}
+
+async function assertTeammatePaneLifecycleRuntimeSeam({ requireDist, distRoot } = {}) {
+  if (typeof requireDist !== 'function' || !distRoot) return
+  await withPatchedPaneDeps({ distRoot, tmuxEnv: undefined }, async ({ panes, calls, signal }) => {
+    const result = await panes.createTeammatePane({ name: 'worker-a', preferred: { target: 'preferred:@1' }, cwd: '/tmp/agent team', startCommand: 'node app.js' }, signal)
+    assert.deepEqual(result, { paneId: '%200', target: 'team:@7' }, 'createTeammatePane should preserve public paneId/target result shape')
+    assert.deepEqual(calls.map(call => call.operation), ['ensureSwarmWindow', 'createTeammatePane', 'setPaneLabel', 'refreshWindowPaneLabels'], 'createTeammatePane should ensure window, delegate create, then label and refresh in order')
+    assert.deepEqual(calls[0].preferred, { target: 'preferred:@1' }, 'createTeammatePane should pass preferred window options to ensureSwarmWindow')
+    assert.deepEqual(calls[1].input, { target: 'team:@7', leaderPaneId: '%101', hasLeaderLayout: false, cwd: '/tmp/agent team', startCommand: 'node app.js' }, 'createTeammatePane should pass bounded creation inputs to adapter')
+    assert.deepEqual(calls[2], { operation: 'setPaneLabel', paneId: '%200', label: 'worker-a', signal }, 'createTeammatePane should set the new pane label through the existing private helper')
+    assert.deepEqual(calls[3], { operation: 'refreshWindowPaneLabels', target: 'team:@7', signal }, 'createTeammatePane should refresh labels for the created target')
+  })
+
+  await withPatchedPaneDeps({
+    distRoot,
+    tmuxEnv: '/tmp/agentteam-step6-tmux',
+    kernelAdapterPatch: {
+      createTeammatePaneAsync: async (input, receivedSignal) => ({ ok: false, operation: 'createTeammatePane', capability: 'workerLifecycle', target: input.target, paneId: '', created: false, status: 'unknown', resultMarker: 'stale', failureKind: 'tmux-command-failed', reason: 'Go worker lifecycle createTeammatePane unavailable (tmux-command-failed)', error: 'Go worker lifecycle createTeammatePane unavailable (tmux-command-failed)', readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true }),
+    },
+  }, async ({ panes, calls, signal }) => {
+    await assert.rejects(() => panes.createTeammatePane({ name: 'worker-a' }, signal), error => {
+      assert.equal(error instanceof Error, true)
+      assert.equal(error.message, 'Go worker lifecycle createTeammatePane unavailable (tmux-command-failed)')
+      return true
+    })
+    assert.deepEqual(calls.map(call => call.operation), ['ensureSwarmWindow'], 'compact create failure should stop before label/refresh helpers')
+  })
+
+  const kernel = requireDist('core/kernel.js')
+  const adapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: path.join(distRoot, 'missing-step6-creation-helper'), env: {} })
+  const invalidCwd = await adapter.createTeammatePaneAsync({ target: 'team:@7', leaderPaneId: '%101', hasLeaderLayout: true, cwd: `${STEP6_RAW_CREATE_CANARY}\0`, startCommand: STEP6_RAW_CREATE_CANARY })
+  assert.equal(invalidCwd.ok, false)
+  assert.equal(invalidCwd.failureKind, 'invalid-cwd')
+  assertNoRawCreationLeak(invalidCwd)
+  const missingCreate = await adapter.createTeammatePaneAsync({ target: 'team:@7', leaderPaneId: '%101', hasLeaderLayout: true, cwd: STEP6_RAW_CREATE_CANARY, startCommand: STEP6_RAW_CREATE_CANARY })
+  assert.equal(missingCreate.ok, false)
+  assert.equal(missingCreate.operation, 'createTeammatePane')
+  assertNoRawCreationLeak(missingCreate)
+  const invalidSession = await adapter.createDetachedSwarmSessionAsync(STEP6_RAW_CREATE_CANARY, STEP6_RAW_CREATE_CANARY)
+  assert.equal(invalidSession.ok, false)
+  assert.equal(invalidSession.failureKind, 'invalid-session')
+  assertNoRawCreationLeak(invalidSession)
+  const invalidWindow = await adapter.createDetachedSwarmWindowAsync('pi-agentteam', STEP6_RAW_CREATE_CANARY)
+  assert.equal(invalidWindow.ok, false)
+  assert.equal(invalidWindow.failureKind, 'invalid-window-name')
+  assertNoRawCreationLeak(invalidWindow)
+
+  const malicious = writeJsonRpcHelperExecutable('malicious-creation-output', `#!/usr/bin/env node
+const fs = require('node:fs')
+const request = JSON.parse(fs.readFileSync(0, 'utf8').trim())
+function respond(result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n') }
+const baseHealth = { ok: true, implementation: 'go', protocolVersion: 1, helperVersion: '0.3.0-read-model-shadow', capabilities: ['health', 'profile', 'tmuxSnapshotParse', 'tmuxSnapshotCapture', 'compactReadModelFingerprint', 'workerLifecycle', 'tmuxAvailability'], businessPathsConnected: false }
+if (request.method === 'health') respond(baseHealth)
+else if (request.method === 'workerLifecycle' && request.params && request.params.operation === 'createTeammatePane') respond({ ok: false, operation: 'createTeammatePane', capability: 'workerLifecycle', target: 'team:@7', paneId: '%101', created: false, status: 'unknown', resultMarker: 'stale', failureKind: 'tmux-command-failed', reason: 'MALICIOUS_CREATION_HELPER_OUTPUT_SHOULD_NOT_LEAK ${STEP6_RAW_CREATE_CANARY}', error: 'MALICIOUS_CREATION_HELPER_OUTPUT_SHOULD_NOT_LEAK ${STEP6_RAW_CREATE_CANARY}', readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true })
+else if (request.method === 'workerLifecycle' && request.params && request.params.operation === 'createDetachedSwarmSession') respond({ ok: false, operation: 'createDetachedSwarmSession', capability: 'workerLifecycle', sessionName: 'pi-agentteam', windowName: 'agentteam', created: false, status: 'unknown', resultMarker: 'stale', failureKind: 'tmux-command-failed', reason: 'MALICIOUS_CREATION_HELPER_OUTPUT_SHOULD_NOT_LEAK ${STEP6_RAW_CREATE_CANARY}', error: 'MALICIOUS_CREATION_HELPER_OUTPUT_SHOULD_NOT_LEAK ${STEP6_RAW_CREATE_CANARY}', readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true })
+else if (request.method === 'workerLifecycle' && request.params && request.params.operation === 'createDetachedSwarmWindow') respond({ ok: false, operation: 'createDetachedSwarmWindow', capability: 'workerLifecycle', sessionName: 'pi-agentteam', windowName: 'agentteam', created: false, status: 'unknown', resultMarker: 'stale', failureKind: 'tmux-command-failed', reason: 'MALICIOUS_CREATION_HELPER_OUTPUT_SHOULD_NOT_LEAK ${STEP6_RAW_CREATE_CANARY}', error: 'MALICIOUS_CREATION_HELPER_OUTPUT_SHOULD_NOT_LEAK ${STEP6_RAW_CREATE_CANARY}', readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true })
+else respond(baseHealth)
+`)
+  try {
+    const maliciousAdapter = kernel.createAgentTeamKernelAdapter({ mode: 'go', helperPath: malicious.file, env: {} })
+    const leakedCreate = await maliciousAdapter.createTeammatePaneAsync({ target: 'team:@7', leaderPaneId: '%101', hasLeaderLayout: true, cwd: STEP6_RAW_CREATE_CANARY, startCommand: STEP6_RAW_CREATE_CANARY })
+    assert.equal(leakedCreate.ok, false)
+    assert.equal(leakedCreate.failureKind, 'tmux-command-failed')
+    assertNoRawCreationLeak(leakedCreate)
+    const leakedSession = await maliciousAdapter.createDetachedSwarmSessionAsync('pi-agentteam', 'agentteam')
+    assert.equal(leakedSession.ok, false)
+    assert.equal(leakedSession.failureKind, 'tmux-command-failed')
+    assertNoRawCreationLeak(leakedSession)
+    const leakedWindow = await maliciousAdapter.createDetachedSwarmWindowAsync('pi-agentteam', 'agentteam')
+    assert.equal(leakedWindow.ok, false)
+    assert.equal(leakedWindow.failureKind, 'tmux-command-failed')
+    assertNoRawCreationLeak(leakedWindow)
   } finally {
     fs.rmSync(malicious.dir, { recursive: true, force: true })
   }
@@ -1507,6 +1915,52 @@ async function assertReadOnlyWindowSessionOrchestrationRuntimeSeam({ requireDist
       ensureTmuxAvailable: async () => {},
       isInsideTmux: () => false,
       firstPaneInWindow: async target => (target === 'pi-agentteam:@7' ? '%leader' : null),
+      resolvePaneBindingAsync: async paneId => ({ paneId, target: 'detached-session:@7' }),
+    },
+    kernelAdapterPatch: {
+      sessionExistsAsync: async (sessionName, signal) => {
+        return { ok: true, operation: 'sessionExists', capability: 'workerLifecycle', sessionName, exists: false, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }
+      },
+    },
+  }, async ({ windows, tmuxCalls, markCalls, refreshCalls, adapterCalls }) => {
+    const result = await windows.ensureSwarmWindow()
+    assert.deepEqual(result, { session: 'detached-session', window: '@7', target: 'detached-session:@7', leaderPaneId: '%leader' })
+    assert.deepEqual(tmuxCalls, [], 'detached missing-session creation should not use direct TypeScript new-session calls')
+    assert.deepEqual(adapterCalls.map(call => call.operation), ['createDetachedSwarmSession', 'findAgentTeamWindowTarget'], 'detached missing-session branch should create the session through Go then continue discovery through adapter seams')
+    assert.deepEqual(markCalls.map(call => call.target), ['pi-agentteam:agentteam', 'detached-session:@7'], 'detached missing-session creation should mark after session creation and after final target resolution')
+    assert.deepEqual(refreshCalls.map(call => call.target), ['detached-session:@7'])
+  })
+
+  await withPatchedWindowDeps({
+    distRoot,
+    insideTmux: false,
+    corePatch: {
+      ensureTmuxAvailable: async () => {},
+      isInsideTmux: () => false,
+      firstPaneInWindow: async () => { throw new Error('firstPaneInWindow should not run after createDetachedSwarmSession failure') },
+      resolvePaneBindingAsync: async () => { throw new Error('resolvePaneBindingAsync should not run after createDetachedSwarmSession failure') },
+    },
+    kernelAdapterPatch: {
+      sessionExistsAsync: async (sessionName) => ({ ok: true, operation: 'sessionExists', capability: 'workerLifecycle', sessionName, exists: false, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }),
+      createDetachedSwarmSessionAsync: async () => ({ ok: false, operation: 'createDetachedSwarmSession', capability: 'workerLifecycle', sessionName: 'pi-agentteam', windowName: 'agentteam', created: false, status: 'unknown', resultMarker: 'stale', failureKind: 'tmux-command-failed', reason: 'Go worker lifecycle createDetachedSwarmSession unavailable (tmux-command-failed)', error: 'Go worker lifecycle createDetachedSwarmSession unavailable (tmux-command-failed)', readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true }),
+    },
+  }, async ({ windows, tmuxCalls, markCalls }) => {
+    await assert.rejects(() => windows.ensureSwarmWindow(), error => {
+      assert.equal(error instanceof Error, true)
+      assert.equal(error.message, 'Go worker lifecycle createDetachedSwarmSession unavailable (tmux-command-failed)')
+      return true
+    })
+    assert.deepEqual(tmuxCalls, [], 'detached new-session helper failure should not fall back to direct TypeScript new-session calls')
+    assert.deepEqual(markCalls, [], 'detached new-session helper failure should stop before marking')
+  })
+
+  await withPatchedWindowDeps({
+    distRoot,
+    insideTmux: false,
+    corePatch: {
+      ensureTmuxAvailable: async () => {},
+      isInsideTmux: () => false,
+      firstPaneInWindow: async target => (target === 'pi-agentteam:@7' ? '%leader' : null),
       resolvePaneBindingAsync: async () => null,
     },
   }, async ({ windows, tmuxCalls }) => {
@@ -1563,6 +2017,28 @@ async function assertReadOnlyWindowSessionOrchestrationRuntimeSeam({ requireDist
     corePatch: {
       ensureTmuxAvailable: async () => {},
       isInsideTmux: () => false,
+      firstPaneInWindow: async () => { throw new Error('firstPaneInWindow should not run after createDetachedSwarmWindow failure') },
+      resolvePaneBindingAsync: async () => { throw new Error('resolvePaneBindingAsync should not run after createDetachedSwarmWindow failure') },
+    },
+    kernelAdapterPatch: {
+      findAgentTeamWindowTargetAsync: async () => ({ ok: false, operation: 'findAgentTeamWindowTarget', capability: 'workerLifecycle', exists: false, readOnly: true, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: false }),
+      createDetachedSwarmWindowAsync: async () => ({ ok: false, operation: 'createDetachedSwarmWindow', capability: 'workerLifecycle', sessionName: 'pi-agentteam', windowName: 'agentteam', created: false, status: 'unknown', resultMarker: 'stale', failureKind: 'tmux-command-failed', reason: 'Go worker lifecycle createDetachedSwarmWindow unavailable (tmux-command-failed)', error: 'Go worker lifecycle createDetachedSwarmWindow unavailable (tmux-command-failed)', readOnly: false, stateFilesRead: false, stateFilesWritten: false, tmuxMutation: true }),
+    },
+  }, async ({ windows, tmuxCalls }) => {
+    await assert.rejects(() => windows.ensureSwarmWindow(), error => {
+      assert.equal(error instanceof Error, true)
+      assert.equal(error.message, 'Go worker lifecycle createDetachedSwarmWindow unavailable (tmux-command-failed)')
+      return true
+    })
+    assert.deepEqual(tmuxCalls, [], 'detached new-window helper failure should not fall back to direct TypeScript new-window calls')
+  })
+
+  await withPatchedWindowDeps({
+    distRoot,
+    insideTmux: false,
+    corePatch: {
+      ensureTmuxAvailable: async () => {},
+      isInsideTmux: () => false,
       firstPaneInWindow: async () => { throw new Error('firstPaneInWindow should not run without post-creation target') },
       resolvePaneBindingAsync: async () => { throw new Error('resolvePaneBindingAsync should not run without post-creation target') },
     },
@@ -1584,16 +2060,19 @@ async function assertGoTmuxCutoverBatch3Guard({ repoRoot, requireDist, distRoot 
   const root = repoRoot || process.cwd()
   assertStep6Batch3AuditMap(root)
   assertWindowLabelMutationFixtureContracts()
+  assertTeammatePaneLifecycleMutationFixtureContracts()
   assertReadOnlyFacadeSourceBoundaries(root)
   assertMutationFacadeSourceBoundaries(root)
   assertGoHelperOperationSurface(root)
   assertReadOnlyFacadeDirectGoBehavior(root)
   assertNonDestructiveMutationDirectGoBehavior(root)
+  assertCreationLifecycleDirectGoBehavior(root)
   assertPackageNativeBoundaries(root)
   assertHistoricalRetention(root)
   assertGoTmuxCutoverBatch3RuntimeSeam(requireDist)
   await assertReadOnlyWindowSessionOrchestrationRuntimeSeam({ requireDist, distRoot })
   await assertWindowLabelMutationRuntimeSeam({ requireDist, distRoot })
+  await assertTeammatePaneLifecycleRuntimeSeam({ requireDist, distRoot })
 }
 
 module.exports = {
@@ -1608,8 +2087,10 @@ module.exports = {
   assertHistoricalRetention,
   assertReadOnlyFacadeDirectGoBehavior,
   assertNonDestructiveMutationDirectGoBehavior,
+  assertCreationLifecycleDirectGoBehavior,
   assertReadOnlyWindowSessionOrchestrationRuntimeSeam,
   assertWindowLabelMutationRuntimeSeam,
+  assertTeammatePaneLifecycleRuntimeSeam,
   assertMutationFacadeSourceBoundaries,
   assertPackageNativeBoundaries,
   assertReadOnlyFacadeSourceBoundaries,

@@ -1373,6 +1373,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.79 defines the high-risk `tmux/panes.ts createTeammatePane(...)` Go cutover gate without implementing runtime mutation.",
     ],
     continuityTargets: ["v0.6.78"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.79", "go-create-teammate-pane-gate")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.80",
@@ -1383,6 +1384,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "On compact helper failure, the TypeScript facade throws a compact `Error` from the validated helper failure reason, preserving the prior throwing create/layout failure shape without exposing raw tmux/helper output.",
     ],
     continuityTargets: ["v0.6.79"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.80", "go-create-teammate-pane-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.81",
@@ -1393,6 +1395,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.81 defines the detached-branch `tmux/windows.ts ensureSwarmWindow(...)` `new-session` Go cutover gate without implementing runtime mutation.",
     ],
     continuityTargets: ["v0.6.80"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.81", "go-detached-new-session-gate")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.82",
@@ -1403,6 +1406,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "On compact helper failure, the TypeScript facade throws a compact `Error` from the validated helper failure reason, preserving the prior throwing create failure behavior without exposing raw tmux/helper output.",
     ],
     continuityTargets: ["v0.6.81"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.82", "go-detached-new-session-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.83",
@@ -1413,6 +1417,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.83 defines the detached-branch `tmux/windows.ts ensureSwarmWindow(...)` `new-window` Go cutover gate without implementing runtime mutation.",
     ],
     continuityTargets: ["v0.6.82"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.83", "go-detached-new-window-gate")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.84",
@@ -1423,6 +1428,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "On compact helper failure, the TypeScript facade throws a compact `Error` from the validated helper failure reason, preserving the prior throwing create failure behavior without exposing raw tmux/helper output.",
     ],
     continuityTargets: ["v0.6.83"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.84", "go-detached-new-window-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.85",
