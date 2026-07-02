@@ -47,14 +47,14 @@ const {
   summarizeSelection,
 } = require('../suiteManifest.cjs')
 
-const EXPECTED_TIER_COUNTS_POST_T041 = Object.freeze({
+const EXPECTED_TIER_COUNTS_POST_T042 = Object.freeze({
   default: 85,
   smoke: 10,
   core: 59,
   'go-current': 26,
-  audit: 99,
+  audit: 95,
   benchmark: 3,
-  regression: 187,
+  regression: 183,
 })
 
 const EXPECTED_HISTORICAL_CHECKPOINT_DELETION_READINESS_COUNTS = Object.freeze({
@@ -77,7 +77,7 @@ const GO_TMUX_CUTOVER_BATCH3_GUARD_SUITE_FILE = normalizeSuiteFile(GO_TMUX_CUTOV
 const HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITE_FILES = HISTORICAL_CHECKPOINT_READY_TO_DELETE_SUITES.map(normalizeSuiteFile)
 const HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITE_FILES = HISTORICAL_CHECKPOINT_NEEDS_SPLIT_SUITES.map(normalizeSuiteFile)
 const HISTORICAL_CHECKPOINT_KEEP_SUITE_FILES = HISTORICAL_CHECKPOINT_KEEP_SUITES.map(normalizeSuiteFile)
-const STEP6_DELETED_READ_ONLY_WINDOW_LABEL_AND_CREATION_LIFECYCLE_SUITE_FILES = Object.freeze([
+const STEP6_DELETED_READ_ONLY_WINDOW_LABEL_CREATION_AND_CLEANUP_LIFECYCLE_SUITE_FILES = Object.freeze([
   'go-kernel-v0655-go-list-agentteam-panes-facade-cutover.cjs',
   'go-kernel-v0656-go-inspect-pane-facade-cutover.cjs',
   'go-kernel-v0657-go-pane-exists-facade-cutover.cjs',
@@ -106,16 +106,16 @@ const STEP6_DELETED_READ_ONLY_WINDOW_LABEL_AND_CREATION_LIFECYCLE_SUITE_FILES = 
   'go-kernel-v0682-go-detached-new-session-cutover.cjs',
   'go-kernel-v0683-go-detached-new-window-gate.cjs',
   'go-kernel-v0684-go-detached-new-window-cutover.cjs',
-])
-const STEP6_OUT_OF_SCOPE_READ_ONLY_AND_DESTRUCTIVE_SYNC_SUITE_FILES = Object.freeze([
-  'go-kernel-v0653-go-inspect-pane-worker-lifecycle.cjs',
-  'go-kernel-v0654-go-list-agentteam-panes-worker-lifecycle.cjs',
-  'go-kernel-v0660-go-current-pane-binding-facade-cutover.cjs',
-  'go-kernel-v0661-go-async-pane-binding-facade-cutover.cjs',
   'go-kernel-v0685-go-kill-pane-gate.cjs',
   'go-kernel-v0686-go-kill-pane-cutover.cjs',
   'go-kernel-v0687-go-clear-pane-label-sync-gate.cjs',
   'go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs',
+])
+const STEP6_RETAINED_READ_ONLY_WORKER_LIFECYCLE_AND_BINDING_SUITE_FILES = Object.freeze([
+  'go-kernel-v0653-go-inspect-pane-worker-lifecycle.cjs',
+  'go-kernel-v0654-go-list-agentteam-panes-worker-lifecycle.cjs',
+  'go-kernel-v0660-go-current-pane-binding-facade-cutover.cjs',
+  'go-kernel-v0661-go-async-pane-binding-facade-cutover.cjs',
 ])
 
 module.exports = {
@@ -152,10 +152,10 @@ module.exports = {
       regression: regressionSuites,
     }
 
-    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T041.regression, 'manifest should encode the post-T041 discovered suite count')
-    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T041, 'suite tier summary should encode the post-T041 topology')
+    assert.equal(allSuites.length, EXPECTED_TIER_COUNTS_POST_T042.regression, 'manifest should encode the post-T042 discovered suite count')
+    assert.deepEqual(summarizeSelection(allSuites), EXPECTED_TIER_COUNTS_POST_T042, 'suite tier summary should encode the post-T042 topology')
     for (const [tier, suites] of Object.entries(tierSelections)) {
-      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T041[tier], `${tier} tier count should match post-T041 topology`)
+      assert.equal(suites.length, EXPECTED_TIER_COUNTS_POST_T042[tier], `${tier} tier count should match post-T042 topology`)
     }
     assert.deepEqual(regressionSuites, allSuites, 'regression tier should preserve every suite')
     assert.ok(defaultSuites.length < regressionSuites.length, 'default tier should be reduced from full regression')
@@ -217,17 +217,17 @@ module.exports = {
     assert.ok(smokeSuites.includes('package-install-smoke.cjs'), 'smoke tier should include package smoke coverage')
     assert.ok(goCurrentSuites.includes('go-kernel-v0696-v07-release-decision-package.cjs'), 'go-current tier should keep latest release/no-action guard')
     assert.ok(defaultSuites.includes('go-kernel-v0696-v07-release-decision-package.cjs'), 'default tier should keep current Go release guard')
-    assert.ok(auditSuites.includes('go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs'), 'audit tier should retain historical cutover coverage')
+    assert.equal(auditSuites.includes('go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs'), false, 'audit tier should remove replaced historical clearPaneLabelSync cutover coverage')
     assert.ok(auditSuites.includes('go-kernel-v0688-historical-checkpoints-audit.cjs'), 'audit tier should include the historical checkpoint manifest audit')
-    for (const file of STEP6_DELETED_READ_ONLY_WINDOW_LABEL_AND_CREATION_LIFECYCLE_SUITE_FILES) {
-      assert.equal(allSuites.includes(file), false, `${file} should be absent after Step 6 read-only facade/orchestration, non-destructive window/label, and high-risk creation lifecycle deletion`)
-      assert.equal(auditSuites.includes(file), false, `${file} should not remain in audit after Step 6 read-only facade/orchestration, non-destructive window/label, and high-risk creation lifecycle deletion`)
-      assert.equal(regressionSuites.includes(file), false, `${file} should not remain in regression after Step 6 read-only facade/orchestration, non-destructive window/label, and high-risk creation lifecycle deletion`)
+    for (const file of STEP6_DELETED_READ_ONLY_WINDOW_LABEL_CREATION_AND_CLEANUP_LIFECYCLE_SUITE_FILES) {
+      assert.equal(allSuites.includes(file), false, `${file} should be absent after Step 6 read-only facade/orchestration, non-destructive window/label, high-risk creation lifecycle, and destructive cleanup deletion`)
+      assert.equal(auditSuites.includes(file), false, `${file} should not remain in audit after Step 6 read-only facade/orchestration, non-destructive window/label, high-risk creation lifecycle, and destructive cleanup deletion`)
+      assert.equal(regressionSuites.includes(file), false, `${file} should not remain in regression after Step 6 read-only facade/orchestration, non-destructive window/label, high-risk creation lifecycle, and destructive cleanup deletion`)
     }
-    for (const file of STEP6_OUT_OF_SCOPE_READ_ONLY_AND_DESTRUCTIVE_SYNC_SUITE_FILES) {
-      assert.ok(allSuites.includes(file), `${file} should remain discoverable because it is out of T041 scope`)
-      assert.ok(auditSuites.includes(file), `${file} should remain audit coverage because it is out of T041 scope`)
-      assert.ok(regressionSuites.includes(file), `${file} should remain regression coverage because it is out of T041 scope`)
+    for (const file of STEP6_RETAINED_READ_ONLY_WORKER_LIFECYCLE_AND_BINDING_SUITE_FILES) {
+      assert.ok(allSuites.includes(file), `${file} should remain discoverable because it is out of T042 scope`)
+      assert.ok(auditSuites.includes(file), `${file} should remain audit coverage because it is out of T042 scope`)
+      assert.ok(regressionSuites.includes(file), `${file} should remain regression coverage because it is out of T042 scope`)
     }
     assert.deepEqual(classifySuite(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE).tiers, ['audit', 'regression'], 'deletion parity suite must remain audit/regression only')
     assert.ok(auditSuites.includes(HISTORICAL_CHECKPOINT_DELETION_PARITY_AUDIT_FILE), 'audit tier should include the historical checkpoint deletion parity audit')
@@ -268,8 +268,7 @@ module.exports = {
 
     assert.deepEqual(selectSuiteFiles({ filters: ['service-units'] }), ['service-units.cjs'], 'legacy substring suite filters should still work without tiers')
     assert.deepEqual(selectSuiteFiles({ tiers: ['audit'], filters: ['go-kernel-v0688'] }), [
-      'go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs',
       'go-kernel-v0688-historical-checkpoints-audit.cjs',
-    ], 'suite filters should intersect with tier selectors')
+    ], 'suite filters should intersect with tier selectors after replaced v0688 cutover deletion')
   },
 }

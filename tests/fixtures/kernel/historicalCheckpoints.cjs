@@ -1439,6 +1439,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.85 defines the destructive `tmux/panes.ts killPane(paneId)` Go cutover gate without implementing runtime mutation.",
     ],
     continuityTargets: ["v0.6.84"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.85", "go-kill-pane-gate")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.86",
@@ -1448,6 +1449,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.86 cuts over only `tmux/panes.ts killPane(paneId)` from the direct TypeScript `runTmuxNoThrow(['kill-pane', '-t', paneId])` behavior to a Go-backed `workerLifecycle.killPane` operation behind the TypeScript facade.",
       "- State repository, task/report/PlanRun/mailbox governance, team panel/UI, release/package controls, normal-user native delivery, or package publishing.",
     ],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.86", "go-kill-pane-cutover")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.87",
@@ -1458,6 +1460,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "Result: v0.6.87 defines the gate-only contract for future `tmux/panes.ts clearPaneLabelSync(paneId)` Go reuse without changing runtime behavior.",
     ],
     continuityTargets: ["v0.6.86"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.87", "go-clear-pane-label-sync-gate")],
   }),
   historicalGoKernelFamily({
     version: "v0.6.88",
@@ -1468,6 +1471,7 @@ const HISTORICAL_CHECKPOINT_FAMILIES_V0644_V0688 = [
       "No new Go operation, sync-specific Go handler, native helper rebuild, or new native smoke key is introduced.",
     ],
     continuityTargets: ["v0.6.87"],
+    replacementCandidateSuites: [historicalGoKernelSuite("v0.6.88", "go-clear-pane-label-sync-cutover")],
   }),
 ]
 

@@ -216,6 +216,10 @@ const EXPECTED_STEP6_DELETION_CANDIDATES = Object.freeze([
   'tests/suites/go-kernel-v0682-go-detached-new-session-cutover.cjs',
   'tests/suites/go-kernel-v0683-go-detached-new-window-gate.cjs',
   'tests/suites/go-kernel-v0684-go-detached-new-window-cutover.cjs',
+  'tests/suites/go-kernel-v0685-go-kill-pane-gate.cjs',
+  'tests/suites/go-kernel-v0686-go-kill-pane-cutover.cjs',
+  'tests/suites/go-kernel-v0687-go-clear-pane-label-sync-gate.cjs',
+  'tests/suites/go-kernel-v0688-go-clear-pane-label-sync-cutover.cjs',
 ])
 
 const SCRIPT_FILES_THAT_MUST_REMAIN = Object.freeze([
@@ -739,7 +743,7 @@ function assertNoDeletionOrReintroduction(root) {
 }
 
 function assertNonCandidatesRemainNonCandidates(root) {
-  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_STEP6_DELETION_CANDIDATES, 'v0.6.44-v0.6.88 replacement/deletion candidates should be limited to Step 6 read-only facade/orchestration, non-destructive window/label, and high-risk creation lifecycle deletions')
+  assertSameSet(HISTORICAL_CHECKPOINT_REPLACEMENT_SUITE_CANDIDATES_V0644_V0688, EXPECTED_STEP6_DELETION_CANDIDATES, 'v0.6.44-v0.6.88 replacement/deletion candidates should be limited to Step 6 read-only facade/orchestration, non-destructive window/label, high-risk creation lifecycle, and destructive cleanup deletions')
   const remapped = new Set(HISTORICAL_CHECKPOINT_STEP5A_REMAP.map(entry => entry.suite))
   const step5B = new Set(HISTORICAL_CHECKPOINT_STEP5B_DELETION_CANDIDATE_SUITES)
   const step5C = new Set(HISTORICAL_CHECKPOINT_STEP5C_DELETION_CANDIDATE_SUITES)
