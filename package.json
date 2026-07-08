@@ -75,7 +75,11 @@
     "config.example.json",
     "tsconfig.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "!tests/",
+    "!scripts/",
+    "!docs/",
+    "!.github/"
   ],
   "pi": {
     "extensions": [
@@ -89,11 +93,6 @@
     "typebox": "*"
   },
   "scripts": {
-    "test": "node tests/run.cjs",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "check:boundaries": "node scripts/check-import-boundaries.cjs",
-    "check": "npm test && npm run typecheck && git diff --check && npm run -s check:boundaries",
-    "release:check": "npm run check && npm pack --dry-run --ignore-scripts",
-    "test:e2e": "node tests/e2e/tmux-smoke.cjs"
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   }
 }
